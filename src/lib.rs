@@ -1,5 +1,6 @@
 use std::fs;
 use std::env;
+use std::str;
 use std::error::Error;
 use std::collections::HashMap;
 
@@ -9,17 +10,33 @@ enum Direction {
     REVERSE,
 }
 
-fn flip(d: Direction) -> Direction {
-    match d {
-        Direction::FORWARD => Direction::REVERSE,
-        Direction::REVERSE => Direction::FORWARD,
+impl Direction {
+    fn flip(d: Direction) -> Direction {
+        match d {
+            Direction::FORWARD => Direction::REVERSE,
+            Direction::REVERSE => Direction::FORWARD,
+        }
+    }
+
+    fn parse_char(c: char) -> Direction {
+        match c {
+            '+' => Direction::FORWARD,
+            '-' => Direction::REVERSE,
+            _ => panic!("Unknown direction {}", c),
+        }
+    }
+
+    fn parse(s: &str) -> Direction {
+        assert!(s.len() == 1, "Unknown direction {}", s);
+        Direction::parse_char(s.chars().nth(0).unwrap())
     }
 }
 
 struct Node {
     //node size
     name: String,
-    length: u64,
+    length: usize,
+    coverage: f64,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
@@ -34,7 +51,7 @@ impl Vertex {
     fn rc(&self) -> Vertex {
         Vertex {
             node_id: self.node_id,
-            direction: flip(self.direction),
+            direction: Direction::flip(self.direction),
         }
     }
 }
@@ -100,6 +117,8 @@ impl Graph {
         //TODO rewrite without cloning with lifetimes
         self.name2ids.insert(node.name.clone(), self.nodes.len());
         self.nodes.push(node);
+        self.incoming_links.push(Vec::new());
+        self.outgoing_links.push(Vec::new());
     }
 
     fn add_link(&mut self, link: Link) {
@@ -114,6 +133,63 @@ impl Graph {
             Direction::FORWARD => self.incoming_links[link.end.node_id].push(link),
             Direction::REVERSE => self.outgoing_links[link.end.node_id].push(link.rc()),
         };
+    }
+
+    //TODO switch to iterator?
+    fn parse_tag<T: str::FromStr>(fields: &[&str], prefix: &str) -> Option<T> {
+        fields.iter()
+            .filter(|s| s.starts_with(prefix))
+            .map(|s| match s[prefix.len()..].parse::<T>() {
+                Ok(t) => t,
+                Err(_) => panic!("Couldn't parse tag {}", s),
+            })
+            .nth(0)
+    }
+
+    fn parse_overlap(cigar: &str) -> u32 {
+        assert!(cigar.ends_with('M'), "Invalid overlap {}", cigar);
+        let ovl = &cigar[..(cigar.len()-1)];
+        ovl.trim().parse().expect(&format!("Invalid overlap {}", cigar))
+    }
+
+    //TODO switch to something iterable
+    fn read(graph_str: &str) -> Graph {
+        let mut g = Graph::new();
+
+        for line in graph_str.lines() {
+            if line.starts_with("S\t") {
+                let split: Vec<&str> = line.split('\t').collect();
+                //println!("Node line {:?}", split);
+                let name = String::from(split[1]);
+                let length = if split[2] != "*" {
+                                 split[2].trim().len()
+                             } else {
+                                 Graph::parse_tag(&split[3..split.len()], "LN:i:")
+                                     .expect("Neither sequence nor LN tag provided")
+                             };
+                let coverage: f64 = Graph::parse_tag(&split[3..split.len()], "ll:f:")
+                                        .unwrap_or(0.);
+                g.add_node(Node{name, length, coverage});
+            }
+        }
+
+        for line in graph_str.lines() {
+            if line.starts_with("L\t") {
+                let split: Vec<&str> = line.trim().split('\t').collect();
+                //println!("Link line {:?}", split);
+                let start = Vertex {
+                    node_id: g.name2id(split[1]),
+                    direction: Direction::parse(split[2]),
+                };
+                let end = Vertex {
+                    node_id: g.name2id(split[3]),
+                    direction: Direction::parse(split[4]),
+                };
+                let overlap = Graph::parse_overlap(split[5]);
+                g.add_link(Link{start, end, overlap});
+            }
+        }
+        g
     }
 
     fn get_vertex(&self, name: &str, direction: Direction) -> Vertex {
@@ -177,19 +253,17 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let n = Node {
         name: String::from("Node 1"),
         length: 1,
+        coverage: 0.,
     };
     let v = Vertex {
         node_id: 1,
         direction: Direction::FORWARD,
     };
 
-    let g = Graph::new();
+    println!("Reading the graph from {:?}", &config.graph_fn);
+    let g = Graph::read(&fs::read_to_string(&config.graph_fn)?);
 
-    println!("Hello, world! {:?}", v);
+    println!("Graph read successfully");
 
-    let contents = fs::read_to_string(config.graph_fn)?;
-    for line in contents.lines() {
-        println!("Printing back {}", line)
-    }
     Ok(())
 }
