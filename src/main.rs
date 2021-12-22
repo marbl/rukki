@@ -13,5 +13,8 @@ fn main() {
     });
 
     println!("Processing graph in file {}", config.graph_fn);
-    graph_analysis::run(config);
+    match graph_analysis::run(config) {
+        Ok(()) => println!("Success"),
+        Err(e) => println!("Some error happened {:?}", e)
+    }
 }

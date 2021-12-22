@@ -13,22 +13,29 @@ enum Direction {
 impl Direction {
     fn flip(d: Direction) -> Direction {
         match d {
-            Direction::FORWARD => Direction::REVERSE,
-            Direction::REVERSE => Direction::FORWARD,
+            Self::FORWARD => Self::REVERSE,
+            Self::REVERSE => Self::FORWARD,
         }
     }
 
     fn parse_char(c: char) -> Direction {
         match c {
-            '+' => Direction::FORWARD,
-            '-' => Direction::REVERSE,
+            '+' => Self::FORWARD,
+            '-' => Self::REVERSE,
             _ => panic!("Unknown direction {}", c),
         }
     }
 
     fn parse(s: &str) -> Direction {
         assert!(s.len() == 1, "Unknown direction {}", s);
-        Direction::parse_char(s.chars().nth(0).unwrap())
+        Self::parse_char(s.chars().nth(0).unwrap())
+    }
+
+    fn str(d: Direction) -> &'static str {
+        match d {
+            Self::FORWARD => "+",
+            Self::REVERSE => "-",
+        }
     }
 }
 
@@ -84,17 +91,78 @@ impl Link {
     }
 
     fn parallel(l1: &Link, l2: &Link) -> bool {
-        Link::join_same(l1, l2) || Link::join_same(l1, &l2.rc())
+        Self::join_same(l1, l2) || Self::join_same(l1, &l2.rc())
     }
 }
 
 struct Graph {
     nodes: Vec<Node>,
+    //TODO storage is excessive, should only store neighbor
     //incoming & outgoing links for every node
     incoming_links: Vec<Vec<Link>>,
     outgoing_links: Vec<Vec<Link>>,
     //TODO switch to &str and figure out how to work with lifetimes
     name2ids: HashMap<String, usize>,
+}
+
+//TODO think about useful iterators and reimplement this one via composition
+//FIXME improve when learn how to store iterator as a field :)
+struct AllLinkIter<'a> {
+    g: &'a Graph,
+    curr_node: usize,
+    incoming_flag: bool,
+    pos: usize,
+}
+
+impl<'a> AllLinkIter<'a> {
+    fn new(g: &'a Graph) -> AllLinkIter<'a> {
+        AllLinkIter {
+            g,
+            curr_node: 0,
+            incoming_flag: true,
+            pos: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for AllLinkIter<'a> {
+    type Item = Link;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.curr_node < self.g.node_cnt() {
+            if self.incoming_flag {
+                let links = &self.g.incoming_links[self.curr_node];
+                assert!(self.pos <= links.len());
+                if self.pos < links.len() {
+                    let link = links[self.pos];
+                    assert!(link.end.node_id == self.curr_node);
+                    self.pos += 1;
+                    if link.end < link.start {
+                        return Some(link);
+                    }
+                } else {
+                    self.incoming_flag = false;
+                    self.pos = 0;
+                }
+            } else {
+                let links = &self.g.outgoing_links[self.curr_node];
+                assert!(self.pos <= links.len());
+                if self.pos < links.len() {
+                    let link = links[self.pos];
+                    assert!(link.start.node_id == self.curr_node);
+                    self.pos += 1;
+                    if link.start <= link.end {
+                        return Some(link);
+                    }
+                } else {
+                    self.incoming_flag = true;
+                    self.pos = 0;
+                    self.curr_node += 1;
+                }
+            }
+        }
+        return None;
+    }
 }
 
 impl Graph {
@@ -107,10 +175,15 @@ impl Graph {
             name2ids:  HashMap::new(),
         };
 
-        if g.nodes.len() != g.incoming_links.len() || g.nodes.len() != g.outgoing_links.len() {
-            panic!("Too bad")
-        }
         g
+    }
+
+    fn node_cnt(&self) -> usize {
+        self.nodes.len()
+    }
+
+    fn node_iter(&self) -> std::slice::Iter<Node> {
+        self.nodes.iter()
     }
 
     fn add_node(&mut self, node: Node) {
@@ -129,10 +202,26 @@ impl Graph {
             Direction::FORWARD => self.outgoing_links[link.start.node_id].push(link),
             Direction::REVERSE => self.incoming_links[link.start.node_id].push(link.rc()),
         };
+
+        if &link == &link.rc() { return };
+
         match link.end.direction {
             Direction::FORWARD => self.incoming_links[link.end.node_id].push(link),
             Direction::REVERSE => self.outgoing_links[link.end.node_id].push(link.rc()),
         };
+    }
+
+    //FIXME add this check within add_link function
+    fn check_links(&self) {
+        assert!(self.nodes.len() == self.incoming_links.len());
+        assert!(self.nodes.len() == self.outgoing_links.len());
+        for node_id in 0..self.node_cnt() {
+            let v = Vertex{node_id, direction: Direction::FORWARD};
+            assert!(self.incoming_links[node_id].iter().filter(|l| l.end != v).count() == 0
+                        , "Problem with incoming links for node {}", self.nodes[node_id].name);
+            assert!(self.outgoing_links[node_id].iter().filter(|l| l.start != v).count() == 0
+                        , "Problem with incoming links for node {}", self.nodes[node_id].name);
+        }
     }
 
     //TODO switch to iterator?
@@ -154,7 +243,7 @@ impl Graph {
 
     //TODO switch to something iterable
     fn read(graph_str: &str) -> Graph {
-        let mut g = Graph::new();
+        let mut g = Self::new();
 
         for line in graph_str.lines() {
             if line.starts_with("S\t") {
@@ -164,10 +253,10 @@ impl Graph {
                 let length = if split[2] != "*" {
                                  split[2].trim().len()
                              } else {
-                                 Graph::parse_tag(&split[3..split.len()], "LN:i:")
+                                 Self::parse_tag(&split[3..split.len()], "LN:i:")
                                      .expect("Neither sequence nor LN tag provided")
                              };
-                let coverage: f64 = Graph::parse_tag(&split[3..split.len()], "ll:f:")
+                let coverage: f64 = Self::parse_tag(&split[3..split.len()], "ll:f:")
                                         .unwrap_or(0.);
                 g.add_node(Node{name, length, coverage});
             }
@@ -185,10 +274,11 @@ impl Graph {
                     node_id: g.name2id(split[3]),
                     direction: Direction::parse(split[4]),
                 };
-                let overlap = Graph::parse_overlap(split[5]);
+                let overlap = Self::parse_overlap(split[5]);
                 g.add_link(Link{start, end, overlap});
             }
         }
+        g.check_links();
         g
     }
 
@@ -209,7 +299,7 @@ impl Graph {
     fn outgoing_edges(&self, v: Vertex) -> Vec<Link> {
         match v.direction {
             Direction::FORWARD => self.outgoing_links[v.node_id].clone(),
-            Direction::REVERSE => Graph::rc(&self.incoming_links[v.node_id]),
+            Direction::REVERSE => Self::rc(&self.incoming_links[v.node_id]),
         }
     }
 
@@ -217,7 +307,7 @@ impl Graph {
     fn incoming_edges(&self, v: Vertex) -> Vec<Link> {
         match v.direction {
             Direction::FORWARD => self.incoming_links[v.node_id].clone(),
-            Direction::REVERSE => Graph::rc(&self.outgoing_links[v.node_id]),
+            Direction::REVERSE => Self::rc(&self.outgoing_links[v.node_id]),
         }
     }
 
@@ -226,6 +316,23 @@ impl Graph {
             Some(&id) => id,
             None => panic!("Node {} is not in the graph", name),
         }
+    }
+
+    //FIXME figure out implicit lifetime
+    fn all_links(&self) -> impl Iterator<Item=Link> + '_ {
+        AllLinkIter::new(self)
+    }
+
+    fn link_cnt(&self) -> usize {
+        self.all_links().count()
+    }
+
+    fn v_str(&self, v: Vertex) -> String {
+        format!("{}{}", self.node(v.node_id).name, Direction::str(v.direction))
+    }
+
+    fn l_str(&self, l: Link) -> String {
+        format!("{}->{}", self.v_str(l.start), self.v_str(l.end))
     }
 }
 
@@ -264,6 +371,12 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let g = Graph::read(&fs::read_to_string(&config.graph_fn)?);
 
     println!("Graph read successfully");
+    println!("Node count: {}", g.node_cnt());
+    println!("Link count: {}", g.link_cnt());
+
+    for l in g.all_links() {
+        println!("here: {}", g.l_str(l));
+    }
 
     Ok(())
 }
