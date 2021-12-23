@@ -4,6 +4,10 @@ use std::error::Error;
 
 mod graph;
 
+pub use graph::Graph;
+pub use graph::Link;
+pub use graph::Direction;
+
 pub struct Config {
     pub graph_fn: String,
 }
@@ -23,8 +27,6 @@ impl Config {
         Ok(Config { graph_fn })
     }
 }
-
-pub use graph::Graph;
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     println!("Reading the graph from {:?}", &config.graph_fn);

@@ -2,7 +2,7 @@ use std::str;
 use std::collections::HashMap;
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
-enum Direction {
+pub enum Direction {
     FORWARD,
     REVERSE,
 }
@@ -25,7 +25,7 @@ impl Direction {
 
     fn parse(s: &str) -> Direction {
         assert!(s.len() == 1, "Unknown direction {}", s);
-        Self::parse_char(s.chars().nth(0).unwrap())
+        Self::parse_char(s.chars().next().unwrap())
     }
 
     fn str(d: Direction) -> &'static str {
@@ -38,17 +38,17 @@ impl Direction {
 
 pub struct Node {
     //node size
-    name: String,
-    length: usize,
-    coverage: f64,
+    pub name: String,
+    pub length: usize,
+    pub coverage: f64,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
-struct Vertex {
+pub struct Vertex {
     //node id
-    node_id: usize,
+    pub node_id: usize,
     //direction
-    direction: Direction,
+    pub direction: Direction,
 }
 
 impl Vertex {
@@ -63,11 +63,11 @@ impl Vertex {
 //TODO separate 'links' and 'edges'
 //links will have overlap size, CIGAR, etc
 //edges will represent a Vertex pair
-#[derive(Copy, Clone, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub struct Link {
-    start: Vertex,
-    end: Vertex,
-    overlap: u32,
+    pub start: Vertex,
+    pub end: Vertex,
+    pub overlap: u32,
 }
 
 impl Link {
@@ -288,7 +288,7 @@ impl Graph {
         links.into_iter().map(|x| x.rc()).collect()
     }
 
-    fn node(&self, node_id: usize) -> &Node {
+    pub fn node(&self, node_id: usize) -> &Node {
         &self.nodes[node_id]
     }
 
@@ -318,6 +318,10 @@ impl Graph {
     //FIXME figure out implicit lifetime
     pub fn all_links(&self) -> impl Iterator<Item=Link> + '_ {
         AllLinkIter::new(self)
+    }
+
+    pub fn all_nodes(&self) -> impl Iterator<Item=&Node> + '_ {
+        self.nodes.iter()
     }
 
     pub fn link_cnt(&self) -> usize {
