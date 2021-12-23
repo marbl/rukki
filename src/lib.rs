@@ -1,7 +1,9 @@
 use std::fs;
 use std::env;
-use std::str;
 use std::error::Error;
+
+mod graph {
+use std::str;
 use std::collections::HashMap;
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
@@ -39,7 +41,7 @@ impl Direction {
     }
 }
 
-struct Node {
+pub struct Node {
     //node size
     name: String,
     length: usize,
@@ -67,7 +69,7 @@ impl Vertex {
 //links will have overlap size, CIGAR, etc
 //edges will represent a Vertex pair
 #[derive(Copy, Clone, PartialEq, PartialOrd)]
-struct Link {
+pub struct Link {
     start: Vertex,
     end: Vertex,
     overlap: u32,
@@ -95,7 +97,7 @@ impl Link {
     }
 }
 
-struct Graph {
+pub struct Graph {
     nodes: Vec<Node>,
     //TODO storage is excessive, should only store neighbor
     //incoming & outgoing links for every node
@@ -178,7 +180,7 @@ impl Graph {
         g
     }
 
-    fn node_cnt(&self) -> usize {
+    pub fn node_cnt(&self) -> usize {
         self.nodes.len()
     }
 
@@ -242,7 +244,7 @@ impl Graph {
     }
 
     //TODO switch to something iterable
-    fn read(graph_str: &str) -> Graph {
+    pub fn read(graph_str: &str) -> Graph {
         let mut g = Self::new();
 
         for line in graph_str.lines() {
@@ -319,21 +321,22 @@ impl Graph {
     }
 
     //FIXME figure out implicit lifetime
-    fn all_links(&self) -> impl Iterator<Item=Link> + '_ {
+    pub fn all_links(&self) -> impl Iterator<Item=Link> + '_ {
         AllLinkIter::new(self)
     }
 
-    fn link_cnt(&self) -> usize {
+    pub fn link_cnt(&self) -> usize {
         self.all_links().count()
     }
 
-    fn v_str(&self, v: Vertex) -> String {
+    pub fn v_str(&self, v: Vertex) -> String {
         format!("{}{}", self.node(v.node_id).name, Direction::str(v.direction))
     }
 
-    fn l_str(&self, l: Link) -> String {
+    pub fn l_str(&self, l: Link) -> String {
         format!("{}->{}", self.v_str(l.start), self.v_str(l.end))
     }
+}
 }
 
 pub struct Config {
@@ -356,17 +359,9 @@ impl Config {
     }
 }
 
-pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    let n = Node {
-        name: String::from("Node 1"),
-        length: 1,
-        coverage: 0.,
-    };
-    let v = Vertex {
-        node_id: 1,
-        direction: Direction::FORWARD,
-    };
+use graph::Graph;
 
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     println!("Reading the graph from {:?}", &config.graph_fn);
     let g = Graph::read(&fs::read_to_string(&config.graph_fn)?);
 
