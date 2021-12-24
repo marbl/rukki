@@ -34,7 +34,7 @@ fn nontrivial_cigar() {
 S a * LN:i:100
 L a + a + 1D10M1I
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    Graph::read(&s.replace(" ", "\t"));
 }
 
 

@@ -279,6 +279,25 @@ impl Graph {
         g
     }
 
+    pub fn as_gfa(&self) -> String {
+        let mut gfa = String::new();
+
+        for n in self.all_nodes() {
+            gfa += &format!("S\t{}\t*\tLN:i:{}\tRC:i:{}\tll:f:{:.1}\n",
+                n.name, n.length,
+                (n.coverage * n.length as f64).round() as u64, n.coverage);
+        }
+
+        for l in self.all_links() {
+            gfa += &format!("L\t{}\t{}\t{}\t{}\t{}M\n", 
+                self.node(l.start.node_id).name, Direction::str(l.start.direction),
+                self.node(l.end.node_id).name, Direction::str(l.end.direction),
+                l.overlap);
+        }
+
+        gfa
+    }
+
     fn get_vertex(&self, name: &str, direction: Direction) -> Vertex {
         let node_id = self.name2id(name);
         Vertex {node_id, direction}
