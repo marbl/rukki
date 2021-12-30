@@ -294,14 +294,35 @@ impl <'a> HaploPathSearcher<'a> {
         long_ext
     }
 
-    fn try_extend_with_vertex(&self, mut path: HaploPath, v: Vertex) -> HaploPath {
-        if !path.in_path(v.node_id) {
-            let end = path.end().unwrap();
-            for l in self.g.outgoing_edges(*end) {
-                if l.end == v {
-                    path.append(l);
-                    break;
-                }
+    fn try_link(&self, mut path: HaploPath, v: Vertex) -> HaploPath {
+        let end = path.end().unwrap();
+        for l in self.g.outgoing_edges(*end) {
+            if l.end == v {
+                path.append(l);
+                break;
+            }
+        }
+        path
+    }
+
+
+    fn try_link_with_vertex(&self, mut path: HaploPath, v: Vertex, group: TrioGroup) -> HaploPath {
+        let end = path.end().unwrap();
+        for l in self.g.outgoing_edges(*end) {
+            let w = l.end;
+            if path.in_path(w.node_id)
+                //TODO think if checking length is necessary here
+                || self.g.node(w.node_id).length >= self.long_node_threshold
+                || self.incompatible_assignment(w.node_id, group)
+                || self.g.incoming_edge_cnt(w) != 1
+                || self.g.outgoing_edge_cnt(w) != 1 {
+                //FIXME think if we should check coverage too
+                continue;
+            }
+            if let Some(l2) = self.g.connector(w, v) {
+                path.append(l);
+                path.append(l2);
+                break;
             }
         }
         path
@@ -323,7 +344,12 @@ impl <'a> HaploPathSearcher<'a> {
             if potential_ext.len() == 1 {
                 let potential_ext = *potential_ext.first().unwrap();
                 let mut p = self.unambig_path_forward(potential_ext.rc(), group);
-                p = self.try_extend_with_vertex(p, v.rc());
+                if !p.in_path(v.node_id) {
+                    p = self.try_link(p, v.rc());
+                }
+                if !p.in_path(v.node_id) {
+                    p = self.try_link_with_vertex(p, v.rc(), group);
+                }
                 if p.trim_to(&v.rc()) > 0 {
                     assert!(p.len() > 1);
                     let p = p.reverse_complement();

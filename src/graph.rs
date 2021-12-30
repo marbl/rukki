@@ -364,6 +364,16 @@ impl Graph {
         self.all_links().count()
     }
 
+    pub fn connector(&self, v: Vertex, w: Vertex) -> Option<Link> {
+        //TODO rewrite via filter
+        for l in self.outgoing_edges(v) {
+            if l.end == w {
+                return Some(l);
+            }
+        }
+        None
+    }
+
     pub fn v_str(&self, v: Vertex) -> String {
         format!("{}{}", self.node(v.node_id).name, Direction::str(v.direction))
     }
@@ -371,4 +381,5 @@ impl Graph {
     pub fn l_str(&self, l: Link) -> String {
         format!("{}->{}", self.v_str(l.start), self.v_str(l.end))
     }
+
 }
