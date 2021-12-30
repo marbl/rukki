@@ -1,7 +1,7 @@
 use std::str;
 use std::collections::HashMap;
 
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub enum Direction {
     FORWARD,
     REVERSE,
@@ -43,7 +43,8 @@ pub struct Node {
     pub coverage: f64,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+//TODO which ones are redundant?
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub struct Vertex {
     //node id
     pub node_id: usize,
@@ -52,7 +53,7 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    fn rc(&self) -> Vertex {
+    pub fn rc(&self) -> Vertex {
         Vertex {
             node_id: self.node_id,
             direction: Direction::flip(self.direction),
@@ -71,7 +72,7 @@ pub struct Link {
 }
 
 impl Link {
-    fn rc(&self) -> Link {
+    pub fn rc(&self) -> Link {
         Link {
             start: self.end.rc(),
             end: self.start.rc(),
@@ -212,7 +213,7 @@ impl Graph {
     fn check_links(&self) {
         assert!(self.nodes.len() == self.incoming_links.len());
         assert!(self.nodes.len() == self.outgoing_links.len());
-        for node_id in 0..self.node_cnt() {
+        for (node_id, node) in self.all_nodes().enumerate() {
             let v = Vertex{node_id, direction: Direction::FORWARD};
             assert!(self.incoming_links[node_id].iter().filter(|l| l.end != v).count() == 0
                         , "Problem with incoming links for node {}", self.nodes[node_id].name);
@@ -229,7 +230,7 @@ impl Graph {
                 Ok(t) => t,
                 Err(_) => panic!("Couldn't parse tag {}", s),
             })
-            .nth(0)
+            .next()
     }
 
     fn parse_overlap(cigar: &str) -> u32 {
@@ -289,7 +290,7 @@ impl Graph {
         }
 
         for l in self.all_links() {
-            gfa += &format!("L\t{}\t{}\t{}\t{}\t{}M\n", 
+            gfa += &format!("L\t{}\t{}\t{}\t{}\t{}M\n",
                 self.node(l.start.node_id).name, Direction::str(l.start.direction),
                 self.node(l.end.node_id).name, Direction::str(l.end.direction),
                 l.overlap);
@@ -311,23 +312,39 @@ impl Graph {
         &self.nodes[node_id]
     }
 
+    pub fn node_name(&self, node_id: usize) -> &str {
+        &self.node(node_id).name
+    }
+
     //TODO switch to iterators when learn enough Rust :)
-    fn outgoing_edges(&self, v: Vertex) -> Vec<Link> {
+    pub fn outgoing_edge_cnt(&self, v: Vertex) -> usize {
+        match v.direction {
+            Direction::FORWARD => self.outgoing_links[v.node_id].len(),
+            Direction::REVERSE => self.incoming_links[v.node_id].len(),
+        }
+    }
+
+    //TODO switch to iterators when learn enough Rust :)
+    pub fn outgoing_edges(&self, v: Vertex) -> Vec<Link> {
         match v.direction {
             Direction::FORWARD => self.outgoing_links[v.node_id].clone(),
             Direction::REVERSE => Self::rc(&self.incoming_links[v.node_id]),
         }
     }
 
+    pub fn incoming_edge_cnt(&self, v: Vertex) -> usize {
+        self.outgoing_edge_cnt(v.rc())
+    }
+
     //TODO switch to iterators when learn enough Rust :)
-    fn incoming_edges(&self, v: Vertex) -> Vec<Link> {
+    pub fn incoming_edges(&self, v: Vertex) -> Vec<Link> {
         match v.direction {
             Direction::FORWARD => self.incoming_links[v.node_id].clone(),
             Direction::REVERSE => Self::rc(&self.outgoing_links[v.node_id]),
         }
     }
 
-    fn name2id(&self, name: &str) -> usize {
+    pub fn name2id(&self, name: &str) -> usize {
         match self.name2ids.get(name) {
             Some(&id) => id,
             None => panic!("Node {} is not in the graph", name),
@@ -347,7 +364,7 @@ impl Graph {
         self.all_links().count()
     }
 
-    fn v_str(&self, v: Vertex) -> String {
+    pub fn v_str(&self, v: Vertex) -> String {
         format!("{}{}", self.node(v.node_id).name, Direction::str(v.direction))
     }
 

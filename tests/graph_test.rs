@@ -10,6 +10,9 @@ fn one_node() {
     assert_eq!("a", n.name);
     assert_eq!(100, n.length);
     assert_eq!(None, g.all_links().next());
+    assert_eq!(g.name2id("a"), 0);
+    let v = Vertex {node_id: 0, direction: Direction::FORWARD,};
+    assert_eq!(v.rc(), Vertex {node_id: 0, direction: Direction::REVERSE,});
 }
 
 #[test]
@@ -25,6 +28,9 @@ L a + a + 10M
     assert_eq!(10, l.overlap);
     assert_eq!(Direction::FORWARD, l.start.direction);
     assert_eq!(Direction::FORWARD, l.end.direction);
+    let v = Vertex {node_id: 0, direction: Direction::FORWARD};
+    assert_eq!(g.outgoing_edges(v), vec![l]);
+    assert_eq!(g.incoming_edges(v), vec![l]);
 }
 
 #[test]
@@ -53,6 +59,9 @@ L a - a - 10M
     assert_eq!("a", g.node(l.end.node_id).name);
     assert_eq!(Direction::FORWARD, l.start.direction);
     assert_eq!(Direction::FORWARD, l.end.direction);
+    let v = Vertex {node_id: 0, direction: Direction::FORWARD};
+    assert_eq!(g.outgoing_edges(v), vec![l]);
+    assert_eq!(g.incoming_edges(v), vec![l]);
 }
 
 #[test]
@@ -68,6 +77,9 @@ L a + a - 10M
     assert_eq!("a+->a-", g.l_str(l));
     assert_eq!(Direction::FORWARD, l.start.direction);
     assert_eq!(Direction::REVERSE, l.end.direction);
+    let v = Vertex {node_id: 0, direction: Direction::FORWARD};
+    assert_eq!(g.outgoing_edges(v), vec![l]);
+    assert_eq!(g.incoming_edges(v.rc()), vec![l]);
 }
 
 #[test]
@@ -83,6 +95,9 @@ L a - a + 10M
     assert_eq!("a-->a+", g.l_str(l));
     assert_eq!(Direction::REVERSE, l.start.direction);
     assert_eq!(Direction::FORWARD, l.end.direction);
+    let v = Vertex {node_id: 0, direction: Direction::FORWARD};
+    assert_eq!(g.incoming_edges(v), vec![l]);
+    assert_eq!(g.outgoing_edges(v.rc()), vec![l]);
 }
 
 #[test]
@@ -106,4 +121,15 @@ L a + b + 10M
     let g = Graph::read(&s.replace(" ", "\t"));
     assert_eq!(2, g.node_cnt());
     assert_eq!(1, g.link_cnt());
+    let v = Vertex{node_id: g.name2id("a"), direction: Direction::FORWARD,};
+    let w = Vertex{node_id: g.name2id("b"), direction: Direction::FORWARD,};
+    let l = Link{start: v, end: w, overlap: 10,};
+    assert_eq!(g.outgoing_edges(v), vec![l]);
+    assert_eq!(g.incoming_edges(v), vec![]);
+    assert_eq!(g.outgoing_edges(v.rc()), vec![]);
+    assert_eq!(g.incoming_edges(v.rc()), vec![l.rc()]);
+    assert_eq!(g.outgoing_edges(w), vec![]);
+    assert_eq!(g.incoming_edges(w), vec![l]);
+    assert_eq!(g.outgoing_edges(w.rc()), vec![l.rc()]);
+    assert_eq!(g.incoming_edges(w.rc()), vec![]);
 }
