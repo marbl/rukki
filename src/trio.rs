@@ -122,7 +122,7 @@ impl <'a> AssignmentStorage<'a> {
 pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo]) -> AssignmentStorage<'a> {
     let mut assignments = AssignmentStorage::new(g);
     let high_cnt_thr = 1000;
-    let moderate_cnt_thr = 500;
+    let moderate_cnt_thr = 300;
     let low_cnt_thr = 100;
     let ratio_thr = 5.0;
     assert!(high_cnt_thr as f32 / low_cnt_thr as f32 > ratio_thr);
@@ -258,6 +258,7 @@ impl <'a> HaploPathSearcher<'a> {
     //TODO maybe consume when grow?
     fn grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
         let mut tot_grow = self.unambig_grow_forward(path, group);
+        tot_grow += self.group_grow_forward(path, group);
         //println!("Trying to jump ahead from {}", self.g.v_str(*path.end().unwrap()));
         while let Some(jump) = self.jump_ahead(*path.end().unwrap(), group) {
             //println!("Successful jump to {}", self.g.v_str(*jump.end().unwrap()));
@@ -267,6 +268,7 @@ impl <'a> HaploPathSearcher<'a> {
                 path.merge_in(jump);
             }
             tot_grow += self.unambig_grow_forward(path, group);
+            tot_grow += self.group_grow_forward(path, group);
             //println!("Trying to jump ahead from {}", self.g.v_str(*path.end().unwrap()));
         }
         tot_grow
@@ -305,24 +307,35 @@ impl <'a> HaploPathSearcher<'a> {
         path
     }
 
+    fn long_node(&self, node_id: usize) -> bool {
+        self.g.node(node_id).length >= self.long_node_threshold
+    }
+
+    fn link_vertex_check(&self, w: Vertex, group: TrioGroup) -> bool {
+        let long_node_ahead = |v: Vertex| {
+            assert!(self.g.outgoing_edge_cnt(v) == 1);
+            self.long_node(self.g.outgoing_edges(w).first().unwrap().end.node_id)
+        };
+        !self.long_node(w.node_id)
+            && !self.incompatible_assignment(w.node_id, group)
+            && self.g.incoming_edge_cnt(w) == 1
+            && self.g.outgoing_edge_cnt(w) == 1
+            && (long_node_ahead(w)
+                || long_node_ahead(w.rc())
+                || self.check_assignment(w.node_id, group))
+    }
 
     fn try_link_with_vertex(&self, mut path: HaploPath, v: Vertex, group: TrioGroup) -> HaploPath {
         let end = path.end().unwrap();
         for l in self.g.outgoing_edges(*end) {
             let w = l.end;
-            if path.in_path(w.node_id)
-                //TODO think if checking length is necessary here
-                || self.g.node(w.node_id).length >= self.long_node_threshold
-                || self.incompatible_assignment(w.node_id, group)
-                || self.g.incoming_edge_cnt(w) != 1
-                || self.g.outgoing_edge_cnt(w) != 1 {
-                //FIXME think if we should check coverage too
-                continue;
-            }
-            if let Some(l2) = self.g.connector(w, v) {
-                path.append(l);
-                path.append(l2);
-                break;
+            //TODO think if checks are reasonable //FIXME think if we should check coverage too
+            if !path.in_path(w.node_id) && self.link_vertex_check(w, group) {
+                if let Some(l2) = self.g.connector(w, v) {
+                    path.append(l);
+                    path.append(l2);
+                    break;
+                }
             }
         }
         path
@@ -370,6 +383,23 @@ impl <'a> HaploPathSearcher<'a> {
         p
     }
 
+    fn group_grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
+        let mut v = *path.end().unwrap();
+        let mut steps = 0;
+        while let Some(l) = self.group_extension(v, group) {
+            let w = l.end;
+            if path.in_path(w.node_id) {
+                break;
+            } else {
+                path.append(l);
+                v = w;
+                steps += 1;
+            }
+        }
+        steps
+    }
+
+    //TODO fix code duplication
     fn unambig_grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
         let mut v = *path.end().unwrap();
         let mut steps = 0;
@@ -395,6 +425,15 @@ impl <'a> HaploPathSearcher<'a> {
         false
     }
 
+    fn check_assignment(&self, node_id: usize, target_group: TrioGroup) -> bool {
+        if let Some(assign) = self.assignments.get(node_id) {
+            if assign.group == target_group {
+                return true;
+            }
+        }
+        false
+    }
+
     //maybe move to graph or some GraphAlgoHelper?
     fn unambiguous_extension(&self, v: Vertex) -> Option<Link> {
         //TODO simplify?
@@ -402,6 +441,27 @@ impl <'a> HaploPathSearcher<'a> {
             1 => Some(*self.g.outgoing_edges(v).first().unwrap()),
             _ => None,
         }
+    }
+
+    //maybe move to graph or some GraphAlgoHelper?
+    fn group_extension(&self, v: Vertex, group: TrioGroup) -> Option<Link> {
+        let mut suitable_extension = None;
+        for l in self.g.outgoing_edges(v) {
+            let w = l.end;
+            if self.assignments.is_definite(w.node_id) {
+                //FIXME helper method
+                if self.assignments.get(w.node_id).unwrap().group == group {
+                    if suitable_extension.is_none() {
+                        suitable_extension = Some(l);
+                    } else {
+                        return None;
+                    }
+                }
+            } else {
+                return None;
+            }
+        }
+        suitable_extension
     }
 
 }
