@@ -3,9 +3,11 @@ use std::env;
 use std::fs::File;
 use std::error::Error;
 use std::io::Write;
+use log::info;
 
 mod graph;
 mod trio;
+mod trio_walk;
 
 pub use graph::Graph;
 pub use graph::Vertex;
@@ -45,12 +47,12 @@ impl Config {
 }
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    println!("Reading the graph from {:?}", &config.graph_fn);
+    info!("Reading the graph from {:?}", &config.graph_fn);
     let g = Graph::read(&fs::read_to_string(&config.graph_fn)?);
 
-    println!("Graph read successfully");
-    println!("Node count: {}", g.node_cnt());
-    println!("Link count: {}", g.link_cnt());
+    info!("Graph read successfully");
+    info!("Node count: {}", g.node_cnt());
+    info!("Link count: {}", g.link_cnt());
 
     //for n in g.all_nodes() {
     //    println!("Node: {} length: {} cov: {}", n.name, n.length, n.coverage);
@@ -90,11 +92,11 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     }
 
     let init_node_len_thr = 500_000;
-    let mut path_searcher = trio::HaploPathSearcher::new(&g,
+    let mut path_searcher = trio_walk::HaploPathSearcher::new(&g,
         &parental_groups, init_node_len_thr);
 
     for (path, group) in path_searcher.find_all() {
-        println!("Identified {:?} path: {}", group, path.print(&g));
+        info!("Identified {:?} path: {}", group, path.print(&g));
     }
 
     Ok(())
