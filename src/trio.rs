@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
+use log::{info, debug, trace};
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub enum Confidence {
@@ -259,17 +260,15 @@ impl <'a> HaploPathSearcher<'a> {
     fn grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
         let mut tot_grow = self.unambig_grow_forward(path, group);
         tot_grow += self.group_grow_forward(path, group);
-        //println!("Trying to jump ahead from {}", self.g.v_str(*path.end().unwrap()));
-        while let Some(jump) = self.jump_ahead(*path.end().unwrap(), group) {
-            //println!("Successful jump to {}", self.g.v_str(*jump.end().unwrap()));
-            assert!(path.end().unwrap() == jump.start().unwrap());
+        while let Some(jump) = self.jump_ahead(path.end(), group) {
+            debug!("Successful jump to {}", self.g.v_str(jump.end()));
+            assert!(path.end() == jump.start());
             if path.can_merge_in(&jump) {
                 tot_grow += jump.len() - 1;
                 path.merge_in(jump);
             }
             tot_grow += self.unambig_grow_forward(path, group);
             tot_grow += self.group_grow_forward(path, group);
-            //println!("Trying to jump ahead from {}", self.g.v_str(*path.end().unwrap()));
         }
         tot_grow
     }
@@ -297,8 +296,7 @@ impl <'a> HaploPathSearcher<'a> {
     }
 
     fn try_link(&self, mut path: HaploPath, v: Vertex) -> HaploPath {
-        let end = path.end().unwrap();
-        for l in self.g.outgoing_edges(*end) {
+        for l in self.g.outgoing_edges(path.end()) {
             if l.end == v {
                 path.append(l);
                 break;
@@ -326,12 +324,12 @@ impl <'a> HaploPathSearcher<'a> {
     }
 
     fn try_link_with_vertex(&self, mut path: HaploPath, v: Vertex, group: TrioGroup) -> HaploPath {
-        let end = path.end().unwrap();
-        for l in self.g.outgoing_edges(*end) {
+        for l in self.g.outgoing_edges(path.end()) {
             let w = l.end;
             //TODO think if checks are reasonable //FIXME think if we should check coverage too
             if !path.in_path(w.node_id) && self.link_vertex_check(w, group) {
                 if let Some(l2) = self.g.connector(w, v) {
+                    debug!("Was able to link {} via {}", self.g.v_str(v), self.g.v_str(w));
                     path.append(l);
                     path.append(l2);
                     break;
@@ -342,6 +340,7 @@ impl <'a> HaploPathSearcher<'a> {
     }
 
     fn jump_ahead(&self, v: Vertex, group: TrioGroup) -> Option<HaploPath> {
+        debug!("Trying to jump ahead from {}", self.g.v_str(v));
         //Currently behavior is quite conservative:
         //1. all long nodes ahead should have assignment
         //2. only one should have correct assignment
@@ -363,16 +362,16 @@ impl <'a> HaploPathSearcher<'a> {
                 if !p.in_path(v.node_id) {
                     p = self.try_link_with_vertex(p, v.rc(), group);
                 }
-                if p.trim_to(&v.rc()) > 0 {
+                if p.trim_to(&v.rc()) {
                     assert!(p.len() > 1);
                     let p = p.reverse_complement();
-                    //println!("Successful jump, path {}", p.print(self.g));
+                    debug!("Successful jump, path {}", p.print(self.g));
                     return Some(p);
                 }
             }
         }
 
-        //println!("Can't jump");
+        debug!("Can't jump");
 
         None
     }
@@ -384,7 +383,7 @@ impl <'a> HaploPathSearcher<'a> {
     }
 
     fn group_grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
-        let mut v = *path.end().unwrap();
+        let mut v = path.end();
         let mut steps = 0;
         while let Some(l) = self.group_extension(v, group) {
             let w = l.end;
@@ -401,13 +400,14 @@ impl <'a> HaploPathSearcher<'a> {
 
     //TODO fix code duplication
     fn unambig_grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
-        let mut v = *path.end().unwrap();
+        let mut v = path.end();
         let mut steps = 0;
         while let Some(l) = self.unambiguous_extension(v) {
             let w = l.end;
             if path.in_path(w.node_id) || self.incompatible_assignment(w.node_id, group) {
                 break;
             } else {
+                debug!("Unambiguously extended to {}", self.g.v_str(w));
                 path.append(l);
                 v = w;
                 steps += 1;
@@ -473,6 +473,7 @@ pub struct HaploPath {
 }
 
 //FIXME rename, doesn't know about haplotype!
+//Never empty! Use None instead
 impl HaploPath {
 
     fn new(init_v: Vertex) -> HaploPath {
@@ -487,12 +488,12 @@ impl HaploPath {
         &self.v_storage
     }
 
-    fn start(&self) -> Option<&Vertex> {
-        self.v_storage.first()
+    fn start(&self) -> Vertex {
+        self.v_storage[0]
     }
 
-    fn end(&self) -> Option<&Vertex> {
-        self.v_storage.last()
+    fn end(&self) -> Vertex {
+        self.v_storage[self.v_storage.len() - 1]
     }
 
     fn len(&self) -> usize {
@@ -512,12 +513,15 @@ impl HaploPath {
         }
     }
 
-    fn trim_to(&mut self, v: &Vertex) -> usize {
-        while self.v_storage.len() > 0 && &self.v_storage[self.v_storage.len() - 1] != v {
-            self.v_storage.pop();
-            self.l_storage.pop();
+    fn trim_to(&mut self, v: &Vertex) -> bool {
+        if self.v_storage.contains(v) {
+            while self.v_storage.last().unwrap() != v {
+                self.v_storage.pop();
+                self.l_storage.pop();
+            }
+            return true;
         }
-        self.len()
+        false
     }
 
     fn append(&mut self, l: Link) {
