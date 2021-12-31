@@ -312,7 +312,11 @@ impl Graph {
         &self.nodes[node_id]
     }
 
-    pub fn node_name(&self, node_id: usize) -> &str {
+    pub fn node_by_name(&self, name: &str) -> &Node {
+        &self.nodes[self.name2id(name)]
+    }
+
+    pub fn name(&self, node_id: usize) -> &str {
         &self.node(node_id).name
     }
 

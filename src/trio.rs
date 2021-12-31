@@ -1,3 +1,5 @@
+use std::cmp;
+use log::{info, debug, trace};
 use std::collections::HashMap;
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
@@ -52,11 +54,15 @@ where T: Clone
 #[derive(Clone, Debug)]
 pub struct TrioInfo {
     node_name: String,
-    mat: u64,
-    pat: u64,
+    mat: usize,
+    pat: usize,
 }
 
 impl TrioInfo {
+    fn total(&self) -> usize {
+        self.mat + self.pat
+    }
+
     fn counts_str(&self) -> String {
         format!("{}:{}", self.mat, self.pat)
     }
@@ -68,8 +74,8 @@ pub fn read_trio(trio_str: &str) -> Vec<TrioInfo> {
         let split: Vec<&str> = line.trim().split('\t').collect();
         if &split[0].to_lowercase() != "node" && &split[0].to_lowercase() != "contig" {
             let node_name = String::from(split[0]);
-            let mat: u64 = split[1].parse().expect("Invalid maternal count");
-            let pat: u64 = split[2].parse().expect("Invalid paternal count");
+            let mat: usize = split[1].parse().expect("Invalid maternal count");
+            let pat: usize = split[2].parse().expect("Invalid paternal count");
             infos.push(TrioInfo{node_name, mat, pat})
         }
     }
@@ -120,13 +126,14 @@ impl <'a> AssignmentStorage<'a> {
 
 pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo]) -> AssignmentStorage<'a> {
     let mut assignments = AssignmentStorage::new(g);
+    let min_marker_inv_density = 10_000;
     let high_cnt_thr = 1000;
-    let moderate_cnt_thr = 300;
-    let low_cnt_thr = 100;
+    let moderate_cnt_thr = 100;
+    let low_cnt_thr = 10;
     let ratio_thr = 5.0;
     assert!(high_cnt_thr as f32 / low_cnt_thr as f32 > ratio_thr);
 
-    let issue_confidence = |x: u64| {
+    let issue_confidence = |x: usize| {
         if x > high_cnt_thr {
             Confidence::HIGH
         } else if x > moderate_cnt_thr {
@@ -138,12 +145,12 @@ pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo]) -> Assi
         }
     };
 
-    let excess_confidence = |x: u64, y: u64| {
+    let excess_confidence = |x: usize, y: usize| {
         assert!(x >= y);
         if x > high_cnt_thr && y < low_cnt_thr {
             return Confidence::HIGH;
         }
-        if (x as f32 / y as f32) >= ratio_thr {
+        if y == 0 || (x as f32 / y as f32) >= ratio_thr {
             if x > moderate_cnt_thr {
                 return Confidence::MODERATE;
             } else if x > low_cnt_thr {
@@ -153,7 +160,7 @@ pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo]) -> Assi
         Confidence::INCONCLUSIVE
     };
 
-    let classify_cnts = |x: u64, y: u64| {
+    let classify_cnts = |x: usize, y: usize| {
         assert!(x >= y);
         match excess_confidence(x, y) {
             Confidence::INCONCLUSIVE => (None, issue_confidence(x)),
@@ -162,7 +169,17 @@ pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo]) -> Assi
     };
 
     for trio_info in trio_infos {
+        let node_len = g.node_by_name(&trio_info.node_name).length;
+        debug!("Looking at node {} (len={}), mat:pat={}",
+            trio_info.node_name, node_len, trio_info.counts_str());
+
+        //TODO maybe take max?
+        if trio_info.total() < moderate_cnt_thr && node_len > trio_info.total() * min_marker_inv_density {
+            debug!("Too few markers")
+        }
+
         if trio_info.mat >= trio_info.pat {
+            debug!("Looks more maternal");
             match classify_cnts(trio_info.mat, trio_info.pat) {
                 (None, Confidence::INCONCLUSIVE) => {},
                 (None, issue_conf) => assignments.assign_by_name(&trio_info.node_name,
@@ -181,6 +198,7 @@ pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo]) -> Assi
                     }),
             }
         } else {
+            debug!("Looks more paternal");
             match classify_cnts(trio_info.pat, trio_info.mat) {
                 (None, Confidence::INCONCLUSIVE) => {},
                 (None, issue_conf) => assignments.assign_by_name(&trio_info.node_name,
