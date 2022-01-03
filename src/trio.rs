@@ -1,5 +1,4 @@
-use std::cmp;
-use log::{info, debug, trace};
+use log::debug;
 use std::collections::HashMap;
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
@@ -90,6 +89,7 @@ pub struct AssignmentStorage<'a> {
     g: &'a Graph,
 }
 
+//TODO remove by_name methods
 impl <'a> AssignmentStorage<'a> {
     pub fn new(g: &'a Graph) -> AssignmentStorage<'a> {
         AssignmentStorage {
@@ -122,6 +122,19 @@ impl <'a> AssignmentStorage<'a> {
     pub fn get_by_name(&self, node_name: &str) -> Option<&Assignment<TrioGroup>> {
         self.get(self.g.name2id(node_name))
     }
+
+    pub fn group(&self, node_id: usize) -> Option<TrioGroup> {
+        if let Some(assign) = self.storage.get(&node_id) {
+            Some(assign.group)
+        } else {
+            None
+        }
+    }
+
+    pub fn group_by_name(&self, node_name: &str) -> Option<TrioGroup> {
+        self.group(self.g.name2id(node_name))
+    }
+
 }
 
 pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo]) -> AssignmentStorage<'a> {

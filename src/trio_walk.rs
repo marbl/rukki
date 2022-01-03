@@ -1,6 +1,6 @@
 use crate::graph::*;
 use crate::trio::*;
-use log::{info, debug, trace};
+use log::debug;
 use std::collections::HashSet;
 use std::collections::HashMap;
 
@@ -22,23 +22,23 @@ impl HaploPath {
         }
     }
 
-    fn vertices(&self) -> &Vec<Vertex> {
+    pub fn vertices(&self) -> &Vec<Vertex> {
         &self.v_storage
     }
 
-    fn start(&self) -> Vertex {
+    pub fn start(&self) -> Vertex {
         self.v_storage[0]
     }
 
-    fn end(&self) -> Vertex {
+    pub fn end(&self) -> Vertex {
         self.v_storage[self.v_storage.len() - 1]
     }
 
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.v_storage.len()
     }
 
-    fn links(&self) -> &Vec<Link> {
+    pub fn links(&self) -> &Vec<Link> {
         &self.l_storage
     }
 
@@ -86,6 +86,10 @@ impl HaploPath {
         }
     }
 
+    pub fn initial_node(&self) -> usize {
+        self.initial_node
+    }
+
     pub fn print(&self, g: &Graph) -> String {
         self.v_storage.iter().map(|&v| g.v_str(v)).collect::<Vec<String>>().join(",")
     }
@@ -97,6 +101,7 @@ pub struct HaploPathSearcher<'a> {
     g: &'a Graph,
     assignments: &'a AssignmentStorage<'a>,
     long_node_threshold: usize,
+    //TODO consider using same structure as for initial assignments
     used: HashMap<usize, TrioGroup>,
 }
 
@@ -113,6 +118,10 @@ impl <'a> HaploPathSearcher<'a> {
             };
             self.used.insert(v.node_id, blended);
         }
+    }
+
+    pub fn used(&self) -> &HashMap<usize, TrioGroup> {
+        &self.used
     }
 
     //TODO maybe use single length threshold?

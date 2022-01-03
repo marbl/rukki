@@ -1,6 +1,5 @@
 //use std::io;
 use std::env;
-use std::process;
 use graph_analysis::Config;
 #[macro_use]
 extern crate log;
@@ -22,6 +21,10 @@ struct Args {
     /// Node annotation output file
     #[clap(short, long)]
     node_annotation: Option<String>,
+
+    /// Marker-assisted extracted haplo-paths
+    #[clap(short, long)]
+    haplo_paths: Option<String>,
 }
 
 fn main() {
@@ -42,10 +45,10 @@ fn main() {
     let config = Config {
         graph_fn: args.graph,
         trio_markers_fn: args.parent_markers,
-        out_fn: args.node_annotation,
+        init_node_annotation_fn: args.node_annotation,
+        haplo_paths_fn: args.haplo_paths,
     };
 
-    info!("Processing graph in file {}", config.graph_fn);
     match graph_analysis::run(config) {
         Ok(()) => info!("Success"),
         Err(e) => info!("Some error happened {:?}", e)

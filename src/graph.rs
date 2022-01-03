@@ -53,6 +53,14 @@ pub struct Vertex {
 }
 
 impl Vertex {
+    pub fn forward(node_id: usize) -> Vertex {
+        Vertex {node_id, direction: Direction::FORWARD}
+    }
+
+    pub fn reverse(node_id: usize) -> Vertex {
+        Vertex {node_id, direction: Direction::REVERSE}
+    }
+
     pub fn rc(&self) -> Vertex {
         Vertex {
             node_id: self.node_id,
