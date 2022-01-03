@@ -46,7 +46,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         info!("Writing initial node annotation to {}", output);
         let mut output = File::create(output)?;
 
-        writeln!(output, "node\tmat:pat\tassignment\tcolor")?;
+        writeln!(output, "node\tlength\tmat:pat\tassignment\tcolor")?;
         for (node_id, n) in g.all_nodes().enumerate() {
             assert!(g.name2id(&n.name) == node_id);
             if let Some(assign) = parental_groups.get(node_id) {
@@ -56,7 +56,8 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
                     trio::TrioGroup::ISSUE => "#fbb117",
                     trio::TrioGroup::HOMOZYGOUS => "#c5d165",
                 };
-                writeln!(output, "{}\t{}\t{:?}\t{}", n.name, assign.info, assign.group, color)?;
+                writeln!(output, "{}\t{}\t{}\t{:?}\t{}", n.name, n.length, assign.info
+                                                       , assign.group, color)?;
             }
         }
     }
