@@ -75,7 +75,7 @@ impl HaploPath {
     }
 
     fn can_merge_in(&self, path: &HaploPath) -> bool {
-        assert!(self.v_storage.last().unwrap() == path.v_storage.first().unwrap());
+        assert!(self.v_storage.last() == path.v_storage.first());
         !path.v_storage.iter().skip(1).any(|v| self.in_path(v.node_id))
     }
 
@@ -209,7 +209,7 @@ impl <'a> HaploPathSearcher<'a> {
     fn link_vertex_check(&self, w: Vertex, group: TrioGroup) -> bool {
         let long_node_ahead = |v: Vertex| {
             assert!(self.g.outgoing_edge_cnt(v) == 1);
-            self.long_node(self.g.outgoing_edges(w).first().unwrap().end.node_id)
+            self.long_node(self.g.outgoing_edges(w)[0].end.node_id)
         };
         !self.long_node(w.node_id)
             && !self.incompatible_assignment(w.node_id, group)
@@ -251,8 +251,7 @@ impl <'a> HaploPathSearcher<'a> {
                 .filter(|x| self.assignments.get(x.node_id).unwrap().group == group)
                 .collect();
             if potential_ext.len() == 1 {
-                let potential_ext = potential_ext.first().unwrap();
-                let mut p = HaploPath::new(potential_ext.rc());
+                let mut p = HaploPath::new(potential_ext[0].rc());
                 self.grow_forward(&mut p, group);
                 if !p.in_path(v.node_id) {
                     p = self.try_link(p, v.rc());
@@ -312,7 +311,7 @@ impl <'a> HaploPathSearcher<'a> {
     fn unambiguous_extension(&self, v: Vertex) -> Option<Link> {
         //TODO simplify?
         match self.g.outgoing_edge_cnt(v) {
-            1 => Some(*self.g.outgoing_edges(v).first().unwrap()),
+            1 => Some(self.g.outgoing_edges(v)[0]),
             _ => None,
         }
     }
