@@ -148,16 +148,29 @@ impl <'a> HaploPathSearcher<'a> {
     fn haplo_path(&self, node_id: usize, group: TrioGroup) -> HaploPath {
         assert!(!self.incompatible_assignment(node_id, group));
         let mut path = HaploPath::new(Vertex{node_id, direction: Direction::FORWARD});
-        self.grow_forward(&mut path, group);
+        self.grow_jump_forward(&mut path, group);
         path = path.reverse_complement();
-        self.grow_forward(&mut path, group);
+        self.grow_jump_forward(&mut path, group);
         path.reverse_complement()
     }
 
-    //TODO maybe consume when grow?
     fn grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
-        let mut tot_grow = self.unambig_grow_forward(path, group);
-        tot_grow += self.group_grow_forward(path, group);
+        //TODO can simplify if left side always evaluated before right
+        let mut tot_grow = 0;
+        loop {
+            let mut grow = self.unambig_grow_forward(path, group);
+            grow += self.group_grow_forward(path, group);
+            if grow == 0 {
+                break;
+            }
+            tot_grow += grow;
+        }
+        tot_grow
+    }
+
+    //TODO maybe consume when grow?
+    fn grow_jump_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
+        let mut tot_grow = self.grow_forward(path, group);
         while let Some(jump) = self.jump_ahead(path.end(), group) {
             debug!("Successful jump to {}", self.g.v_str(jump.end()));
             assert!(path.end() == jump.start());
@@ -165,8 +178,7 @@ impl <'a> HaploPathSearcher<'a> {
                 tot_grow += jump.len() - 1;
                 path.merge_in(jump);
             }
-            tot_grow += self.unambig_grow_forward(path, group);
-            tot_grow += self.group_grow_forward(path, group);
+            tot_grow += self.grow_forward(path, group);
         }
         tot_grow
     }
@@ -253,8 +265,9 @@ impl <'a> HaploPathSearcher<'a> {
                 .filter(|x| self.assignments.get(x.node_id).unwrap().group == group)
                 .collect();
             if potential_ext.len() == 1 {
-                let potential_ext = *potential_ext.first().unwrap();
-                let mut p = self.unambig_path_forward(potential_ext.rc(), group);
+                let potential_ext = potential_ext.first().unwrap();
+                let mut p = HaploPath::new(potential_ext.rc());
+                self.grow_forward(&mut p, group);
                 if !p.in_path(v.node_id) {
                     p = self.try_link(p, v.rc());
                 }
@@ -275,12 +288,6 @@ impl <'a> HaploPathSearcher<'a> {
         None
     }
 
-    fn unambig_path_forward(&self, v: Vertex, group: TrioGroup) -> HaploPath {
-        let mut p = HaploPath::new(v);
-        self.unambig_grow_forward(&mut p, group);
-        p
-    }
-
     fn group_grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
         let mut v = path.end();
         let mut steps = 0;
@@ -298,6 +305,7 @@ impl <'a> HaploPathSearcher<'a> {
     }
 
     //TODO fix code duplication
+    //TODO test that calling it second time always does nothing
     fn unambig_grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
         let mut v = path.end();
         let mut steps = 0;
