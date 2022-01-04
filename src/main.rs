@@ -25,6 +25,10 @@ struct Args {
     /// Marker-assisted extracted haplo-paths
     #[clap(short, long)]
     haplo_paths: Option<String>,
+
+    /// Use GAF ([<>]<name1>)+ format for paths
+    #[clap(short, long)]
+    gaf_paths: bool,
 }
 
 fn main() {
@@ -47,6 +51,7 @@ fn main() {
         trio_markers_fn: args.parent_markers,
         init_node_annotation_fn: args.node_annotation,
         haplo_paths_fn: args.haplo_paths,
+        gaf_paths: args.gaf_paths,
     };
 
     match graph_analysis::run(config) {

@@ -94,6 +94,10 @@ impl HaploPath {
         self.v_storage.iter().map(|&v| g.v_str(v)).collect::<Vec<String>>().join(",")
     }
 
+    pub fn print_gaf(&self, g: &Graph) -> String {
+        self.v_storage.iter().map(|&v| g.gaf_str(v)).collect::<Vec<String>>().join("")
+    }
+
 }
 
 //TODO add template parameter

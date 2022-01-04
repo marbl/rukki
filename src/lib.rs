@@ -18,6 +18,7 @@ pub struct Config {
     pub trio_markers_fn: String,
     pub init_node_annotation_fn: Option<String>,
     pub haplo_paths_fn: Option<String>,
+    pub gaf_paths: bool,
 }
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
@@ -77,7 +78,8 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
             //info!("Identified {:?} path: {}", group, path.print(&g));
             writeln!(output, "path_from_{}\t{}\t{:?}\t{}",
                 g.node(path.initial_node()).name,
-                path.print(&g),
+                if config.gaf_paths {path.print_gaf(&g)}
+                               else {path.print(&g)},
                 group,
                 path.initial_node())?;
         }
@@ -90,9 +92,11 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
                                     .map_or(String::from("NA"), |x| format!("{:?}", x));
 
                 //println!("Unused node: {} length: {} group: {}", n.name, n.length, group_str);
-                writeln!(output, "unused_{}\t{}\t{}\t{}",
+                writeln!(output, "unused_{}_len_{}\t{}\t{}\t{}",
                     n.name,
-                    &g.v_str(Vertex::forward(node_id)),
+                    n.length,
+                    if config.gaf_paths {g.gaf_str(Vertex::forward(node_id))}
+                                   else {g.v_str(Vertex::forward(node_id))},
                     group_str,
                     node_id)?;
             }

@@ -34,6 +34,13 @@ impl Direction {
             Self::REVERSE => "-",
         }
     }
+
+    fn gaf_str(d: Direction) -> &'static str {
+        match d {
+            Self::FORWARD => ">",
+            Self::REVERSE => "<",
+        }
+    }
 }
 
 pub struct Node {
@@ -388,6 +395,10 @@ impl Graph {
 
     pub fn v_str(&self, v: Vertex) -> String {
         format!("{}{}", self.node(v.node_id).name, Direction::str(v.direction))
+    }
+
+    pub fn gaf_str(&self, v: Vertex) -> String {
+        format!("{}{}", Direction::gaf_str(v.direction), self.node(v.node_id).name)
     }
 
     pub fn l_str(&self, l: Link) -> String {
