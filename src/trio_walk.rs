@@ -154,20 +154,6 @@ impl <'a> HaploPathSearcher<'a> {
         path.reverse_complement()
     }
 
-    fn grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
-        //TODO can simplify if left side always evaluated before right
-        let mut tot_grow = 0;
-        loop {
-            let mut grow = self.unambig_grow_forward(path, group);
-            grow += self.group_grow_forward(path, group);
-            if grow == 0 {
-                break;
-            }
-            tot_grow += grow;
-        }
-        tot_grow
-    }
-
     //TODO maybe consume when grow?
     fn grow_jump_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
         let mut tot_grow = self.grow_forward(path, group);
@@ -288,7 +274,7 @@ impl <'a> HaploPathSearcher<'a> {
         None
     }
 
-    fn group_grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
+    fn grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
         let mut v = path.end();
         let mut steps = 0;
         while let Some(l) = self.group_extension(v, group) {
@@ -296,25 +282,6 @@ impl <'a> HaploPathSearcher<'a> {
             if path.in_path(w.node_id) {
                 break;
             } else {
-                path.append(l);
-                v = w;
-                steps += 1;
-            }
-        }
-        steps
-    }
-
-    //TODO fix code duplication
-    //TODO test that calling it second time always does nothing
-    fn unambig_grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
-        let mut v = path.end();
-        let mut steps = 0;
-        while let Some(l) = self.unambiguous_extension(v) {
-            let w = l.end;
-            if path.in_path(w.node_id) || self.incompatible_assignment(w.node_id, group) {
-                break;
-            } else {
-                debug!("Unambiguously extended to {}", self.g.v_str(w));
                 path.append(l);
                 v = w;
                 steps += 1;
@@ -352,6 +319,12 @@ impl <'a> HaploPathSearcher<'a> {
 
     //maybe move to graph or some GraphAlgoHelper?
     fn group_extension(&self, v: Vertex, group: TrioGroup) -> Option<Link> {
+        if let Some(l) = self.unambiguous_extension(v) {
+            if !self.incompatible_assignment(l.end.node_id, group) {
+                return Some(l);
+            }
+        }
+
         let mut suitable_extension = None;
         for l in self.g.outgoing_edges(v) {
             let w = l.end;
