@@ -156,17 +156,29 @@ impl <'a> HaploPathSearcher<'a> {
 
     //TODO maybe consume when grow?
     fn grow_jump_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
-        let mut tot_grow = self.grow_forward(path, group);
-        while let Some(jump) = self.jump_ahead(path.end(), group) {
-            debug!("Successful jump to {}", self.g.v_str(jump.end()));
-            assert!(path.end() == jump.start());
-            if path.can_merge_in(&jump) {
-                tot_grow += jump.len() - 1;
-                path.merge_in(jump);
+        let mut tot_grow = 0;
+        loop {
+            let mut grow = self.grow_forward(path, group, true);
+            grow += self.jump_forward(path, group);
+            if grow == 0 {
+                break;
             }
-            tot_grow += self.grow_forward(path, group);
+            tot_grow += grow;
         }
         tot_grow
+    }
+
+    fn jump_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
+        if let Some(jump) = self.find_jump_ahead(path.end(), group) {
+            assert!(path.end() == jump.start());
+            if path.can_merge_in(&jump)
+                && jump.v_storage.iter().all(|v| self.check_available(v.node_id, group)) {
+                let add_on = jump.len() - 1;
+                path.merge_in(jump);
+                return add_on;
+            }
+        }
+        0
     }
 
     fn inner_dfs(&self, v: Vertex, visited: &mut HashSet<Vertex>, long_ext: &mut Vec<Vertex>) {
@@ -242,7 +254,7 @@ impl <'a> HaploPathSearcher<'a> {
         path
     }
 
-    fn jump_ahead(&self, v: Vertex, group: TrioGroup) -> Option<HaploPath> {
+    fn find_jump_ahead(&self, v: Vertex, group: TrioGroup) -> Option<HaploPath> {
         debug!("Trying to jump ahead from {}", self.g.v_str(v));
         //Currently behavior is quite conservative:
         //1. all long nodes ahead should have assignment
@@ -260,7 +272,9 @@ impl <'a> HaploPathSearcher<'a> {
             if potential_ext.len() == 1 {
                 debug!("Unique potential extension {}", self.g.v_str(potential_ext[0]));
                 let mut p = HaploPath::new(potential_ext[0].rc());
-                self.grow_forward(&mut p, group);
+                debug!("Growing path forward from {}", self.g.v_str(potential_ext[0]));
+                self.grow_forward(&mut p, group, false);
+                debug!("Found path {}", p.print(self.g));
                 if !p.in_path(v.node_id) {
                     debug!("Tried linking");
                     p = self.try_link(p, v.rc());
@@ -272,7 +286,7 @@ impl <'a> HaploPathSearcher<'a> {
                 if p.trim_to(&v.rc()) {
                     assert!(p.len() > 1);
                     let p = p.reverse_complement();
-                    debug!("Successful jump, path {}", p.print(self.g));
+                    debug!("Successfully found jump, path {}", p.print(self.g));
                     return Some(p);
                 }
                 debug!("Couldn't trim to vertex {}", self.g.v_str(v.rc()));
@@ -281,17 +295,37 @@ impl <'a> HaploPathSearcher<'a> {
             debug!("Not all long extensions had definite assignments");
         }
 
-        debug!("Can't jump");
+        debug!("Can't find jump");
 
         None
     }
 
-    fn grow_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
+    //FIXME maybe stop grow process immediately when this fails
+    fn check_available(&self, node_id: usize, target_group: TrioGroup) -> bool {
+        if let Some(&group) = self.used.get(&node_id) {
+            assert!(group != TrioGroup::ISSUE);
+            if TrioGroup::incompatible(group, target_group) {
+                if self.long_node(node_id) {
+                    debug!("Can't reuse long node {} in different haplotype", self.g.name(node_id));
+                    return false;
+                }
+            } else {
+                //node already used within the same haplotype
+                debug!("Tried to reuse node {} twice within the same haplotype: {:?}",
+                        self.g.name(node_id), target_group);
+                return false;
+            }
+        }
+        true
+    }
+
+    fn grow_forward(&self, path: &mut HaploPath, group: TrioGroup, check_avail: bool) -> usize {
         let mut v = path.end();
         let mut steps = 0;
         while let Some(l) = self.group_extension(v, group) {
             let w = l.end;
-            if path.in_path(w.node_id) {
+            if path.in_path(w.node_id)
+                || (check_avail && !self.check_available(w.node_id, group)) {
                 break;
             } else {
                 path.append(l);
