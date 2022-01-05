@@ -209,8 +209,9 @@ impl <'a> HaploPathSearcher<'a> {
     fn link_vertex_check(&self, w: Vertex, group: TrioGroup) -> bool {
         let long_node_ahead = |v: Vertex| {
             assert!(self.g.outgoing_edge_cnt(v) == 1);
-            self.long_node(self.g.outgoing_edges(w)[0].end.node_id)
+            self.long_node(self.g.outgoing_edges(v)[0].end.node_id)
         };
+
         !self.long_node(w.node_id)
             && !self.incompatible_assignment(w.node_id, group)
             && self.g.incoming_edge_cnt(w) == 1
@@ -255,13 +256,17 @@ impl <'a> HaploPathSearcher<'a> {
             let potential_ext: Vec<Vertex> = long_ahead.into_iter()
                 .filter(|x| self.assignments.get(x.node_id).unwrap().group == group)
                 .collect();
+            debug!("Assignment matching extension count: {}", potential_ext.len());
             if potential_ext.len() == 1 {
+                debug!("Unique potential extension {}", self.g.v_str(potential_ext[0]));
                 let mut p = HaploPath::new(potential_ext[0].rc());
                 self.grow_forward(&mut p, group);
                 if !p.in_path(v.node_id) {
+                    debug!("Tried linking");
                     p = self.try_link(p, v.rc());
                 }
                 if !p.in_path(v.node_id) {
+                    debug!("Tried linking via vertex");
                     p = self.try_link_with_vertex(p, v.rc(), group);
                 }
                 if p.trim_to(&v.rc()) {
@@ -270,7 +275,10 @@ impl <'a> HaploPathSearcher<'a> {
                     debug!("Successful jump, path {}", p.print(self.g));
                     return Some(p);
                 }
+                debug!("Couldn't trim to vertex {}", self.g.v_str(v.rc()));
             }
+        } else {
+            debug!("Not all long extensions had definite assignments");
         }
 
         debug!("Can't jump");
