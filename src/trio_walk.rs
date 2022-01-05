@@ -147,7 +147,7 @@ impl <'a> HaploPathSearcher<'a> {
 
     fn haplo_path(&self, node_id: usize, group: TrioGroup) -> HaploPath {
         assert!(!self.incompatible_assignment(node_id, group));
-        let mut path = HaploPath::new(Vertex{node_id, direction: Direction::FORWARD});
+        let mut path = HaploPath::new(Vertex::forward(node_id));
         self.grow_jump_forward(&mut path, group);
         path = path.reverse_complement();
         self.grow_jump_forward(&mut path, group);

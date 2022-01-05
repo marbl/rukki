@@ -228,8 +228,8 @@ impl Graph {
     fn check_links(&self) {
         assert!(self.nodes.len() == self.incoming_links.len());
         assert!(self.nodes.len() == self.outgoing_links.len());
-        for (node_id, node) in self.all_nodes().enumerate() {
-            let v = Vertex{node_id, direction: Direction::FORWARD};
+        for (node_id, _) in self.all_nodes().enumerate() {
+            let v = Vertex::forward(node_id);
             assert!(self.incoming_links[node_id].iter().filter(|l| l.end != v).count() == 0
                         , "Problem with incoming links for node {}", self.nodes[node_id].name);
             assert!(self.outgoing_links[node_id].iter().filter(|l| l.start != v).count() == 0
