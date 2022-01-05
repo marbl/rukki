@@ -221,7 +221,12 @@ impl <'a> HaploPathSearcher<'a> {
     }
 
     fn try_link_with_vertex(&self, mut path: HaploPath, v: Vertex, group: TrioGroup) -> HaploPath {
-        for l in self.g.outgoing_edges(path.end()) {
+        let mut outgoing_edges = self.g.outgoing_edges(path.end());
+        outgoing_edges.sort_by(|a, b| self.g.node(b.end.node_id).coverage
+                        .partial_cmp(&self.g.node(a.end.node_id).coverage)
+                        .unwrap());
+
+        for l in outgoing_edges {
             let w = l.end;
             //TODO think if checks are reasonable //FIXME think if we should check coverage too
             if !path.in_path(w.node_id) && self.link_vertex_check(w, group) {
