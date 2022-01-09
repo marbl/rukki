@@ -178,6 +178,41 @@ impl<'a> Iterator for AllLinkIter<'a> {
     }
 }
 
+struct VertexIter<'a> {
+    g: &'a Graph,
+    curr_node: usize,
+    forward_flag: bool,
+}
+
+impl<'a> VertexIter<'a> {
+    fn new(g: &'a Graph) -> VertexIter<'a> {
+        VertexIter {
+            g,
+            curr_node: 0,
+            forward_flag: true,
+        }
+    }
+}
+
+impl<'a> Iterator for VertexIter<'a> {
+    type Item = Vertex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.curr_node < self.g.node_cnt() {
+            if self.forward_flag {
+                self.forward_flag = false;
+                return Some(Vertex::forward(self.curr_node));
+            } else {
+                let node_id = self.curr_node;
+                self.forward_flag = true;
+                self.curr_node += 1;
+                return Some(Vertex::reverse(node_id));
+            }
+        }
+        return None;
+    }
+}
+
 impl Graph {
 
     fn new() -> Graph {
@@ -377,6 +412,14 @@ impl Graph {
 
     pub fn all_nodes(&self) -> impl Iterator<Item=&Node> + '_ {
         self.nodes.iter()
+    }
+
+    pub fn all_vertices(&self) -> impl Iterator<Item=Vertex> + '_ {
+        VertexIter::new(self)
+    }
+
+    pub fn canonic_vertices(&self) -> impl Iterator<Item=Vertex> + '_ {
+        (1..self.node_cnt()).map(|i| Vertex::forward(i))
     }
 
     pub fn link_cnt(&self) -> usize {
