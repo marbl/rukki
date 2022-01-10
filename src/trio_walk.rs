@@ -299,12 +299,12 @@ impl <'a> HaploPathSearcher<'a> {
                 self.grow_forward(&mut p, group, false);
                 debug!("Found path {}", p.print(self.g));
                 if !p.in_path(v.node_id) {
-                    debug!("Tried linking");
-                    p = self.try_link(p, v.rc());
-                }
-                if !p.in_path(v.node_id) {
                     debug!("Tried linking via vertex");
                     p = self.try_link_with_vertex(p, v.rc(), group);
+                }
+                if !p.in_path(v.node_id) {
+                    debug!("Tried linking");
+                    p = self.try_link(p, v.rc());
                 }
                 if p.trim_to(&v.rc()) {
                     assert!(p.len() > 1);
