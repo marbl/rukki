@@ -5,6 +5,7 @@ use std::io::Write;
 use log::info;
 
 mod graph;
+mod graph_algos;
 mod trio;
 mod trio_walk;
 

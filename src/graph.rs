@@ -76,6 +76,7 @@ impl Vertex {
     }
 }
 
+//FIXME support link coverage!
 //TODO separate 'links' and 'edges'
 //links will have overlap size, CIGAR, etc
 //edges will represent a Vertex pair

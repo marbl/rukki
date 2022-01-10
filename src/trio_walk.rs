@@ -1,5 +1,6 @@
 use crate::graph::*;
 use crate::trio::*;
+use crate::graph_algos::*;
 use log::debug;
 use std::collections::HashSet;
 use std::collections::HashMap;
@@ -107,11 +108,28 @@ pub struct HaploPathSearcher<'a> {
     long_node_threshold: usize,
     //TODO consider using same structure as for initial assignments
     used: HashMap<usize, TrioGroup>,
+    in_sccs: HashSet<usize>,
 }
 
 impl <'a> HaploPathSearcher<'a> {
+    fn nodes_in_sccs(g: &Graph) -> HashSet<usize> {
+        let mut nodes_in_sccs = HashSet::new();
+        for scc in strongly_connected(g) {
+            for v in scc {
+                nodes_in_sccs.insert(v.node_id);
+            }
+        }
+        nodes_in_sccs
+    }
+
     pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage<'a>, long_node_threshold: usize) -> HaploPathSearcher<'a> {
-        HaploPathSearcher{ g, assignments, long_node_threshold, used: HashMap::new() }
+        HaploPathSearcher{
+            g,
+            assignments,
+            long_node_threshold,
+            used: HashMap::new(),
+            in_sccs: HaploPathSearcher::nodes_in_sccs(g),
+        }
     }
 
     fn update_used(&mut self, path: &HaploPath, group: TrioGroup) {
@@ -131,6 +149,7 @@ impl <'a> HaploPathSearcher<'a> {
     //TODO maybe use single length threshold?
     pub fn find_all(&mut self) -> Vec<(HaploPath, TrioGroup)> {
         let mut answer = Vec::new();
+
         for (node_id, node) in self.g.all_nodes().enumerate() {
             if self.used.contains_key(&node_id) {
                 continue;
@@ -170,8 +189,12 @@ impl <'a> HaploPathSearcher<'a> {
 
     fn jump_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
         if let Some(jump) = self.find_jump_ahead(path.end(), group) {
+            assert!(jump.len() > 1);
             assert!(path.end() == jump.start());
+            //FIXME improve logging!
             if path.can_merge_in(&jump)
+                //written this way only to skip last node, rewrite!
+                && jump.l_storage.iter().all(|l| !self.in_sccs.contains(&l.start.node_id))
                 && jump.v_storage.iter().all(|v| self.check_available(v.node_id, group)) {
                 let add_on = jump.len() - 1;
                 path.merge_in(jump);
