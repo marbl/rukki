@@ -114,7 +114,7 @@ pub struct HaploPathSearcher<'a> {
 impl <'a> HaploPathSearcher<'a> {
     fn nodes_in_sccs(g: &Graph) -> HashSet<usize> {
         let mut nodes_in_sccs = HashSet::new();
-        for scc in strongly_connected(g) {
+        for scc in scc::strongly_connected(g) {
             for v in scc {
                 nodes_in_sccs.insert(v.node_id);
             }
