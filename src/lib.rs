@@ -73,15 +73,15 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         let mut path_searcher = trio_walk::HaploPathSearcher::new(&g,
             &parental_groups, init_node_len_thr);
 
-        for (path, group) in path_searcher.find_all() {
-            assert!(path.vertices().contains(&Vertex::forward(path.initial_node())));
+        for (path, node_id, group) in path_searcher.find_all() {
+            assert!(path.vertices().contains(&Vertex::forward(node_id)));
             //info!("Identified {:?} path: {}", group, path.print(&g));
             writeln!(output, "path_from_{}\t{}\t{:?}\t{}",
-                g.node(path.initial_node()).name,
+                g.node(node_id).name,
                 if config.gaf_paths {path.print_gaf(&g)}
                                else {path.print(&g)},
                 group,
-                path.initial_node())?;
+                g.node(node_id).name)?;
         }
 
         let used = path_searcher.used();

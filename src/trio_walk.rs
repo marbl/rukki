@@ -8,7 +8,6 @@ use std::collections::HashMap;
 pub struct HaploPath {
     v_storage: Vec<Vertex>,
     l_storage: Vec<Link>,
-    initial_node: usize,
 }
 
 //FIXME rename, doesn't know about haplotype!
@@ -19,7 +18,6 @@ impl HaploPath {
         HaploPath {
             v_storage: vec![init_v],
             l_storage: Vec::new(),
-            initial_node: init_v.node_id,
         }
     }
 
@@ -48,7 +46,6 @@ impl HaploPath {
         HaploPath {
             v_storage: self.v_storage.iter().rev().map(|v| v.rc()).collect(),
             l_storage: self.l_storage.iter().rev().map(|l| l.rc()).collect(),
-            initial_node: self.initial_node,
         }
     }
 
@@ -85,10 +82,6 @@ impl HaploPath {
         for l in path.l_storage {
             self.append(l);
         }
-    }
-
-    pub fn initial_node(&self) -> usize {
-        self.initial_node
     }
 
     pub fn print(&self, g: &Graph) -> String {
@@ -147,18 +140,19 @@ impl <'a> HaploPathSearcher<'a> {
     }
 
     //TODO maybe use single length threshold?
-    pub fn find_all(&mut self) -> Vec<(HaploPath, TrioGroup)> {
+    pub fn find_all(&mut self) -> Vec<(HaploPath, usize, TrioGroup)> {
         let mut answer = Vec::new();
 
         for (node_id, node) in self.g.all_nodes().enumerate() {
             if self.used.contains_key(&node_id) {
                 continue;
             }
+            //launch from long, definitely assigned nodes
             if node.length >= self.long_node_threshold && self.assignments.is_definite(node_id) {
                 let group = self.assignments.get(node_id).unwrap().group;
                 let path = self.haplo_path(node_id, group);
                 self.update_used(&path, group);
-                answer.push((path, group));
+                answer.push((path, node_id, group));
             }
         }
         answer
