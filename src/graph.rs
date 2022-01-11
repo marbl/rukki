@@ -450,3 +450,92 @@ impl Graph {
     }
 
 }
+
+pub struct Path {
+    v_storage: Vec<Vertex>,
+    l_storage: Vec<Link>,
+}
+
+//FIXME rename, doesn't know about haplotype!
+//Never empty! Use None instead
+impl Path {
+
+    pub fn new(init_v: Vertex) -> Path {
+        Path {
+            v_storage: vec![init_v],
+            l_storage: Vec::new(),
+        }
+    }
+
+    pub fn vertices(&self) -> &Vec<Vertex> {
+        &self.v_storage
+    }
+
+    pub fn start(&self) -> Vertex {
+        self.v_storage[0]
+    }
+
+    pub fn end(&self) -> Vertex {
+        self.v_storage[self.v_storage.len() - 1]
+    }
+
+    pub fn len(&self) -> usize {
+        self.v_storage.len()
+    }
+
+    pub fn links(&self) -> &Vec<Link> {
+        &self.l_storage
+    }
+
+    pub fn reverse_complement(self) -> Path {
+        //TODO optimize since consuming self
+        Path {
+            v_storage: self.v_storage.iter().rev().map(|v| v.rc()).collect(),
+            l_storage: self.l_storage.iter().rev().map(|l| l.rc()).collect(),
+        }
+    }
+
+    pub fn trim_to(&mut self, v: &Vertex) -> bool {
+        if self.v_storage.contains(v) {
+            while self.v_storage.last().unwrap() != v {
+                self.v_storage.pop();
+                self.l_storage.pop();
+            }
+            return true;
+        }
+        false
+    }
+
+    pub fn append(&mut self, l: Link) {
+        assert!(self.v_storage.last().unwrap() == &l.start);
+        //TODO disable expensive assert?
+        assert!(!self.in_path(l.end.node_id));
+        self.v_storage.push(l.end);
+        self.l_storage.push(l);
+    }
+
+    pub fn in_path(&self, node_id: usize) -> bool {
+        self.v_storage.iter().any(|v| v.node_id == node_id)
+    }
+
+    pub fn can_merge_in(&self, path: &Path) -> bool {
+        assert!(self.v_storage.last() == path.v_storage.first());
+        !path.v_storage.iter().skip(1).any(|v| self.in_path(v.node_id))
+    }
+
+    pub fn merge_in(&mut self, path: Path) {
+        assert!(self.can_merge_in(&path));
+        for l in path.l_storage {
+            self.append(l);
+        }
+    }
+
+    pub fn print(&self, g: &Graph) -> String {
+        self.v_storage.iter().map(|&v| g.v_str(v)).collect::<Vec<String>>().join(",")
+    }
+
+    pub fn print_gaf(&self, g: &Graph) -> String {
+        self.v_storage.iter().map(|&v| g.gaf_str(v)).collect::<Vec<String>>().join("")
+    }
+
+}

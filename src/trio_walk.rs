@@ -5,97 +5,8 @@ use log::debug;
 use std::collections::HashSet;
 use std::collections::HashMap;
 
-pub struct HaploPath {
-    v_storage: Vec<Vertex>,
-    l_storage: Vec<Link>,
-}
-
-//FIXME rename, doesn't know about haplotype!
-//Never empty! Use None instead
-impl HaploPath {
-
-    fn new(init_v: Vertex) -> HaploPath {
-        HaploPath {
-            v_storage: vec![init_v],
-            l_storage: Vec::new(),
-        }
-    }
-
-    pub fn vertices(&self) -> &Vec<Vertex> {
-        &self.v_storage
-    }
-
-    pub fn start(&self) -> Vertex {
-        self.v_storage[0]
-    }
-
-    pub fn end(&self) -> Vertex {
-        self.v_storage[self.v_storage.len() - 1]
-    }
-
-    pub fn len(&self) -> usize {
-        self.v_storage.len()
-    }
-
-    pub fn links(&self) -> &Vec<Link> {
-        &self.l_storage
-    }
-
-    fn reverse_complement(self) -> HaploPath {
-        //TODO optimize since consuming self
-        HaploPath {
-            v_storage: self.v_storage.iter().rev().map(|v| v.rc()).collect(),
-            l_storage: self.l_storage.iter().rev().map(|l| l.rc()).collect(),
-        }
-    }
-
-    fn trim_to(&mut self, v: &Vertex) -> bool {
-        if self.v_storage.contains(v) {
-            while self.v_storage.last().unwrap() != v {
-                self.v_storage.pop();
-                self.l_storage.pop();
-            }
-            return true;
-        }
-        false
-    }
-
-    fn append(&mut self, l: Link) {
-        assert!(self.v_storage.last().unwrap() == &l.start);
-        //TODO disable expensive assert?
-        assert!(!self.in_path(l.end.node_id));
-        self.v_storage.push(l.end);
-        self.l_storage.push(l);
-    }
-
-    fn in_path(&self, node_id: usize) -> bool {
-        self.v_storage.iter().any(|v| v.node_id == node_id)
-    }
-
-    fn can_merge_in(&self, path: &HaploPath) -> bool {
-        assert!(self.v_storage.last() == path.v_storage.first());
-        !path.v_storage.iter().skip(1).any(|v| self.in_path(v.node_id))
-    }
-
-    fn merge_in(&mut self, path: HaploPath) {
-        assert!(self.can_merge_in(&path));
-        for l in path.l_storage {
-            self.append(l);
-        }
-    }
-
-    pub fn print(&self, g: &Graph) -> String {
-        self.v_storage.iter().map(|&v| g.v_str(v)).collect::<Vec<String>>().join(",")
-    }
-
-    pub fn print_gaf(&self, g: &Graph) -> String {
-        self.v_storage.iter().map(|&v| g.gaf_str(v)).collect::<Vec<String>>().join("")
-    }
-
-}
-
 //TODO add template parameter
-pub struct HaploPathSearcher<'a> {
+pub struct HaploSearcher<'a> {
     g: &'a Graph,
     assignments: &'a AssignmentStorage<'a>,
     long_node_threshold: usize,
@@ -104,7 +15,7 @@ pub struct HaploPathSearcher<'a> {
     in_sccs: HashSet<usize>,
 }
 
-impl <'a> HaploPathSearcher<'a> {
+impl <'a> HaploSearcher<'a> {
     fn nodes_in_sccs(g: &Graph) -> HashSet<usize> {
         let mut nodes_in_sccs = HashSet::new();
         for scc in scc::strongly_connected(g) {
@@ -115,17 +26,17 @@ impl <'a> HaploPathSearcher<'a> {
         nodes_in_sccs
     }
 
-    pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage<'a>, long_node_threshold: usize) -> HaploPathSearcher<'a> {
-        HaploPathSearcher{
+    pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage<'a>, long_node_threshold: usize) -> HaploSearcher<'a> {
+        HaploSearcher{
             g,
             assignments,
             long_node_threshold,
             used: HashMap::new(),
-            in_sccs: HaploPathSearcher::nodes_in_sccs(g),
+            in_sccs: HaploSearcher::nodes_in_sccs(g),
         }
     }
 
-    fn update_used(&mut self, path: &HaploPath, group: TrioGroup) {
+    fn update_used(&mut self, path: &Path, group: TrioGroup) {
         for v in path.vertices() {
             let blended = match self.used.get(&v.node_id) {
                 Some(exist_group) => TrioGroup::blend(*exist_group, group),
@@ -140,7 +51,7 @@ impl <'a> HaploPathSearcher<'a> {
     }
 
     //TODO maybe use single length threshold?
-    pub fn find_all(&mut self) -> Vec<(HaploPath, usize, TrioGroup)> {
+    pub fn find_all(&mut self) -> Vec<(Path, usize, TrioGroup)> {
         let mut answer = Vec::new();
 
         for (node_id, node) in self.g.all_nodes().enumerate() {
@@ -158,9 +69,9 @@ impl <'a> HaploPathSearcher<'a> {
         answer
     }
 
-    fn haplo_path(&self, node_id: usize, group: TrioGroup) -> HaploPath {
+    fn haplo_path(&self, node_id: usize, group: TrioGroup) -> Path {
         assert!(!self.incompatible_assignment(node_id, group));
-        let mut path = HaploPath::new(Vertex::forward(node_id));
+        let mut path = Path::new(Vertex::forward(node_id));
         self.grow_jump_forward(&mut path, group);
         path = path.reverse_complement();
         self.grow_jump_forward(&mut path, group);
@@ -168,7 +79,7 @@ impl <'a> HaploPathSearcher<'a> {
     }
 
     //TODO maybe consume when grow?
-    fn grow_jump_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
+    fn grow_jump_forward(&self, path: &mut Path, group: TrioGroup) -> usize {
         let mut tot_grow = 0;
         loop {
             let mut grow = self.grow_forward(path, group, true);
@@ -181,15 +92,15 @@ impl <'a> HaploPathSearcher<'a> {
         tot_grow
     }
 
-    fn jump_forward(&self, path: &mut HaploPath, group: TrioGroup) -> usize {
+    fn jump_forward(&self, path: &mut Path, group: TrioGroup) -> usize {
         if let Some(jump) = self.find_jump_ahead(path.end(), group) {
             assert!(jump.len() > 1);
             assert!(path.end() == jump.start());
             //FIXME improve logging!
             if path.can_merge_in(&jump)
                 //written this way only to skip last node, rewrite!
-                && jump.l_storage.iter().all(|l| !self.in_sccs.contains(&l.start.node_id))
-                && jump.v_storage.iter().all(|v| self.check_available(v.node_id, group)) {
+                && jump.links().iter().all(|l| !self.in_sccs.contains(&l.start.node_id))
+                && jump.vertices().iter().all(|v| self.check_available(v.node_id, group)) {
                 let add_on = jump.len() - 1;
                 path.merge_in(jump);
                 return add_on;
@@ -221,7 +132,7 @@ impl <'a> HaploPathSearcher<'a> {
         long_ext
     }
 
-    fn try_link(&self, mut path: HaploPath, v: Vertex) -> HaploPath {
+    fn try_link(&self, mut path: Path, v: Vertex) -> Path {
         for l in self.g.outgoing_edges(path.end()) {
             if l.end == v {
                 path.append(l);
@@ -250,7 +161,7 @@ impl <'a> HaploPathSearcher<'a> {
                 || self.check_assignment(w.node_id, group))
     }
 
-    fn try_link_with_vertex(&self, mut path: HaploPath, v: Vertex, group: TrioGroup) -> HaploPath {
+    fn try_link_with_vertex(&self, mut path: Path, v: Vertex, group: TrioGroup) -> Path {
         let mut outgoing_edges = self.g.outgoing_edges(path.end());
         outgoing_edges.sort_by(|a, b| self.g.node(b.end.node_id).coverage
                         .partial_cmp(&self.g.node(a.end.node_id).coverage)
@@ -271,7 +182,7 @@ impl <'a> HaploPathSearcher<'a> {
         path
     }
 
-    fn find_jump_ahead(&self, v: Vertex, group: TrioGroup) -> Option<HaploPath> {
+    fn find_jump_ahead(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
         debug!("Trying to jump ahead from {}", self.g.v_str(v));
         //Currently behavior is quite conservative:
         //1. all long nodes ahead should have assignment
@@ -288,7 +199,7 @@ impl <'a> HaploPathSearcher<'a> {
             debug!("Assignment matching extension count: {}", potential_ext.len());
             if potential_ext.len() == 1 {
                 debug!("Unique potential extension {}", self.g.v_str(potential_ext[0]));
-                let mut p = HaploPath::new(potential_ext[0].rc());
+                let mut p = Path::new(potential_ext[0].rc());
                 debug!("Growing path forward from {}", self.g.v_str(potential_ext[0]));
                 self.grow_forward(&mut p, group, false);
                 debug!("Found path {}", p.print(self.g));
@@ -336,7 +247,7 @@ impl <'a> HaploPathSearcher<'a> {
         true
     }
 
-    fn grow_forward(&self, path: &mut HaploPath, group: TrioGroup, check_avail: bool) -> usize {
+    fn grow_forward(&self, path: &mut Path, group: TrioGroup, check_avail: bool) -> usize {
         let mut v = path.end();
         let mut steps = 0;
         while let Some(l) = self.group_extension(v, group) {

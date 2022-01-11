@@ -70,7 +70,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
 
         writeln!(output, "name\tpath\tassignment\tinit_node")?;
         let init_node_len_thr = 500_000;
-        let mut path_searcher = trio_walk::HaploPathSearcher::new(&g,
+        let mut path_searcher = trio_walk::HaploSearcher::new(&g,
             &parental_groups, init_node_len_thr);
 
         for (path, node_id, group) in path_searcher.find_all() {
