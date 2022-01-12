@@ -5,7 +5,8 @@ use std::io::Write;
 use log::info;
 
 mod graph;
-mod graph_algos;
+//ASK why tests don't compile without the pub
+pub mod graph_algos;
 mod trio;
 mod trio_walk;
 

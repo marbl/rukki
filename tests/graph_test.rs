@@ -43,7 +43,6 @@ L a + a + 1D10M1I
     Graph::read(&s.replace(" ", "\t"));
 }
 
-
 #[test]
 fn loop2() {
     let s = "

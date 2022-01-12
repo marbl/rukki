@@ -84,7 +84,7 @@ impl Vertex {
 pub struct Link {
     pub start: Vertex,
     pub end: Vertex,
-    pub overlap: u32,
+    pub overlap: usize,
 }
 
 impl Link {
@@ -284,7 +284,7 @@ impl Graph {
             .next()
     }
 
-    fn parse_overlap(cigar: &str) -> u32 {
+    fn parse_overlap(cigar: &str) -> usize {
         assert!(cigar.ends_with('M'), "Invalid overlap {}", cigar);
         let ovl = &cigar[..(cigar.len()-1)];
         ovl.trim().parse().expect(&format!("Invalid overlap {}", cigar))
