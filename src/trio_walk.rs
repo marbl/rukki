@@ -308,11 +308,13 @@ impl <'a> HaploSearcher<'a> {
 
         //println!("Long ahead: {}", long_ahead.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
 
-        if long_ahead.iter().all(|x| self.assignments.is_definite(x.node_id)) {
+        //if long_ahead.iter().all(|x| self.assignments.is_definite(x.node_id)) {
+        if long_ahead.iter().all(|x| self.assignments.contains(x.node_id)) {
             let potential_ext: Vec<Vertex> = long_ahead.into_iter()
-                .filter(|x| self.assignments.get(x.node_id).unwrap().group == group)
+                //.filter(|x| self.assignments.get(x.node_id).unwrap().group == group)
+                .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
                 .collect();
-            debug!("Assignment matching extension count: {}", potential_ext.len());
+            debug!("Compatible extension count: {}", potential_ext.len());
             if potential_ext.len() == 1 {
                 debug!("Unique potential extension {}", self.g.v_str(potential_ext[0]));
                 let mut p = Path::new(potential_ext[0].rc());

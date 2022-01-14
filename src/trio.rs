@@ -24,6 +24,10 @@ impl TrioGroup {
             (g1 == TrioGroup::PATERNAL && g2 == TrioGroup::MATERNAL)
     }
 
+    pub fn compatible(g1: TrioGroup, g2: TrioGroup) -> bool {
+        !Self::incompatible(g1, g2)
+    }
+
     pub fn is_definite(&self) -> bool {
         match *self {
             TrioGroup::MATERNAL | TrioGroup::PATERNAL => true,
@@ -129,8 +133,8 @@ impl <'a> AssignmentStorage<'a> {
         self.storage.get(&node_id)
     }
 
-    pub fn get_by_name(&self, node_name: &str) -> Option<&Assignment<TrioGroup>> {
-        self.get(self.g.name2id(node_name))
+    pub fn contains(&self, node_id: usize) -> bool {
+        self.storage.contains_key(&node_id)
     }
 
     pub fn group(&self, node_id: usize) -> Option<TrioGroup> {
@@ -139,10 +143,6 @@ impl <'a> AssignmentStorage<'a> {
         } else {
             None
         }
-    }
-
-    pub fn group_by_name(&self, node_name: &str) -> Option<TrioGroup> {
-        self.group(self.g.name2id(node_name))
     }
 
 }
