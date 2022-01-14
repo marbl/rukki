@@ -137,9 +137,7 @@ impl<'a> SuperbubbleFinder<'a> {
                     self.reached_vertices.insert(w, self.link_dist_range(l));
                 }
                 let rem_inc = remaining_incoming.get_mut(&w).unwrap();
-                //FIXME What is going on?!
-                //*rem_inc -= 1;
-                *rem_inc = *rem_inc - 1;
+                *rem_inc -= 1;
                 //self.reached_vertices.get(w) =
                 self.reached_vertices.insert(w,
                     merge_range(*self.reached_vertices.get(&w).unwrap(), self.link_dist_range(l)));
