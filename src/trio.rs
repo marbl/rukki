@@ -39,6 +39,16 @@ impl TrioGroup {
             return TrioGroup::HOMOZYGOUS;
         }
     }
+
+    pub fn optional_blend(og1: Option<TrioGroup>, og2: Option<TrioGroup>) -> Option<TrioGroup> {
+        match og1 {
+            None => og2,
+            Some(g1) => match og2 {
+                None => og1,
+                Some(g2) => Some(Self::blend(g1, g2)),
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -107,11 +117,11 @@ impl <'a> AssignmentStorage<'a> {
         false
     }
 
-    fn assign(&mut self, node_id: usize, assignment: Assignment<TrioGroup>) {
+    pub fn assign(&mut self, node_id: usize, assignment: Assignment<TrioGroup>) {
         self.storage.insert(node_id, assignment);
     }
 
-    fn assign_by_name(&mut self, node_name: &str, assignment: Assignment<TrioGroup>) {
+    pub fn assign_by_name(&mut self, node_name: &str, assignment: Assignment<TrioGroup>) {
         self.assign(self.g.name2id(node_name), assignment);
     }
 
@@ -139,6 +149,7 @@ impl <'a> AssignmentStorage<'a> {
 
 pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo]) -> AssignmentStorage<'a> {
     let mut assignments = AssignmentStorage::new(g);
+    //FIXME parameterize
     let min_marker_inv_density = 10_000;
     let high_cnt_thr = 1000;
     let moderate_cnt_thr = 100;

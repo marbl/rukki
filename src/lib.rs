@@ -44,6 +44,9 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
 
     info!("Assigning initial parental groups to the nodes");
     let parental_groups = trio::assign_parental_groups(&g, &trio_infos);
+    info!("Detecting homozygous nodes");
+    //TODO parameterize
+    let parental_groups = trio_walk::assign_homozygous(&g, parental_groups, 100_000);
 
     if let Some(output) = config.init_node_annotation_fn {
         info!("Writing initial node annotation to {}", output);
@@ -101,6 +104,8 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
                     group_str,
                     node_id)?;
             }
+            //FIXME how many times should we report HOMOZYGOUS node?!
+            //What if it has never been used? Are we confident enough?
         }
 
     }

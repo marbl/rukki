@@ -1,9 +1,148 @@
 use crate::graph::*;
 use crate::trio::*;
 use crate::graph_algos::*;
-use log::debug;
+use log::{debug, trace};
 use std::collections::HashSet;
 use std::collections::HashMap;
+
+fn inner_dfs(g: &Graph, v: Vertex, node_len_thr: usize, visited: &mut HashSet<Vertex>, long_ext: &mut Vec<Vertex>) {
+    visited.insert(v);
+    //if only one vertex is visited then it means we just started
+    if visited.len() > 1 && g.node(v.node_id).length >= node_len_thr {
+        long_ext.push(v);
+    } else {
+        for l in g.outgoing_edges(v) {
+            let w = l.end;
+            if !visited.contains(&w) {
+                inner_dfs(g, w, node_len_thr, visited, long_ext);
+            }
+        }
+    }
+}
+
+fn bounded_dfs(g: &Graph, v: Vertex, node_len_thr: usize) -> Vec<Vertex> {
+    //TODO change for integer vectors
+    let mut visited = HashSet::new();
+    let mut long_ext = Vec::new();
+    inner_dfs(g, v, node_len_thr, &mut visited, &mut long_ext);
+    long_ext
+}
+
+//TODO add template parameter
+pub struct HomozygousAssigner<'a> {
+    g: &'a Graph,
+    assignments: AssignmentStorage<'a>,
+    node_len_thr: usize,
+}
+
+impl <'a> HomozygousAssigner<'a> {
+
+    fn marking_round(&mut self) -> usize {
+        let mut marked = 0;
+        //TODO think how it should work with generalized super-bubbles
+        //(probably should give a chance to extend even the node is already marked)
+        for v in self.g.all_vertices() {
+            //the node is long, lacks any assignment (including ISSUE) and neighborhood checks out
+            if self.g.node(v.node_id).length >= self.node_len_thr
+                && self.assignments.get(v.node_id).is_none()
+                && self.check_homozygous_neighborhood(v) {
+                marked += self.mark_vertex_and_chains(v);
+            }
+        }
+        marked
+    }
+
+    fn mark_vertex_and_chains(&mut self, v: Vertex) -> usize {
+        //hit node with existing assignment
+        if !self.mark_vertex(v) {
+            //already marked
+            return 0;
+        }
+        let mut marked = 1;
+        marked += self.mark_chain_ahead(v);
+        marked += self.mark_chain_ahead(v.rc());
+        marked
+    }
+
+    fn mark_vertex(&mut self, v: Vertex) -> bool {
+        if !self.assignments.get(v.node_id).is_none() {
+            //hit node with existing assignment
+            return false;
+        }
+        self.assignments.assign(v.node_id, Assignment::<TrioGroup>{
+            group: TrioGroup::HOMOZYGOUS,
+            confidence: Confidence::MODERATE,
+            info: String::from("HomozygousAssigner"),
+        });
+        true
+    }
+
+    fn mark_chain_ahead(&mut self, init_v: Vertex) -> usize {
+        let mut v = init_v;
+        //FIXME proper parameterization
+        let max_length = 200_000;
+        let max_diff = 200_000;
+        let max_count = 1000;
+        let mut marked = 0;
+        loop {
+            let mut bubble_finder = superbubble::SuperbubbleFinder::new(self.g, v,
+                max_length, max_diff, max_count);
+            if !bubble_finder.find_superbubble() || bubble_finder.end_vertex() == Some(init_v) {
+                break;
+            }
+            v = bubble_finder.end_vertex().unwrap();
+            if !self.mark_vertex(v) {
+                break;
+            }
+            marked += 1;
+        }
+        marked
+    }
+
+    fn check_homozygous_neighborhood(&self, v: Vertex) -> bool {
+        self.check_homozygous_fork_ahead(v)
+            || self.check_homozygous_fork_ahead(v.rc())
+    }
+
+    fn check_homozygous_fork_ahead(&self, v: Vertex) -> bool {
+        let long_ahead = bounded_dfs(self.g, v, self.node_len_thr);
+        let mut blended_group = None;
+        for v_ahead in long_ahead {
+            match self.assignments.group(v_ahead.node_id) {
+                None | Some(TrioGroup::ISSUE) => return false,
+                og => blended_group = TrioGroup::optional_blend(blended_group, og),
+            };
+            //looking back we should only get to v.rc()
+            //TODO improve with flow ideas
+            if !bounded_dfs(self.g, v_ahead.rc(), self.node_len_thr)
+                .iter()
+                .all(|&w| w == v.rc()) {
+                return false;
+            }
+        }
+        blended_group == Some(TrioGroup::HOMOZYGOUS)
+    }
+}
+
+pub fn assign_homozygous<'a>(g: &'a Graph,
+    assignments: AssignmentStorage<'a>,
+    node_len_thr: usize) -> AssignmentStorage<'a> {
+    let mut total_assigned = 0;
+    let mut assigner = HomozygousAssigner {
+        g, assignments, node_len_thr,
+    };
+    loop {
+        debug!("Marking round");
+        let marked = assigner.marking_round();
+        debug!("Marked {}", marked);
+        if marked == 0 {
+            break;
+        }
+        total_assigned += marked;
+    }
+    debug!("Total marked {}", total_assigned);
+    assigner.assignments
+}
 
 //TODO add template parameter
 pub struct HaploSearcher<'a> {
@@ -109,29 +248,6 @@ impl <'a> HaploSearcher<'a> {
         0
     }
 
-    fn inner_dfs(&self, v: Vertex, visited: &mut HashSet<Vertex>, long_ext: &mut Vec<Vertex>) {
-        visited.insert(v);
-        //if only one vertex is visited then it means we just started
-        if visited.len() > 1 && self.g.node(v.node_id).length >= self.long_node_threshold {
-            long_ext.push(v);
-        } else {
-            for l in self.g.outgoing_edges(v) {
-                let w = l.end;
-                if !visited.contains(&w) {
-                    self.inner_dfs(w, visited, long_ext);
-                }
-            }
-        }
-    }
-
-    fn bounded_dfs(&self, v: Vertex) -> Vec<Vertex> {
-        //TODO change for integer vectors
-        let mut visited = HashSet::new();
-        let mut long_ext = Vec::new();
-        self.inner_dfs(v, &mut visited, &mut long_ext);
-        long_ext
-    }
-
     fn try_link(&self, mut path: Path, v: Vertex) -> Path {
         for l in self.g.outgoing_edges(path.end()) {
             if l.end == v {
@@ -188,7 +304,7 @@ impl <'a> HaploSearcher<'a> {
         //1. all long nodes ahead should have assignment
         //2. only one should have correct assignment
         //3. this one should have unambiguous path backward to the vertex maybe stopping one link away
-        let long_ahead: Vec<Vertex> = self.bounded_dfs(v);
+        let long_ahead: Vec<Vertex> = bounded_dfs(self.g, v, self.long_node_threshold);
 
         //println!("Long ahead: {}", long_ahead.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
 
@@ -234,6 +350,7 @@ impl <'a> HaploSearcher<'a> {
             assert!(group != TrioGroup::ISSUE);
             if TrioGroup::incompatible(group, target_group) {
                 if self.long_node(node_id) {
+                    //FIXME increase this threshold
                     debug!("Can't reuse long node {} in different haplotype", self.g.name(node_id));
                     return false;
                 }
