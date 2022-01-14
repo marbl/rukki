@@ -34,10 +34,6 @@ pub struct SuperbubbleFinder<'a> {
 
 impl<'a> SuperbubbleFinder<'a> {
 
-    fn no_link_to_start(&self, v: Vertex) -> bool {
-        !self.g.outgoing_edges(v).iter().any(|l| l.end == self.start_vertex)
-    }
-
     fn link_dist_range(&self, l: Link) -> DistRange {
         let &r = self.reached_vertices.get(&l.start).unwrap();
         let enode_len = self.g.node(l.end.node_id).length;
@@ -117,13 +113,15 @@ impl<'a> SuperbubbleFinder<'a> {
             for l in self.g.outgoing_edges(v) {
                 let w = l.end;
                 if w == self.start_vertex {
-                    if v != self.start_vertex {
-                        //no loops involiving the start vertex
-                        return false;
-                    } else {
-                        //unless self-loop
-                        continue;
-                    }
+                    return false;
+                    //FIXME re-enable after dealing with usage wrt start/end symmetry absense
+                    //if v != self.start_vertex {
+                    //    //no loops involiving the start vertex
+                    //    return false;
+                    //} else {
+                    //    //unless self-loop
+                    //    continue;
+                    //}
                 }
 
                 if !self.reached_vertices.contains_key(&w) {
