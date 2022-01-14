@@ -108,6 +108,7 @@ S b * LN:i:200
     let g = Graph::read(&s.replace(" ", "\t"));
     assert_eq!(2, g.node_cnt());
     assert_eq!(0, g.link_cnt());
+    assert_eq!(g.all_vertices().count(), 4);
 }
 
 #[test]

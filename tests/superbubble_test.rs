@@ -49,6 +49,29 @@ L c + b + 50M
 }
 
 #[test]
+fn simple_bubble() {
+    let s = "
+S a * LN:i:100
+S b * LN:i:100
+S c * LN:i:100
+S d * LN:i:100
+L a + b + 50M
+L a + c + 50M
+L b + d + 50M
+L c + d + 50M
+";
+    let g = Graph::read(&s.replace(" ", "\t"));
+    let mut finder = superbubble::SuperbubbleFinder::new(&g, Vertex::forward(0), 1000, 1000, 1000);
+    assert!(finder.find_superbubble());
+    assert!(g.name(finder.end_vertex().unwrap().node_id) == "d");
+    assert_eq!(finder.vertices().count(), 4);
+    let mut bubble_vertices = finder.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
+    bubble_vertices.sort();
+    assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+"]);
+    assert_eq!(finder.length_range(), (100, 100));
+}
+
+#[test]
 fn triple_bubble() {
     let s = "
 S a * LN:i:100
@@ -79,9 +102,9 @@ S a * LN:i:100
 S b * LN:i:100
 S c * LN:i:100
 S d * LN:i:100
-S e * LN:i:100
 L a + b + 50M
 L a + c + 50M
+L b + c + 50M
 L b + d + 50M
 L c + d + 50M
 ";
@@ -93,12 +116,11 @@ L c + d + 50M
     let mut bubble_vertices = finder.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+"]);
-    assert_eq!(finder.length_range(), (100, 100));
+    assert_eq!(finder.length_range(), (100, 150));
 }
 
-
 #[test]
-fn simple_bubble() {
+fn super_bubble_1_reverse() {
     let s = "
 S a * LN:i:100
 S b * LN:i:100
@@ -106,22 +128,23 @@ S c * LN:i:100
 S d * LN:i:100
 L a + b + 50M
 L a + c + 50M
+L b + c + 50M
 L b + d + 50M
 L c + d + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let mut finder = superbubble::SuperbubbleFinder::new(&g, Vertex::forward(0), 1000, 1000, 1000);
+    let mut finder = superbubble::SuperbubbleFinder::new(&g, Vertex::reverse(3), 1000, 1000, 1000);
     assert!(finder.find_superbubble());
-    assert!(g.name(finder.end_vertex().unwrap().node_id) == "d");
+    assert!(g.name(finder.end_vertex().unwrap().node_id) == "a");
     assert_eq!(finder.vertices().count(), 4);
     let mut bubble_vertices = finder.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
     bubble_vertices.sort();
-    assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+"]);
-    assert_eq!(finder.length_range(), (100, 100));
+    assert_eq!(bubble_vertices, vec!["a-","b-","c-","d-"]);
+    assert_eq!(finder.length_range(), (100, 150));
 }
 
 #[test]
-fn super_bubble() {
+fn super_bubble_2() {
     let s = "
 S a * LN:i:100
 S b * LN:i:100
