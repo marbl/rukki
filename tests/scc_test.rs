@@ -17,6 +17,6 @@ fn manual_tmp_test() {
     write!(output, "{}", cond.as_gfa()).unwrap();
     let mut output = File::create(scc_out_file).unwrap();
     for (scc_id, scc) in sccs.iter().enumerate() {
-        write!(output, "scc_{}: {}\n", scc_id, scc.iter().map(|&w| g.v_str(w)).collect::<Vec<String>>().join(","));
+        write!(output, "scc_{}: {}\n", scc_id, scc.iter().map(|&w| g.v_str(w)).collect::<Vec<String>>().join(",")).unwrap();
     }
 }

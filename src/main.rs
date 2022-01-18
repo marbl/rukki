@@ -1,19 +1,43 @@
 //use std::io;
 use std::env;
-use graph_analysis::Config;
 #[macro_use]
 extern crate log;
 use env_logger::{Env, Builder, Target};
-use clap::Parser;
+use clap::{AppSettings, Parser, Subcommand};
 
-/// Assembly graph analysis
-#[derive(Parser, Debug)]
+/// Assembly graph analysis suite
+#[derive(Parser)]
 #[clap(about, version, author)]
 struct Args {
     /// GFA file
     //#[clap(short, long)]
-    graph: String,
+    input_graph: String,
 
+    //TODO add those
+    ///// Sets a custom config file. Could have been an Option<T> with no default too
+    //#[clap(short = "c", long = "config", default_value = "default.conf")]
+    //config: String,
+
+    // /// A level of verbosity, and can be used multiple times
+    // #[clap(short = "v", long = "verbose", parse(from_occurrences))]
+    // verbose: i32,
+
+    #[clap(subcommand)]
+    subcmd: Commands,
+
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Trio-marker based analysis
+    #[clap(setting(AppSettings::ArgRequiredElseHelp))]
+    Trio(TrioSettings),
+}
+
+//TODO use PathBuf?
+/// Trio-marker based settings
+#[derive(clap::Args)]
+struct TrioSettings {
     /// Parental markers file
     #[clap(short, long)]
     parent_markers: String,
@@ -23,7 +47,7 @@ struct Args {
     node_annotation: Option<String>,
 
     /// Marker-assisted extracted haplo-paths
-    #[clap(short, long)]
+    #[clap(long)]
     haplo_paths: Option<String>,
 
     /// Use GAF ([<>]<name1>)+ format for paths
@@ -42,20 +66,16 @@ fn main() {
 
     let args = Args::parse();
 
-    //let config = Config::new(env::args()).unwrap_or_else(|err| {
-    //    info!("Problem parsing arguments: {}", err);
-    //    process::exit(1);
-    //});
-    let config = Config {
-        graph_fn: args.graph,
-        trio_markers_fn: args.parent_markers,
-        init_node_annotation_fn: args.node_annotation,
-        haplo_paths_fn: args.haplo_paths,
-        gaf_paths: args.gaf_paths,
-    };
+    match &args.subcmd {
+        Commands::Trio(settings) => {
+            println!("Running trio marker analysis");
 
-    match graph_analysis::run(config) {
-        Ok(()) => info!("Success"),
-        Err(e) => info!("Some error happened {:?}", e)
+            match graph_analysis::run_trio_analysis(&args.input_graph, &settings.parent_markers,
+                &settings.node_annotation, &settings.haplo_paths, settings.gaf_paths) {
+                Ok(()) => info!("Success"),
+                Err(e) => info!("Some error happened {:?}", e)
+            }
+        }
     }
+
 }

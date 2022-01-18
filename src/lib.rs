@@ -15,17 +15,11 @@ pub use graph::Vertex;
 pub use graph::Link;
 pub use graph::Direction;
 
-pub struct Config {
-    pub graph_fn: String,
-    pub trio_markers_fn: String,
-    pub init_node_annotation_fn: Option<String>,
-    pub haplo_paths_fn: Option<String>,
-    pub gaf_paths: bool,
-}
-
-pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    info!("Reading graph from {:?}", &config.graph_fn);
-    let g = Graph::read(&fs::read_to_string(&config.graph_fn)?);
+pub fn run_trio_analysis(graph_fn: &String, trio_markers_fn: &String,
+    init_node_annotation_fn: &Option<String>, haplo_paths_fn: &Option<String>,
+    gaf_paths: bool) -> Result<(), Box<dyn Error>> {
+    info!("Reading graph from {:?}", graph_fn);
+    let g = Graph::read(&fs::read_to_string(graph_fn)?);
 
     info!("Graph read successfully");
     info!("Node count: {}", g.node_cnt());
@@ -39,8 +33,8 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     //}
     //write!(output, "{}", g.as_gfa())?;
 
-    info!("Reading trio marker information from {}", config.trio_markers_fn);
-    let trio_infos = trio::read_trio(&fs::read_to_string(&config.trio_markers_fn)?);
+    info!("Reading trio marker information from {}", trio_markers_fn);
+    let trio_infos = trio::read_trio(&fs::read_to_string(trio_markers_fn)?);
 
     info!("Assigning initial parental groups to the nodes");
     let parental_groups = trio::assign_parental_groups(&g, &trio_infos);
@@ -48,7 +42,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     //TODO parameterize
     let parental_groups = trio_walk::assign_homozygous(&g, parental_groups, 100_000);
 
-    if let Some(output) = config.init_node_annotation_fn {
+    if let Some(output) = init_node_annotation_fn {
         info!("Writing initial node annotation to {}", output);
         let mut output = File::create(output)?;
 
@@ -68,7 +62,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         }
     }
 
-    if let Some(output) = config.haplo_paths_fn {
+    if let Some(output) = haplo_paths_fn {
         info!("Searching for haplo-paths, output in {}", output);
         let mut output = File::create(output)?;
 
@@ -82,7 +76,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
             //info!("Identified {:?} path: {}", group, path.print(&g));
             writeln!(output, "path_from_{}\t{}\t{:?}\t{}",
                 g.node(node_id).name,
-                if config.gaf_paths {path.print_gaf(&g)}
+                if gaf_paths {path.print_gaf(&g)}
                                else {path.print(&g)},
                 group,
                 g.node(node_id).name)?;
@@ -99,8 +93,8 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
                 writeln!(output, "unused_{}_len_{}\t{}\t{}\t{}",
                     n.name,
                     n.length,
-                    if config.gaf_paths {g.gaf_str(Vertex::forward(node_id))}
-                                   else {g.v_str(Vertex::forward(node_id))},
+                    if gaf_paths {g.gaf_str(Vertex::forward(node_id))}
+                                else {g.v_str(Vertex::forward(node_id))},
                     group_str,
                     node_id)?;
             }
