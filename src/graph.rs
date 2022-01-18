@@ -1,7 +1,8 @@
 use std::str;
 use std::collections::HashMap;
 
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
+//TODO which ones are redundant?
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum Direction {
     FORWARD,
     REVERSE,
@@ -43,6 +44,7 @@ impl Direction {
     }
 }
 
+#[derive(Clone)]
 pub struct Node {
     //node size
     pub name: String,
@@ -51,7 +53,7 @@ pub struct Node {
 }
 
 //TODO which ones are redundant?
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Vertex {
     //node id
     pub node_id: usize,
@@ -216,7 +218,7 @@ impl<'a> Iterator for VertexIter<'a> {
 
 impl Graph {
 
-    fn new() -> Graph {
+    pub fn new() -> Graph {
         let g = Graph {
             nodes: Vec::new(),
             incoming_links: Vec::new(),
@@ -231,19 +233,21 @@ impl Graph {
         self.nodes.len()
     }
 
-    fn node_iter(&self) -> std::slice::Iter<Node> {
+    pub fn node_iter(&self) -> std::slice::Iter<Node> {
         self.nodes.iter()
     }
 
-    fn add_node(&mut self, node: Node) {
+    pub fn add_node(&mut self, node: Node) -> usize {
         //TODO rewrite without cloning with lifetimes
-        self.name2ids.insert(node.name.clone(), self.nodes.len());
+        let node_id = self.nodes.len();
+        self.name2ids.insert(node.name.clone(), node_id);
         self.nodes.push(node);
         self.incoming_links.push(Vec::new());
         self.outgoing_links.push(Vec::new());
+        node_id
     }
 
-    fn add_link(&mut self, link: Link) {
+    pub fn add_link(&mut self, link: Link) {
         //FIXME Currently doesn't check that every link is represented only once
         //TODO Think of some nice 'views' for vectors that will reverse complement everything put
         //there

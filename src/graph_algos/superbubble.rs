@@ -25,7 +25,6 @@ pub struct SuperbubbleFinder<'a> {
     max_count: usize,
 
     //FIXME maybe create superbubble struct?
-    cnt_: usize,
     //TODO think of alternative definitions of weight (currently: total k-mer multiplicity)
     //vertex to heaviest path weight / path length range
     reached_vertices: HashMap<Vertex, DistRange>,
@@ -50,7 +49,6 @@ impl<'a> SuperbubbleFinder<'a> {
             max_length,
             max_diff,
             max_count,
-            cnt_: 0,
             reached_vertices: HashMap::new(),
             end_vertex: None,
         }

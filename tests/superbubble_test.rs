@@ -1,5 +1,5 @@
 use graph_analysis::*;
-use graph_analysis::graph_algos::*;
+use graph_analysis::graph_algos::superbubble;
 
 #[test]
 fn multi_link_bubble() {
