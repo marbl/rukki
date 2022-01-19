@@ -32,10 +32,12 @@ enum Commands {
     /// Trio-marker based analysis
     #[clap(setting(AppSettings::ArgRequiredElseHelp))]
     Trio(TrioSettings),
+    /// Primary-alt style analysis
+    #[clap(setting(AppSettings::ArgRequiredElseHelp))]
+    PriAlt,
 }
 
 //TODO use PathBuf?
-/// Trio-marker based settings
 #[derive(clap::Args)]
 struct TrioSettings {
     /// Parental markers file
@@ -72,6 +74,14 @@ fn main() {
 
             match graph_analysis::run_trio_analysis(&args.input_graph, &settings.parent_markers,
                 &settings.node_annotation, &settings.haplo_paths, settings.gaf_paths) {
+                Ok(()) => info!("Success"),
+                Err(e) => info!("Some error happened {:?}", e)
+            }
+        }
+
+        Commands::PriAlt => {
+            println!("Extracting primary/alt paths");
+            match graph_analysis::run_primary_alt_analysis(&args.input_graph) {
                 Ok(()) => info!("Success"),
                 Err(e) => info!("Some error happened {:?}", e)
             }

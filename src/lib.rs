@@ -9,13 +9,24 @@ mod graph;
 pub mod graph_algos;
 mod trio;
 mod trio_walk;
+mod pseudo_hap;
 
 pub use graph::Graph;
 pub use graph::Vertex;
 pub use graph::Link;
 pub use graph::Direction;
 
-pub fn run_trio_analysis(graph_fn: &String, trio_markers_fn: &String,
+fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
+    info!("Reading graph from {:?}", graph_fn);
+    let g = Graph::read(&fs::read_to_string(graph_fn)?);
+
+    info!("Graph read successfully");
+    info!("Node count: {}", g.node_cnt());
+    info!("Link count: {}", g.link_cnt());
+    Ok(g)
+}
+
+pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     init_node_annotation_fn: &Option<String>, haplo_paths_fn: &Option<String>,
     gaf_paths: bool) -> Result<(), Box<dyn Error>> {
     info!("Reading graph from {:?}", graph_fn);
@@ -103,6 +114,13 @@ pub fn run_trio_analysis(graph_fn: &String, trio_markers_fn: &String,
         }
 
     }
+
+    info!("All done");
+    Ok(())
+}
+
+pub fn run_primary_alt_analysis(graph_fn: &str) -> Result<(), Box<dyn Error>> {
+    let g = read_graph(graph_fn)?;
 
     info!("All done");
     Ok(())
