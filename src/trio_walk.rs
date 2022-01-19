@@ -77,21 +77,18 @@ impl <'a> HomozygousAssigner<'a> {
         true
     }
 
-    fn mark_chain_ahead(&mut self, init_v: Vertex) -> usize {
-        let mut v = init_v;
+    fn mark_chain_ahead(&mut self, v: Vertex) -> usize {
         //FIXME proper parameterization
-        let max_length = 200_000;
-        let max_diff = 200_000;
-        let max_count = 1000;
+        let params = superbubble::SbSearchParams {
+            max_length: 200_000,
+            max_diff: 200_000,
+            max_count: 1000,
+        };
+
         let mut marked = 0;
-        loop {
-            let mut bubble_finder = superbubble::SuperbubbleFinder::new(self.g, v,
-                max_length, max_diff, max_count);
-            if !bubble_finder.find_superbubble() || bubble_finder.end_vertex() == Some(init_v) {
-                break;
-            }
-            v = bubble_finder.end_vertex().unwrap();
-            if !self.mark_vertex(v) {
+        for bubble in superbubble::find_chain_ahead(self.g, v, &params) {
+            //set to match previous logic, maybe rethink
+            if !self.mark_vertex(bubble.end_vertex()) {
                 break;
             }
             marked += 1;
@@ -99,6 +96,7 @@ impl <'a> HomozygousAssigner<'a> {
         marked
     }
 
+    //TODO checking only one is probably enough, since iterating over all vertices
     fn check_homozygous_neighborhood(&self, v: Vertex) -> bool {
         self.check_homozygous_fork_ahead(v)
             || self.check_homozygous_fork_ahead(v.rc())

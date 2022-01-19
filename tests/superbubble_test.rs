@@ -10,10 +10,10 @@ L a + b + 50M
 L a + b + 75M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let mut finder = superbubble::SuperbubbleFinder::new(&g, Vertex::forward(0), 1000, 1000, 1000);
-    assert!(finder.find_superbubble());
-    assert_eq!(finder.length_range(), (25, 50));
-    assert!(g.name(finder.end_vertex().unwrap().node_id) == "b");
+    let bubble = superbubble::find_superbubble(&g,
+        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    assert_eq!(bubble.length_range(), (25, 50));
+    assert!(g.name(bubble.end_vertex().node_id) == "b");
 }
 
 #[test]
@@ -28,8 +28,8 @@ L a + b + 75M
 L a + c + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let mut finder = superbubble::SuperbubbleFinder::new(&g, Vertex::forward(0), 1000, 1000, 1000);
-    assert!(finder.find_superbubble());
+    let _bubble = superbubble::find_superbubble(&g,
+        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
 }
 
 #[test]
@@ -44,8 +44,8 @@ L a + b + 50M
 L c + b + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let mut finder = superbubble::SuperbubbleFinder::new(&g, Vertex::forward(0), 1000, 1000, 1000);
-    assert!(finder.find_superbubble());
+    let _bubble = superbubble::find_superbubble(&g,
+        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
 }
 
 #[test]
@@ -61,14 +61,14 @@ L b + d + 50M
 L c + d + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let mut finder = superbubble::SuperbubbleFinder::new(&g, Vertex::forward(0), 1000, 1000, 1000);
-    assert!(finder.find_superbubble());
-    assert!(g.name(finder.end_vertex().unwrap().node_id) == "d");
-    assert_eq!(finder.vertices().count(), 4);
-    let mut bubble_vertices = finder.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
+    let bubble = superbubble::find_superbubble(&g,
+        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    assert!(g.name(bubble.end_vertex().node_id) == "d");
+    assert_eq!(bubble.vertices().count(), 4);
+    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+"]);
-    assert_eq!(finder.length_range(), (100, 100));
+    assert_eq!(bubble.length_range(), (100, 100));
 }
 
 #[test]
@@ -85,14 +85,14 @@ L c + d + 50M
 L a + d + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let mut finder = superbubble::SuperbubbleFinder::new(&g, Vertex::forward(0), 1000, 1000, 1000);
-    assert!(finder.find_superbubble());
-    assert!(g.name(finder.end_vertex().unwrap().node_id) == "d");
-    assert_eq!(finder.vertices().count(), 4);
-    let mut bubble_vertices = finder.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
+    let bubble = superbubble::find_superbubble(&g,
+        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    assert!(g.name(bubble.end_vertex().node_id) == "d");
+    assert_eq!(bubble.vertices().count(), 4);
+    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+"]);
-    assert_eq!(finder.length_range(), (50, 100));
+    assert_eq!(bubble.length_range(), (50, 100));
 }
 
 #[test]
@@ -109,14 +109,14 @@ L b + d + 50M
 L c + d + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let mut finder = superbubble::SuperbubbleFinder::new(&g, Vertex::forward(0), 1000, 1000, 1000);
-    assert!(finder.find_superbubble());
-    assert!(g.name(finder.end_vertex().unwrap().node_id) == "d");
-    assert_eq!(finder.vertices().count(), 4);
-    let mut bubble_vertices = finder.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
+    let bubble = superbubble::find_superbubble(&g,
+        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    assert!(g.name(bubble.end_vertex().node_id) == "d");
+    assert_eq!(bubble.vertices().count(), 4);
+    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+"]);
-    assert_eq!(finder.length_range(), (100, 150));
+    assert_eq!(bubble.length_range(), (100, 150));
 }
 
 #[test]
@@ -133,14 +133,14 @@ L b + d + 50M
 L c + d + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let mut finder = superbubble::SuperbubbleFinder::new(&g, Vertex::reverse(3), 1000, 1000, 1000);
-    assert!(finder.find_superbubble());
-    assert!(g.name(finder.end_vertex().unwrap().node_id) == "a");
-    assert_eq!(finder.vertices().count(), 4);
-    let mut bubble_vertices = finder.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
+    let bubble = superbubble::find_superbubble(&g,
+        Vertex::reverse(3), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    assert!(g.name(bubble.end_vertex().node_id) == "a");
+    assert_eq!(bubble.vertices().count(), 4);
+    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a-","b-","c-","d-"]);
-    assert_eq!(finder.length_range(), (100, 150));
+    assert_eq!(bubble.length_range(), (100, 150));
 }
 
 #[test]
@@ -162,12 +162,12 @@ L d + f + 50M
 L e + f + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let mut finder = superbubble::SuperbubbleFinder::new(&g, Vertex::forward(0), 1000, 1000, 1000);
-    assert!(finder.find_superbubble());
-    assert!(g.name(finder.end_vertex().unwrap().node_id) == "f");
-    assert_eq!(finder.vertices().count(), 6);
-    let mut bubble_vertices = finder.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
+    let bubble = superbubble::find_superbubble(&g,
+        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    assert!(g.name(bubble.end_vertex().node_id) == "f");
+    assert_eq!(bubble.vertices().count(), 6);
+    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+","e+","f+"]);
-    assert_eq!(finder.length_range(), (100, 150));
+    assert_eq!(bubble.length_range(), (100, 150));
 }
