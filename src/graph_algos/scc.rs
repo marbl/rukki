@@ -147,7 +147,7 @@ fn check_consistency(graph: &Graph, non_trivial_sccs: &Vec<Vec<Vertex>>) -> bool
 }
 
 //Building condensation Graph
-pub fn condensation(graph: &Graph, non_trivial_sccs: &Vec<Vec<Vertex>>) -> (Graph, HashMap<Vertex, Vertex>) {
+pub fn condensation(graph: &Graph, non_trivial_sccs: &Vec<Vec<Vertex>>, ignore_loops: bool) -> (Graph, HashMap<Vertex, Vertex>) {
     assert!(check_consistency(graph, &non_trivial_sccs));
     let mut condensation = Graph::new();
     let mut vertices_to_scc = HashMap::new();
@@ -203,6 +203,11 @@ pub fn condensation(graph: &Graph, non_trivial_sccs: &Vec<Vec<Vertex>>) -> (Grap
     for l in graph.all_links() {
         let &v = old_2_new.get(&l.start).unwrap();
         let &w = old_2_new.get(&l.end).unwrap();
+        //checking that no link between nodes exists
+        if ignore_loops && v == w {
+            debug!("Loop ignored for vertex {}", condensation.v_str(v));
+            continue
+        }
         if !condensation.outgoing_edges(v).iter().any(|l| l.end == w) {
             condensation.add_link(Link {
                 start: v,
