@@ -14,31 +14,30 @@ fn merge_range((min1, max1): DistRange, (min2, max2): DistRange) -> DistRange {
     (cmp::min(min1, min2), cmp::max(max1, max2))
 }
 
-pub struct Superbubble<'a> {
-    g: &'a Graph,
+pub struct Superbubble {
     start_vertex: Vertex,
     end_vertex: Option<Vertex>,
     //vertex to path length range
     reached_vertices: HashMap<Vertex, DistRange>,
 }
 
-impl <'a> Superbubble<'a> {
+impl Superbubble {
 
-    fn link_dist_range(&self, l: Link) -> DistRange {
+    fn link_dist_range(&self, l: Link, g: &Graph) -> DistRange {
         let &r = self.reached_vertices.get(&l.start).unwrap();
-        let enode_len = self.g.node(l.end.node_id).length;
+        let enode_len = g.node(l.end.node_id).length;
         assert!(enode_len >= l.overlap);
         shift_range(r, enode_len - l.overlap)
     }
 
-    pub fn longest_path(&self) -> Path {
+    pub fn longest_path(&self, g: &Graph) -> Path {
         let mut v = self.end_vertex.unwrap();
         let mut longest_dist = self.reached_vertices.get(&v).unwrap().1;
         let mut rc_p = Path::new(v.rc());
         'outer: while v != self.start_vertex {
             //let l = self.heaviest_backtrace.get(v).unwrap();
-            for l in self.g.incoming_edges(v) {
-                if self.link_dist_range(l).1 == longest_dist {
+            for l in g.incoming_edges(v) {
+                if self.link_dist_range(l, g).1 == longest_dist {
                     assert!(l.end == v);
                     rc_p.append(l.rc());
                     v = l.start;
@@ -51,14 +50,14 @@ impl <'a> Superbubble<'a> {
         rc_p.reverse_complement()
     }
 
-    pub fn shortest_path(&self) -> Path {
+    pub fn shortest_path(&self, g: &Graph) -> Path {
         let mut v = self.end_vertex.unwrap();
         let mut shortest_dist = self.reached_vertices.get(&v).unwrap().0;
         let mut rc_p = Path::new(v.rc());
         'outer: while v != self.start_vertex {
             //let l = self.heaviest_backtrace.get(v).unwrap();
-            for l in self.g.incoming_edges(v) {
-                if self.link_dist_range(l).0 == shortest_dist {
+            for l in g.incoming_edges(v) {
+                if self.link_dist_range(l, g).0 == shortest_dist {
                     assert!(l.end == v);
                     rc_p.append(l.rc());
                     v = l.start;
@@ -116,9 +115,8 @@ impl SbSearchParams {
 //TODO handle case when first/last vertex have other outgoing/incoming edges
 //last vertex case is almost handled
 //returns true if no thresholds exceeded
-pub fn find_superbubble<'a>(g: &'a Graph, v: Vertex, params: &SbSearchParams) -> Option<Superbubble<'a>> {
+pub fn find_superbubble(g: &Graph, v: Vertex, params: &SbSearchParams) -> Option<Superbubble> {
     let mut bubble = Superbubble {
-        g,
         start_vertex: v,
         reached_vertices: HashMap::new(),
         end_vertex: None,
@@ -174,13 +172,13 @@ pub fn find_superbubble<'a>(g: &'a Graph, v: Vertex, params: &SbSearchParams) ->
                 }
                 not_ready_cnt += 1;
                 remaining_incoming.insert(w, g.incoming_edge_cnt(w));
-                bubble.reached_vertices.insert(w, bubble.link_dist_range(l));
+                bubble.reached_vertices.insert(w, bubble.link_dist_range(l, g));
             }
             let rem_inc = remaining_incoming.get_mut(&w).unwrap();
             *rem_inc -= 1;
             //self.reached_vertices.get(w) =
             bubble.reached_vertices.insert(w,
-                merge_range(*bubble.reached_vertices.get(&w).unwrap(), bubble.link_dist_range(l)));
+                merge_range(*bubble.reached_vertices.get(&w).unwrap(), bubble.link_dist_range(l, g)));
 
             if *remaining_incoming.get(&w).unwrap() == 0 {
                 can_be_processed.push(w);
@@ -221,9 +219,9 @@ pub fn find_superbubble<'a>(g: &'a Graph, v: Vertex, params: &SbSearchParams) ->
     None
 }
 
-type BubbleChain<'a> = Vec<Superbubble<'a>>;
+type BubbleChain = Vec<Superbubble>;
 
-pub fn find_chain_ahead<'a>(g: &'a Graph, init_v: Vertex, params: &SbSearchParams) -> BubbleChain<'a> {
+pub fn find_chain_ahead(g: &Graph, init_v: Vertex, params: &SbSearchParams) -> BubbleChain {
     let mut chain = Vec::new();
     //FIXME no need to check here, since we are marking everything, but useful for general code
     let mut v = init_v;
