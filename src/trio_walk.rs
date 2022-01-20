@@ -5,29 +5,6 @@ use log::{debug, trace};
 use std::collections::HashSet;
 use std::collections::HashMap;
 
-fn inner_dfs(g: &Graph, v: Vertex, node_len_thr: usize, visited: &mut HashSet<Vertex>, long_ext: &mut Vec<Vertex>) {
-    visited.insert(v);
-    //if only one vertex is visited then it means we just started
-    if visited.len() > 1 && g.node(v.node_id).length >= node_len_thr {
-        long_ext.push(v);
-    } else {
-        for l in g.outgoing_edges(v) {
-            let w = l.end;
-            if !visited.contains(&w) {
-                inner_dfs(g, w, node_len_thr, visited, long_ext);
-            }
-        }
-    }
-}
-
-fn bounded_dfs(g: &Graph, v: Vertex, node_len_thr: usize) -> Vec<Vertex> {
-    //TODO change for integer vectors
-    let mut visited = HashSet::new();
-    let mut long_ext = Vec::new();
-    inner_dfs(g, v, node_len_thr, &mut visited, &mut long_ext);
-    long_ext
-}
-
 //TODO add template parameter
 pub struct HomozygousAssigner<'a> {
     g: &'a Graph,
@@ -103,7 +80,7 @@ impl <'a> HomozygousAssigner<'a> {
     }
 
     fn check_homozygous_fork_ahead(&self, v: Vertex) -> bool {
-        let long_ahead = bounded_dfs(self.g, v, self.node_len_thr);
+        let (_, long_ahead) = graph_algos::bounded_dfs(self.g, v, self.node_len_thr);
         let mut blended_group = None;
         for v_ahead in long_ahead {
             match self.assignments.group(v_ahead.node_id) {
@@ -112,7 +89,7 @@ impl <'a> HomozygousAssigner<'a> {
             };
             //looking back we should only get to v.rc()
             //TODO improve with flow ideas
-            if !bounded_dfs(self.g, v_ahead.rc(), self.node_len_thr)
+            if !graph_algos::bounded_dfs(self.g, v_ahead.rc(), self.node_len_thr).1
                 .iter()
                 .all(|&w| w == v.rc()) {
                 return false;
@@ -302,7 +279,7 @@ impl <'a> HaploSearcher<'a> {
         //1. all long nodes ahead should have assignment
         //2. only one should have correct assignment
         //3. this one should have unambiguous path backward to the vertex maybe stopping one link away
-        let long_ahead: Vec<Vertex> = bounded_dfs(self.g, v, self.long_node_threshold);
+        let (_, long_ahead) = graph_algos::bounded_dfs(self.g, v, self.long_node_threshold);
 
         //println!("Long ahead: {}", long_ahead.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
 
