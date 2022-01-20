@@ -12,7 +12,7 @@ L a + b + 75M
     let g = Graph::read(&s.replace(" ", "\t"));
     let bubble = superbubble::find_superbubble(&g,
         Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
-    assert_eq!(bubble.length_range(), (25, 50));
+    assert_eq!(bubble.length_range(&g), (125, 150));
     assert!(g.name(bubble.end_vertex().node_id) == "b");
 }
 
@@ -68,7 +68,7 @@ L c + d + 50M
     let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+"]);
-    assert_eq!(bubble.length_range(), (100, 100));
+    assert_eq!(bubble.length_range(&g), (200, 200));
 }
 
 #[test]
@@ -92,7 +92,7 @@ L a + d + 50M
     let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+"]);
-    assert_eq!(bubble.length_range(), (50, 100));
+    assert_eq!(bubble.length_range(&g), (150, 200));
 }
 
 #[test]
@@ -116,7 +116,7 @@ L c + d + 50M
     let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+"]);
-    assert_eq!(bubble.length_range(), (100, 150));
+    assert_eq!(bubble.length_range(&g), (200, 250));
 }
 
 #[test]
@@ -140,7 +140,7 @@ L c + d + 50M
     let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a-","b-","c-","d-"]);
-    assert_eq!(bubble.length_range(), (100, 150));
+    assert_eq!(bubble.length_range(&g), (200, 250));
 }
 
 #[test]
@@ -169,5 +169,5 @@ L e + f + 50M
     let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+","e+","f+"]);
-    assert_eq!(bubble.length_range(), (100, 150));
+    assert_eq!(bubble.length_range(&g), (200, 250));
 }

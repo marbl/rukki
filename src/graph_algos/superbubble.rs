@@ -74,6 +74,10 @@ impl Superbubble {
         self.reached_vertices.keys()
     }
 
+    pub fn inner_vertices(&self) -> impl Iterator<Item=&Vertex> + '_ {
+        self.reached_vertices.keys().filter(|&v| *v != self.start_vertex() && *v != self.end_vertex())
+    }
+
     pub fn start_vertex(&self) -> Vertex {
         self.start_vertex
     }
@@ -82,11 +86,12 @@ impl Superbubble {
         self.end_vertex.unwrap()
     }
 
-    //Maybe return Option?
-    pub fn length_range(&self) -> (usize, usize) {
-        match self.end_vertex {
-            None => (0, 0),
-            Some(v) => *self.reached_vertices.get(&v).unwrap(),
+    pub fn length_range(&self, g: &Graph) -> (usize, usize) {
+        let r = *self.reached_vertices.get(&self.end_vertex()).unwrap();
+        if self.start_vertex() != self.end_vertex() {
+            shift_range(r, g.node(self.start_vertex().node_id).length)
+        } else {
+            r
         }
     }
 }
@@ -219,6 +224,29 @@ pub fn find_superbubble(g: &Graph, v: Vertex, params: &SbSearchParams) -> Option
     None
 }
 
+pub fn find_all_outer(g: &Graph, params: &SbSearchParams) -> Vec<Superbubble> {
+    let mut used_starts = HashSet::new();
+    let mut start_2_bubble = HashMap::new();
+    for v in g.all_vertices() {
+        if used_starts.contains(&v) {
+            continue;
+        }
+        if let Some(bubble) = find_superbubble(g, v, params) {
+            //used_starts.insert(bubble.start_vertex());
+            used_starts.insert(bubble.end_vertex().rc());
+            assert!(!start_2_bubble.contains_key(&bubble.end_vertex().rc()));
+            for &w in bubble.inner_vertices() {
+                used_starts.insert(w);
+                used_starts.insert(w.rc());
+                start_2_bubble.remove(&w);
+                start_2_bubble.remove(&w.rc());
+            }
+            start_2_bubble.insert(v, bubble);
+        }
+    }
+    start_2_bubble.into_values().collect()
+}
+
 type BubbleChain = Vec<Superbubble>;
 
 pub fn find_chain_ahead(g: &Graph, init_v: Vertex, params: &SbSearchParams) -> BubbleChain {
@@ -239,4 +267,36 @@ pub fn find_chain_ahead(g: &Graph, init_v: Vertex, params: &SbSearchParams) -> B
         }
     }
     chain
+}
+
+//TODO test
+pub fn find_maximal_chain(g: &Graph, mut init_v: Vertex, params: &SbSearchParams) -> BubbleChain {
+    let chain_back = find_chain_ahead(g, init_v.rc(), params);
+    if !chain_back.is_empty() {
+        init_v = chain_back.last().unwrap().end_vertex().rc();
+    }
+    find_chain_ahead(g, init_v, params)
+}
+
+pub fn length_range(chain: &BubbleChain, g: &Graph) -> DistRange {
+    //special case correctly handling start == end
+    if chain.len() == 1 {
+        chain[0].length_range(g);
+    }
+    let mut tot_min = 0;
+    let mut tot_max = 0;
+    for bubble in chain {
+        //TODO implement via negative shift and tuple addition
+        let (min, max) = bubble.length_range(g);
+        let s_l = g.node(bubble.start_vertex().node_id).length;
+        tot_min += min - s_l;
+        tot_max += max - s_l;
+    }
+    if !chain.is_empty()
+        && chain[0].start_vertex() != chain.last().unwrap().end_vertex() {
+        let s_l = g.node(chain[0].start_vertex().node_id).length;
+        (tot_min + s_l, tot_max + s_l)
+    } else {
+        (tot_min, tot_max)
+    }
 }
