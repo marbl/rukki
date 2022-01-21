@@ -370,6 +370,14 @@ impl Graph {
         &self.nodes[node_id]
     }
 
+    pub fn node_length(&self, node_id: usize) -> usize {
+        self.node(node_id).length
+    }
+
+    pub fn vertex_length(&self, v: Vertex) -> usize {
+        self.node_length(v.node_id)
+    }
+
     pub fn node_by_name(&self, name: &str) -> &Node {
         &self.nodes[self.name2id(name)]
     }
@@ -504,7 +512,18 @@ impl Path {
         }
     }
 
+    pub fn trim(&mut self, step: usize) {
+        assert!(step < self.len());
+        //TODO optimize
+        for _ in 0..step {
+            self.v_storage.pop();
+            //it's ok to pop even if it is empty
+            self.l_storage.pop();
+        }
+    }
+
     pub fn trim_to(&mut self, v: &Vertex) -> bool {
+        //TODO optimize
         if self.v_storage.contains(v) {
             while self.v_storage.last().unwrap() != v {
                 self.v_storage.pop();
@@ -515,12 +534,23 @@ impl Path {
         false
     }
 
+    //TODO rename
     pub fn append(&mut self, l: Link) {
         assert!(self.v_storage.last().unwrap() == &l.start);
         //TODO disable expensive assert?
         assert!(!self.in_path(l.end.node_id));
         self.v_storage.push(l.end);
         self.l_storage.push(l);
+    }
+
+    //TODO rename?
+    //TODO optimize (can work directly with vectors)
+    //NB does not support intersecting paths (e.g. forming loop)
+    pub fn extend(&mut self, other: Path) {
+        assert!(self.v_storage.last().unwrap() == other.v_storage.first().unwrap());
+        for l in other.l_storage {
+            self.append(l);
+        }
     }
 
     pub fn in_path(&self, node_id: usize) -> bool {
@@ -545,6 +575,14 @@ impl Path {
 
     pub fn print_gaf(&self, g: &Graph) -> String {
         self.v_storage.iter().map(|&v| g.gaf_str(v)).collect::<Vec<String>>().join("")
+    }
+
+    pub fn total_length(&self, g: &Graph) -> usize {
+        let mut tot_length = g.vertex_length(self.v_storage[0]);
+        for l in &self.l_storage {
+            tot_length += g.vertex_length(l.end) - l.overlap;
+        }
+        tot_length
     }
 
 }
