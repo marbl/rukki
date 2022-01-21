@@ -354,10 +354,10 @@ impl Graph {
         gfa
     }
 
-    fn get_vertex(&self, name: &str, direction: Direction) -> Vertex {
-        let node_id = self.name2id(name);
-        Vertex {node_id, direction}
-    }
+    //fn get_vertex(&self, name: &str, direction: Direction) -> Vertex {
+    //    let node_id = self.name2id(name);
+    //    Vertex {node_id, direction}
+    //}
 
     fn rc(links: &Vec<Link>) -> Vec<Link> {
         links.into_iter().map(|x| x.rc()).collect()
@@ -410,7 +410,7 @@ impl Graph {
         }
     }
 
-    //FIXME figure out implicit lifetime
+    //TODO iterate over references
     pub fn all_links(&self) -> impl Iterator<Item=Link> + '_ {
         AllLinkIter::new(self)
     }
@@ -419,10 +419,12 @@ impl Graph {
         self.nodes.iter()
     }
 
+    //TODO iterate over references
     pub fn all_vertices(&self) -> impl Iterator<Item=Vertex> + '_ {
         VertexIter::new(self)
     }
 
+    //TODO iterate over references
     pub fn canonic_vertices(&self) -> impl Iterator<Item=Vertex> + '_ {
         (1..self.node_cnt()).map(|i| Vertex::forward(i))
     }
