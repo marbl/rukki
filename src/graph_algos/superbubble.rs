@@ -88,6 +88,8 @@ impl Superbubble {
 
     pub fn length_range(&self, g: &Graph) -> (usize, usize) {
         let r = *self.reached_vertices.get(&self.end_vertex()).unwrap();
+        //currently start vertex and end vertex can't be the same
+        assert!(self.start_vertex() != self.end_vertex());
         if self.start_vertex() != self.end_vertex() {
             shift_range(r, g.node(self.start_vertex().node_id).length)
         } else {
@@ -247,8 +249,9 @@ pub fn find_all_outer(g: &Graph, params: &SbSearchParams) -> Vec<Superbubble> {
     start_2_bubble.into_values().collect()
 }
 
-type BubbleChain = Vec<Superbubble>;
+pub type BubbleChain = Vec<Superbubble>;
 
+//TODO maybe switch to Option?
 pub fn find_chain_ahead(g: &Graph, init_v: Vertex, params: &SbSearchParams) -> BubbleChain {
     let mut chain = Vec::new();
     //FIXME no need to check here, since we are marking everything, but useful for general code
@@ -278,6 +281,25 @@ pub fn find_maximal_chain(g: &Graph, mut init_v: Vertex, params: &SbSearchParams
     find_chain_ahead(g, init_v, params)
 }
 
+pub fn find_maximal_chains(g: &Graph, params: &SbSearchParams) -> Vec<BubbleChain> {
+    let mut considered_start_nodes = HashSet::new();
+    let mut maximal_chains = Vec::new();
+    for outer_bubble in find_all_outer(g, params) {
+        let v = outer_bubble.start_vertex();
+        if considered_start_nodes.contains(&v.node_id) {
+            continue;
+        }
+        let chain = find_maximal_chain(g, v, params);
+        assert!(!chain.is_empty());
+        for bubble in &chain {
+            considered_start_nodes.insert(bubble.start_vertex().node_id);
+            considered_start_nodes.insert(bubble.end_vertex().node_id);
+        }
+        maximal_chains.push(chain);
+    }
+    maximal_chains
+}
+
 pub fn length_range(chain: &BubbleChain, g: &Graph) -> DistRange {
     //special case correctly handling start == end
     if chain.len() == 1 {
@@ -299,4 +321,17 @@ pub fn length_range(chain: &BubbleChain, g: &Graph) -> DistRange {
     } else {
         (tot_min, tot_max)
     }
+}
+
+pub fn check_chain<F>(chain: &BubbleChain, mut f: F) -> bool
+where
+F: FnMut(&Vertex) -> bool {
+    for bubble in chain {
+        for v in bubble.vertices() {
+            if !f(v) {
+                return false
+            }
+        }
+    }
+    true
 }
