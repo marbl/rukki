@@ -25,7 +25,7 @@ impl Superbubble {
 
     fn link_dist_range(&self, l: Link, g: &Graph) -> DistRange {
         let &r = self.reached_vertices.get(&l.start).unwrap();
-        let enode_len = g.node(l.end.node_id).length;
+        let enode_len = g.vertex_length(l.end);
         assert!(enode_len >= l.overlap);
         shift_range(r, enode_len - l.overlap)
     }
@@ -90,11 +90,12 @@ impl Superbubble {
         let r = *self.reached_vertices.get(&self.end_vertex()).unwrap();
         //currently start vertex and end vertex can't be the same
         assert!(self.start_vertex() != self.end_vertex());
-        if self.start_vertex() != self.end_vertex() {
-            shift_range(r, g.node(self.start_vertex().node_id).length)
-        } else {
-            r
-        }
+        shift_range(r, g.vertex_length(self.start_vertex()))
+        //if self.start_vertex() != self.end_vertex() {
+        //    shift_range(r, g.node(self.start_vertex().node_id).length)
+        //} else {
+        //    r
+        //}
     }
 }
 
@@ -203,7 +204,7 @@ pub fn find_superbubble(g: &Graph, v: Vertex, params: &SbSearchParams) -> Option
 
             let &(min_len, max_len) = bubble.reached_vertices.get(&v).unwrap();
 
-            let v_len = g.node(v.node_id).length;
+            let v_len = g.vertex_length(v);
 
             //FIXME it seems like only start_pos is ever checked
             if min_len > v_len && (min_len - v_len) > params.max_length {
@@ -300,27 +301,46 @@ pub fn find_maximal_chains(g: &Graph, params: &SbSearchParams) -> Vec<BubbleChai
     maximal_chains
 }
 
+//will need adjustment if ever 'start' can be same as 'end' in superbubble
 pub fn length_range(chain: &BubbleChain, g: &Graph) -> DistRange {
-    //special case correctly handling start == end
-    if chain.len() == 1 {
-        chain[0].length_range(g);
-    }
     let mut tot_min = 0;
     let mut tot_max = 0;
     for bubble in chain {
         //TODO implement via negative shift and tuple addition
         let (min, max) = bubble.length_range(g);
-        let s_l = g.node(bubble.start_vertex().node_id).length;
+        let s_l = g.vertex_length(bubble.start_vertex());
         tot_min += min - s_l;
         tot_max += max - s_l;
     }
     if !chain.is_empty()
         && chain[0].start_vertex() != chain.last().unwrap().end_vertex() {
-        let s_l = g.node(chain[0].start_vertex().node_id).length;
+        let s_l = g.vertex_length(chain[0].start_vertex());
         (tot_min + s_l, tot_max + s_l)
     } else {
         (tot_min, tot_max)
     }
+}
+
+//TODO make chain its own structure not to allow empty chains
+pub fn longest_path(chain: &BubbleChain, g: &Graph) -> Option<Path> {
+    if chain.is_empty() {
+        return None;
+    }
+    let start_vertex = chain[0].start_vertex();
+    let mut total = chain[0].longest_path(g);
+    for (i, bubble) in chain.iter().enumerate() {
+        if i == 0 {
+            continue;
+        }
+        let mut p = bubble.longest_path(g);
+        if i == (chain.len() - 1) {
+            if bubble.end_vertex() == start_vertex {
+                p.trim(1);
+            }
+        }
+        total.extend(p);
+    }
+    Some(total)
 }
 
 pub fn check_chain<F>(chain: &BubbleChain, mut f: F) -> bool
