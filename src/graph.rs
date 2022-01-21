@@ -309,8 +309,11 @@ impl Graph {
                                  Self::parse_tag(&split[3..split.len()], "LN:i:")
                                      .expect("Neither sequence nor LN tag provided")
                              };
-                let coverage: f64 = Self::parse_tag(&split[3..split.len()], "ll:f:")
-                                        .unwrap_or(0.);
+                let coverage = match Self::parse_tag::<usize>(&split[3..split.len()], "RC:i:") {
+                    None => Self::parse_tag(&split[3..split.len()], "ll:f:")
+                                        .unwrap_or(0.),
+                    Some(raw_cnt) => raw_cnt as f64 / length as f64,
+                };
                 g.add_node(Node{name, length, coverage});
             }
         }
