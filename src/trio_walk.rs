@@ -278,13 +278,14 @@ impl <'a> HaploSearcher<'a> {
         if long_ahead.iter().all(|x| self.assignments.contains(x.node_id)) {
             let potential_ext: Vec<Vertex> = long_ahead.into_iter()
                 //.filter(|x| self.assignments.get(x.node_id).unwrap().group == group)
+                .filter(|x| x != &v)
                 .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
                 .collect();
             debug!("Compatible extension count: {}", potential_ext.len());
             if potential_ext.len() == 1 {
                 debug!("Unique potential extension {}", self.g.v_str(potential_ext[0]));
                 let mut p = Path::new(potential_ext[0].rc());
-                debug!("Growing path forward from {}", self.g.v_str(potential_ext[0]));
+                debug!("Growing path forward from {}", self.g.v_str(potential_ext[0].rc()));
                 self.grow_forward(&mut p, group, false);
                 debug!("Found path {}", p.print(self.g));
                 if !p.in_path(v.node_id) {
