@@ -113,6 +113,16 @@ pub fn strongly_connected(graph: &Graph) -> Vec<Vec<Vertex>> {
     non_trivial_sccs
 }
 
+pub fn nodes_in_sccs(g: &Graph) -> HashSet<usize> {
+    let mut nodes_in_sccs = HashSet::new();
+    for scc in strongly_connected(g) {
+        for v in scc {
+            nodes_in_sccs.insert(v.node_id);
+        }
+    }
+    nodes_in_sccs
+}
+
 fn check_consistency(graph: &Graph, non_trivial_sccs: &Vec<Vec<Vertex>>) -> bool {
     let mut vertices_to_scc = HashMap::new();
     for (scc_id, vertices) in non_trivial_sccs.iter().enumerate() {

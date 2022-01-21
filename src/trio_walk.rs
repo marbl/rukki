@@ -130,15 +130,6 @@ pub struct HaploSearcher<'a> {
 }
 
 impl <'a> HaploSearcher<'a> {
-    fn nodes_in_sccs(g: &Graph) -> HashSet<usize> {
-        let mut nodes_in_sccs = HashSet::new();
-        for scc in scc::strongly_connected(g) {
-            for v in scc {
-                nodes_in_sccs.insert(v.node_id);
-            }
-        }
-        nodes_in_sccs
-    }
 
     pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage<'a>, long_node_threshold: usize) -> HaploSearcher<'a> {
         HaploSearcher{
@@ -146,7 +137,7 @@ impl <'a> HaploSearcher<'a> {
             assignments,
             long_node_threshold,
             used: HashMap::new(),
-            in_sccs: HaploSearcher::nodes_in_sccs(g),
+            in_sccs: scc::nodes_in_sccs(g),
         }
     }
 
