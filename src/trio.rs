@@ -147,14 +147,14 @@ impl <'a> AssignmentStorage<'a> {
 
 }
 
-pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo]) -> AssignmentStorage<'a> {
+pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo], low_cnt_thr : usize, ratio_thr : f32) -> AssignmentStorage<'a> {
     let mut assignments = AssignmentStorage::new(g);
-    //FIXME parameterize
     let min_marker_inv_density = 10_000;
-    let high_cnt_thr = 1000;
-    let moderate_cnt_thr = 100;
-    let low_cnt_thr = 10;
-    let ratio_thr = 5.0;
+    let moderate_cnt_thr = low_cnt_thr * 10;
+    let high_cnt_thr =  moderate_cnt_thr * 10;
+
+    debug!("Running with marker parameters confidence: high={} medium={}, low={}; Ratio: {}",
+            high_cnt_thr, moderate_cnt_thr, low_cnt_thr, ratio_thr);
     assert!(high_cnt_thr as f32 / low_cnt_thr as f32 > ratio_thr);
 
     let issue_confidence = |x: usize| {

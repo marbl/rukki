@@ -28,7 +28,7 @@ fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
 
 pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     init_node_annotation_fn: &Option<String>, haplo_paths_fn: &Option<String>,
-    gaf_paths: bool) -> Result<(), Box<dyn Error>> {
+    gaf_paths: bool, low_cnt_thr : usize, ratio_thr : f32) -> Result<(), Box<dyn Error>> {
     info!("Reading graph from {:?}", graph_fn);
     let g = Graph::read(&fs::read_to_string(graph_fn)?);
 
@@ -48,7 +48,7 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     let trio_infos = trio::read_trio(&fs::read_to_string(trio_markers_fn)?);
 
     info!("Assigning initial parental groups to the nodes");
-    let parental_groups = trio::assign_parental_groups(&g, &trio_infos);
+    let parental_groups = trio::assign_parental_groups(&g, &trio_infos, low_cnt_thr, ratio_thr);
     info!("Detecting homozygous nodes");
     //TODO parameterize
     let parental_groups = trio_walk::assign_homozygous(&g, parental_groups, 100_000);

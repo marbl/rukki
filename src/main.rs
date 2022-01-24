@@ -55,6 +55,12 @@ struct TrioSettings {
     /// Use GAF ([<>]<name1>)+ format for paths
     #[clap(short, long)]
     gaf_paths: bool,
+
+    #[clap(long, default_value_t = 10 )]
+    low_marker_count: usize,
+
+    #[clap(long, default_value_t = 5.0 )]
+    marker_ratio: f32,
 }
 
 fn main() {
@@ -73,7 +79,7 @@ fn main() {
             println!("Running trio marker analysis");
 
             match graph_analysis::run_trio_analysis(&args.input_graph, &settings.parent_markers,
-                &settings.node_annotation, &settings.haplo_paths, settings.gaf_paths) {
+                &settings.node_annotation, &settings.haplo_paths, settings.gaf_paths, settings.low_marker_count, settings.marker_ratio) {
                 Ok(()) => info!("Success"),
                 Err(e) => info!("Some error happened {:?}", e)
             }
