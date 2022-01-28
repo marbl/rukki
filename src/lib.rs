@@ -3,6 +3,7 @@ use std::fs::File;
 use std::error::Error;
 use std::io::Write;
 use log::info;
+use std::collections::HashSet;
 
 mod graph;
 //ASK why tests don't compile without the pub
@@ -13,6 +14,7 @@ mod pseudo_hap;
 
 pub use graph::Graph;
 pub use graph::Vertex;
+pub use graph::Path;
 pub use graph::Link;
 pub use graph::Direction;
 
@@ -28,7 +30,7 @@ fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
 
 pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     init_node_annotation_fn: &Option<String>, haplo_paths_fn: &Option<String>,
-    gaf_paths: bool, low_cnt_thr : usize, ratio_thr : f32) -> Result<(), Box<dyn Error>> {
+    gaf_paths: bool, low_cnt_thr: usize, ratio_thr: f32) -> Result<(), Box<dyn Error>> {
     info!("Reading graph from {:?}", graph_fn);
     let g = Graph::read(&fs::read_to_string(graph_fn)?);
 
@@ -87,8 +89,7 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
             //info!("Identified {:?} path: {}", group, path.print(&g));
             writeln!(output, "path_from_{}\t{}\t{:?}\t{}",
                 g.node(node_id).name,
-                if gaf_paths {path.print_gaf(&g)}
-                               else {path.print(&g)},
+                path.print_format(&g, gaf_paths),
                 group,
                 g.node(node_id).name)?;
         }
@@ -104,8 +105,7 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
                 writeln!(output, "unused_{}_len_{}\t{}\t{}\t{}",
                     n.name,
                     n.length,
-                    if gaf_paths {g.gaf_str(Vertex::forward(node_id))}
-                                else {g.v_str(Vertex::forward(node_id))},
+                    Path::new(Vertex::forward(node_id)).print_format(&g, gaf_paths),
                     group_str,
                     node_id)?;
             }
@@ -119,8 +119,84 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     Ok(())
 }
 
-pub fn run_primary_alt_analysis(graph_fn: &str) -> Result<(), Box<dyn Error>> {
+pub fn run_primary_alt_analysis(graph_fn: &str,
+                                colors_fn: &Option<String>,
+                                paths_fn: &Option<String>,
+                                gaf_paths: bool) -> Result<(), Box<dyn Error>> {
     let g = read_graph(graph_fn)?;
+    let unique_block_len = 500_000;
+    let linear_blocks = pseudo_hap::pseudo_hap_decompose(&g, unique_block_len);
+
+    if let Some(output) = colors_fn {
+        info!("Writing node colors to {}", output);
+        let mut output = File::create(output)?;
+
+        let mut primary_nodes = HashSet::new();
+        let mut alt_nodes = HashSet::new();
+        let mut boundary_nodes = HashSet::new();
+
+        for block in &linear_blocks {
+            let p = block.instance_path();
+            primary_nodes.extend(p.vertices()
+                                 .iter().map(|&v| v.node_id));
+            alt_nodes.extend(block.known_alt_nodes().iter().copied());
+            boundary_nodes.extend([p.start().node_id, p.end().node_id]);
+        }
+
+        writeln!(output, "node\tlength\tassignment\tcolor")?;
+        for (node_id, n) in g.all_nodes().enumerate() {
+            assert!(g.name2id(&n.name) == node_id);
+            let mut color = "#808080";
+            let mut assign = "NA";
+            if boundary_nodes.contains(&node_id) {
+                assert!(!alt_nodes.contains(&node_id));
+                color = "#fbb117";
+                assign = "PRIMARY_BOUNDARY";
+            } else if primary_nodes.contains(&node_id) {
+                assert!(!alt_nodes.contains(&node_id));
+                color = "#8888FF";
+                assign = "PRIMARY";
+            } else if alt_nodes.contains(&node_id) {
+                color = "#FF8888";
+                assign = "ALT";
+            }
+            writeln!(output, "{}\t{}\t{}\t{}", n.name, n.length, assign, color)?;
+        }
+    }
+
+    let used : HashSet<usize> = linear_blocks.iter()
+                                    .map(|b| b.all_nodes())
+                                    .flatten().collect();
+
+    if let Some(output) = paths_fn {
+        info!("Outputting paths in {}", output);
+        let mut output = File::create(output)?;
+
+        writeln!(output, "name\tlen\tpath\tassignment")?;
+
+        for (block_id, block) in linear_blocks.into_iter().enumerate() {
+            writeln!(output, "primary_{}\t{}\t{}\tPRIMARY",
+                block_id,
+                block.instance_path().total_length(&g),
+                block.instance_path().print_format(&g, gaf_paths))?;
+            for (alt_id, &known_alt) in block.known_alt_nodes().iter().enumerate() {
+                writeln!(output, "alt_{}_{}\t{}\t{}\tALT",
+                    block_id,
+                    alt_id,
+                    g.node(known_alt).length,
+                    Path::new(Vertex::forward(known_alt)).print_format(&g, gaf_paths))?;
+            }
+        }
+
+        for (node_id, n) in g.all_nodes().enumerate() {
+            if !used.contains(&node_id) {
+                writeln!(output, "unused_{}\t{}\t{}\tNA",
+                    n.name,
+                    n.length,
+                    Path::new(Vertex::forward(node_id)).print_format(&g, gaf_paths))?;
+            }
+        }
+    }
 
     info!("All done");
     Ok(())

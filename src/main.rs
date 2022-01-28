@@ -34,7 +34,7 @@ enum Commands {
     Trio(TrioSettings),
     /// Primary-alt style analysis
     #[clap(setting(AppSettings::ArgRequiredElseHelp))]
-    PriAlt,
+    PriAlt(PriAltSettings),
 }
 
 //TODO use PathBuf?
@@ -56,12 +56,31 @@ struct TrioSettings {
     #[clap(short, long)]
     gaf_paths: bool,
 
-    #[clap(long, default_value_t = 10 )]
+    #[clap(long, default_value_t = 10)]
     low_marker_count: usize,
 
-    #[clap(long, default_value_t = 5.0 )]
+    #[clap(long, default_value_t = 5.0)]
     marker_ratio: f32,
 }
+
+//TODO use PathBuf?
+#[derive(clap::Args)]
+struct PriAltSettings {
+
+    /// colors output file
+    #[clap(short, long)]
+    colors: Option<String>,
+
+    /// Extracted primary and alt paths
+    #[clap(long)]
+    paths: Option<String>,
+
+    /// Use GAF ([<>]<name1>)+ format for paths
+    #[clap(short, long)]
+    gaf_paths: bool,
+
+}
+
 
 fn main() {
     //env_logger::init();
@@ -79,15 +98,18 @@ fn main() {
             println!("Running trio marker analysis");
 
             match graph_analysis::run_trio_analysis(&args.input_graph, &settings.parent_markers,
-                &settings.node_annotation, &settings.haplo_paths, settings.gaf_paths, settings.low_marker_count, settings.marker_ratio) {
+                            &settings.node_annotation, &settings.haplo_paths, settings.gaf_paths,
+                            settings.low_marker_count, settings.marker_ratio) {
                 Ok(()) => info!("Success"),
                 Err(e) => info!("Some error happened {:?}", e)
             }
         }
 
-        Commands::PriAlt => {
+        Commands::PriAlt(settings) => {
             println!("Extracting primary/alt paths");
-            match graph_analysis::run_primary_alt_analysis(&args.input_graph) {
+            match graph_analysis::run_primary_alt_analysis(&args.input_graph,
+                                        &settings.colors, &settings.paths,
+                                        settings.gaf_paths) {
                 Ok(()) => info!("Success"),
                 Err(e) => info!("Some error happened {:?}", e)
             }

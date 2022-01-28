@@ -343,14 +343,32 @@ pub fn longest_path(chain: &BubbleChain, g: &Graph) -> Option<Path> {
     Some(total)
 }
 
+pub fn linear_frac(chain: &BubbleChain, g: &Graph) -> f32 {
+    assert!(!chain.is_empty());
+    let start_vertex = chain[0].start_vertex();
+    let mut total_linear = g.vertex_length(start_vertex);
+    for (i, bubble) in chain.iter().enumerate() {
+        if bubble.end_vertex() != start_vertex {
+            total_linear += g.vertex_length(bubble.end_vertex());
+        } else {
+            assert!(i == chain.len() - 1);
+        }
+    }
+    let longest_path_len = length_range(chain, g).1;
+    if total_linear > longest_path_len {
+        1.
+    } else {
+        total_linear as f32 / longest_path_len as f32
+    }
+}
+
+//FIXME implement flattened vertex iterator even if it has duplicates
 pub fn check_chain<F>(chain: &BubbleChain, mut f: F) -> bool
 where
 F: FnMut(&Vertex) -> bool {
     for bubble in chain {
-        for v in bubble.vertices() {
-            if !f(v) {
-                return false
-            }
+        if !bubble.vertices().all(&mut f) {
+            return false
         }
     }
     true

@@ -468,6 +468,7 @@ impl Graph {
 
 }
 
+#[derive(Clone)]
 pub struct Path {
     v_storage: Vec<Vertex>,
     l_storage: Vec<Link>,
@@ -481,6 +482,13 @@ impl Path {
         Path {
             v_storage: vec![init_v],
             l_storage: Vec::new(),
+        }
+    }
+
+    pub fn from_link(l: Link) -> Path {
+        Path {
+            v_storage: vec![l.start, l.end],
+            l_storage: vec![l],
         }
     }
 
@@ -504,6 +512,7 @@ impl Path {
         &self.l_storage
     }
 
+    //TODO rename to rc?:write!
     pub fn reverse_complement(self) -> Path {
         //TODO optimize since consuming self
         Path {
@@ -577,12 +586,33 @@ impl Path {
         self.v_storage.iter().map(|&v| g.gaf_str(v)).collect::<Vec<String>>().join("")
     }
 
+    pub fn print_format(&self, g: &Graph, gaf: bool) -> String {
+        if gaf {self.print_gaf(g)} else {self.print(g)}
+    }
+
     pub fn total_length(&self, g: &Graph) -> usize {
         let mut tot_length = g.vertex_length(self.v_storage[0]);
         for l in &self.l_storage {
             tot_length += g.vertex_length(l.end) - l.overlap;
         }
         tot_length
+    }
+
+    pub fn check_subpath(&self, other: &Path, start_pos: usize) -> bool {
+        if self.len() < start_pos + other.len() {
+            return false;
+        }
+        match other.len() {
+            1 => self.v_storage[start_pos] == other.start(),
+            _ => &self.l_storage[start_pos..(start_pos + other.len() - 1)] == &other.l_storage,
+        }
+    }
+
+    pub fn check_subpath_rc(&self, other: &Path, start_pos: usize) -> bool {
+        if start_pos < (other.len() - 1) {
+            return false;
+        }
+        self.check_subpath(&other.clone().reverse_complement(), start_pos - (other.len() - 1))
     }
 
 }

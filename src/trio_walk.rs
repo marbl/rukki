@@ -80,7 +80,7 @@ impl <'a> HomozygousAssigner<'a> {
     }
 
     fn check_homozygous_fork_ahead(&self, v: Vertex) -> bool {
-        let (_, long_ahead) = graph_algos::bounded_dfs(self.g, v, self.node_len_thr);
+        let long_ahead = dfs::sinks_ahead(self.g, v, self.node_len_thr);
         let mut blended_group = None;
         for v_ahead in long_ahead {
             match self.assignments.group(v_ahead.node_id) {
@@ -89,7 +89,7 @@ impl <'a> HomozygousAssigner<'a> {
             };
             //looking back we should only get to v.rc()
             //TODO improve with flow ideas
-            if !graph_algos::bounded_dfs(self.g, v_ahead.rc(), self.node_len_thr).1
+            if !dfs::sinks_ahead(self.g, v_ahead.rc(), self.node_len_thr)
                 .iter()
                 .all(|&w| w == v.rc()) {
                 return false;
@@ -270,7 +270,7 @@ impl <'a> HaploSearcher<'a> {
         //1. all long nodes ahead should have assignment
         //2. only one should have correct assignment
         //3. this one should have unambiguous path backward to the vertex maybe stopping one link away
-        let (_, long_ahead) = graph_algos::bounded_dfs(self.g, v, self.long_node_threshold);
+        let long_ahead = dfs::sinks_ahead(self.g, v, self.long_node_threshold);
 
         //println!("Long ahead: {}", long_ahead.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
 
