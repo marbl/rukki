@@ -366,10 +366,5 @@ pub fn linear_frac(chain: &BubbleChain, g: &Graph) -> f32 {
 pub fn check_chain<F>(chain: &BubbleChain, mut f: F) -> bool
 where
 F: FnMut(&Vertex) -> bool {
-    for bubble in chain {
-        if !bubble.vertices().all(&mut f) {
-            return false
-        }
-    }
-    true
+    chain.iter().flat_map(|b| b.vertices()).all(&mut f)
 }

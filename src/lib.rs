@@ -165,8 +165,8 @@ pub fn run_primary_alt_analysis(graph_fn: &str,
     }
 
     let used : HashSet<usize> = linear_blocks.iter()
-                                    .map(|b| b.all_nodes())
-                                    .flatten().collect();
+                                    .flat_map(|b| b.all_nodes())
+                                    .collect();
 
     if let Some(output) = paths_fn {
         info!("Outputting paths in {}", output);
