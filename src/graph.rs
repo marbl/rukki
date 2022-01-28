@@ -486,6 +486,7 @@ impl Path {
     }
 
     pub fn from_link(l: Link) -> Path {
+        assert!(l.start.node_id != l.end.node_id);
         Path {
             v_storage: vec![l.start, l.end],
             l_storage: vec![l],
@@ -547,7 +548,7 @@ impl Path {
     pub fn append(&mut self, l: Link) {
         assert!(self.v_storage.last().unwrap() == &l.start);
         //TODO disable expensive assert?
-        assert!(!self.in_path(l.end.node_id));
+        debug_assert!(!self.in_path(l.end.node_id));
         self.v_storage.push(l.end);
         self.l_storage.push(l);
     }

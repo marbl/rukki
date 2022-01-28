@@ -10,6 +10,11 @@ pub struct LinearBlock {
 
 impl LinearBlock {
 
+    pub fn print(&self, g: &Graph) -> String {
+        format!("<Block: path={}; known_alts=[{}]>", self.instance_path().print(g),
+            self.known_alt_nodes.iter().map(|&node_id| g.name(node_id)).collect::<Vec<&str>>().join(","))
+    }
+
     pub fn instance_path(&self) -> &Path {
         &self.instance_path
     }
@@ -26,15 +31,24 @@ impl LinearBlock {
     }
 
     fn can_merge_in(&self, other: &LinearBlock) -> bool {
-        other.all_nodes()
-             .all(|n| !self.instance_path.in_path(n)
-                   && !self.known_alt_nodes.contains(&n))
+        self.instance_path.can_merge_in(&other.instance_path)
+            && other.all_nodes()
+             .all(|n| !self.known_alt_nodes.contains(&n))
     }
 
     fn merge_in(&mut self, other: LinearBlock) {
         debug_assert!(self.can_merge_in(&other));
         self.instance_path.merge_in(other.instance_path);
         self.known_alt_nodes.extend(other.known_alt_nodes.into_iter());
+    }
+
+    fn try_merge_in(mut self, other: LinearBlock) -> Option<LinearBlock> {
+        if self.can_merge_in(&other) {
+            self.merge_in(other);
+            Some(self)
+        } else {
+            None
+        }
     }
 
     fn from_path(path: Path, iter: impl Iterator<Item=Vertex>) -> LinearBlock {
@@ -60,7 +74,9 @@ impl LinearBlock {
         assert!(bubble_chain.len() > 0);
         let mut block = Self::vertex_block(bubble_chain[0].start_vertex());
         for b in bubble_chain.into_iter() {
-            block.merge_in(Self::from_bubble(g, b));
+            let b_lb = Self::from_bubble(g, b);
+            assert!(block.can_merge_in(&b_lb));
+            block.merge_in(b_lb);
         }
         block
     }
@@ -98,6 +114,13 @@ impl LinearBlock {
 //todo maybe support blocks here? (use block search and is_block method)
 fn bridged_by_vertex(g: &Graph, v: Vertex) -> Option<Path> {
     if g.incoming_edge_cnt(v) == 1 && g.outgoing_edge_cnt(v) == 1 {
+        let u = g.incoming_edges(v)[0].start;
+        let w = g.outgoing_edges(v)[0].end;
+        if u.node_id == v.node_id
+        || w.node_id == v.node_id
+        || w.node_id == u.node_id {
+            return None;
+        }
         let mut p = Path::from_link(g.incoming_edges(v)[0]);
         p.append(g.outgoing_edges(v)[0]);
         Some(p)
@@ -172,11 +195,12 @@ fn forward_extension(g: &Graph, v: Vertex, unique_block_len: usize) -> Option<Li
 fn extension_in_deadend(g: &Graph, v: Vertex, unique_block_len: usize)
 -> Option<LinearBlock> {
     let l = unambiguous_outgoing(g, v)?;
-    let a = other_incoming(g, l.end, l)?.start;
+    let w = l.end;
+    let a = other_incoming(g, w, l)?.start;
 
     if is_deadend(g, a) {
-        let mut ext_block = LinearBlock::from_path(Path::from_link(l), std::iter::once(a));
-        ext_block.merge_in(unique_block_ahead(g, v, unique_block_len)?);
+        let ext_block = LinearBlock::from_path(Path::from_link(l), std::iter::once(a));
+        let ext_block = ext_block.try_merge_in(unique_block_ahead(g, w, unique_block_len)?)?;
         Some(ext_block)
     } else {
         None
@@ -186,6 +210,7 @@ fn extension_in_deadend(g: &Graph, v: Vertex, unique_block_len: usize)
 //    a x            a x
 //   /       or     /
 //- v - w -      - v - o x
+//l -- 'horizontal' link
 fn extension_out_deadend(g: &Graph, v: Vertex, unique_block_len: usize)
 -> Option<LinearBlock> {
     if g.outgoing_edge_cnt(v) == 2 {
@@ -208,7 +233,7 @@ fn extension_out_deadend(g: &Graph, v: Vertex, unique_block_len: usize)
                 ext.merge_in(unique_block_ahead(g, l.end, unique_block_len)?);
                 return Some(ext);
             }
-            _ => panic!("Can't be"),
+            x => assert!(x == 0),
         }
     }
     None
@@ -225,11 +250,10 @@ fn extension_via_bridge(g: &Graph, u: Vertex, unique_block_len: usize) -> Option
         let s = other_outgoing(g, u, bridge_p.links()[0])?.end;
         let t = other_incoming(g, w, bridge_p.links()[1])?.start;
 
-        let mut ext_block = LinearBlock::from_path(bridge_p,
+        let ext_block = LinearBlock::from_path(bridge_p,
             admissible_alt_class(g, s, t, unique_block_len)?
             .into_iter());
-
-        ext_block.merge_in(unique_block_ahead(g, v, unique_block_len)?);
+        let ext_block = ext_block.try_merge_in(unique_block_ahead(g, w, unique_block_len)?)?;
         Some(ext_block)
     } else {
         None
@@ -382,6 +406,8 @@ fn simple_unique_blocks(g: &Graph, unique_block_len: usize) -> Vec<LinearBlock> 
     for chain in find_maximal_chains(g, &SbSearchParams::unrestricted())
                     .into_iter()
                     .filter(|c| check_chain(c, |v| !nodes_in_sccs.contains(&v.node_id))
+                                //FIXME think of supporting looped bubble chains
+                                && c.first().unwrap().start_vertex() != c.last().unwrap().end_vertex()
                                 //FIXME think if makes more sense to check shortest one
                                 //but longest path used elsewhere
                                 && length_range(c, g).1 >= unique_block_len) {
@@ -428,7 +454,7 @@ pub struct GapInfo {
 fn detect_gap(g: &Graph, u: Vertex) -> Option<GapInfo> {
     if let Some(bridge_p) = bridge_ahead(g, u) {
         assert!(bridge_p.len() == 3);
-        let v = bridge_p.vertices()[1];
+        //let v = bridge_p.vertices()[1];
         let w = bridge_p.end();
         let s_l = other_outgoing(g, u, bridge_p.links()[0])?;
         let t_l = other_incoming(g, w, bridge_p.links()[1])?;
