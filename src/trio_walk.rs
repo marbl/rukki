@@ -204,7 +204,7 @@ impl <'a> HaploSearcher<'a> {
             //FIXME improve logging!
             if path.can_merge_in(&jump)
                 //written this way only to skip last node, rewrite!
-                && jump.links().iter().all(|l| !self.in_sccs.contains(&l.start.node_id))
+                && (&(jump.vertices())[0..(jump.len() - 1)]).iter().all(|v| !self.in_sccs.contains(&v.node_id))
                 && jump.vertices().iter().all(|v| self.check_available(v.node_id, group)) {
                 let add_on = jump.len() - 1;
                 path.merge_in(jump);

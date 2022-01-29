@@ -468,10 +468,65 @@ impl Graph {
 
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+pub struct GapInfo {
+    pub start: Vertex,
+    pub end: Vertex,
+    pub gap_size: i64,
+}
+
+impl GapInfo {
+    pub fn rc(&self) -> GapInfo {
+        GapInfo {
+            start: self.end.rc(),
+            end: self.start.rc(),
+            gap_size: self.gap_size,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+pub enum GeneralizedLink {
+    LINK(Link),
+    GAP(GapInfo),
+}
+
+//TODO think of refactoring
+impl GeneralizedLink {
+    pub fn start(&self) -> Vertex {
+        match &self {
+            Self::LINK(l) => l.start,
+            Self::GAP(g) => g.start,
+        }
+    }
+
+    pub fn end(&self) -> Vertex {
+        match &self {
+            Self::LINK(l) => l.end,
+            Self::GAP(g) => g.end,
+        }
+    }
+
+    pub fn overlap(&self) -> i64 {
+        match &self {
+            Self::LINK(l) => l.overlap as i64,
+            Self::GAP(g) => -g.gap_size,
+        }
+    }
+
+    pub fn rc(&self) -> GeneralizedLink {
+        match &self {
+            Self::LINK(l) => Self::LINK(l.rc()),
+            Self::GAP(g) => Self::GAP(g.rc()),
+        }
+    }
+
+}
+
 #[derive(Clone)]
 pub struct Path {
     v_storage: Vec<Vertex>,
-    l_storage: Vec<Link>,
+    l_storage: Vec<GeneralizedLink>,
 }
 
 //FIXME rename, doesn't know about haplotype!
@@ -489,7 +544,7 @@ impl Path {
         assert!(l.start.node_id != l.end.node_id);
         Path {
             v_storage: vec![l.start, l.end],
-            l_storage: vec![l],
+            l_storage: vec![GeneralizedLink::LINK(l)],
         }
     }
 
@@ -509,9 +564,20 @@ impl Path {
         self.v_storage.len()
     }
 
-    pub fn links(&self) -> &Vec<Link> {
-        &self.l_storage
+    pub fn general_link_at(&self, idx: usize) -> GeneralizedLink {
+        self.l_storage[idx]
     }
+
+    pub fn link_at(&self, idx: usize) -> Link {
+        match self.general_link_at(idx) {
+            GeneralizedLink::LINK(l) => l,
+            _ => panic!("Not an actual graph link at index {}", idx),
+        }
+    }
+
+    //pub fn links(&self) -> &Vec<Link> {
+    //    &self.l_storage
+    //}
 
     //TODO rename to rc?:write!
     pub fn reverse_complement(self) -> Path {
@@ -545,12 +611,17 @@ impl Path {
     }
 
     //TODO rename
-    pub fn append(&mut self, l: Link) {
-        assert!(self.v_storage.last().unwrap() == &l.start);
+    pub fn append_general(&mut self, l: GeneralizedLink) {
+        assert!(self.v_storage.last().unwrap() == &l.start());
         //TODO disable expensive assert?
-        debug_assert!(!self.in_path(l.end.node_id));
-        self.v_storage.push(l.end);
+        debug_assert!(!self.in_path(l.end().node_id));
+        self.v_storage.push(l.end());
         self.l_storage.push(l);
+    }
+
+    //TODO rename
+    pub fn append(&mut self, l: Link) {
+        self.append_general(GeneralizedLink::LINK(l));
     }
 
     //TODO rename?
@@ -559,7 +630,7 @@ impl Path {
     pub fn extend(&mut self, other: Path) {
         assert!(self.v_storage.last().unwrap() == other.v_storage.first().unwrap());
         for l in other.l_storage {
-            self.append(l);
+            self.append_general(l);
         }
     }
 
@@ -575,7 +646,7 @@ impl Path {
     pub fn merge_in(&mut self, path: Path) {
         assert!(self.can_merge_in(&path));
         for l in path.l_storage {
-            self.append(l);
+            self.append_general(l);
         }
     }
 
@@ -592,11 +663,11 @@ impl Path {
     }
 
     pub fn total_length(&self, g: &Graph) -> usize {
-        let mut tot_length = g.vertex_length(self.v_storage[0]);
+        let mut tot_length = g.vertex_length(self.v_storage[0]) as i64;
         for l in &self.l_storage {
-            tot_length += g.vertex_length(l.end) - l.overlap;
+            tot_length += g.vertex_length(l.end()) as i64 - l.overlap();
         }
-        tot_length
+        tot_length as usize
     }
 
     pub fn check_subpath(&self, other: &Path, start_pos: usize) -> bool {

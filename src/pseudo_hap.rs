@@ -245,10 +245,10 @@ fn extension_out_deadend(g: &Graph, v: Vertex, unique_block_len: usize)
 fn extension_via_bridge(g: &Graph, u: Vertex, unique_block_len: usize) -> Option<LinearBlock> {
     if let Some(bridge_p) = bridge_ahead(g, u) {
         assert!(bridge_p.len() == 3);
-        let v = bridge_p.vertices()[1];
+        //let v = bridge_p.vertices()[1];
         let w = bridge_p.end();
-        let s = other_outgoing(g, u, bridge_p.links()[0])?.end;
-        let t = other_incoming(g, w, bridge_p.links()[1])?.start;
+        let s = other_outgoing(g, u, bridge_p.link_at(0))?.end;
+        let t = other_incoming(g, w, bridge_p.link_at(1))?.start;
 
         let ext_block = LinearBlock::from_path(bridge_p,
             admissible_alt_class(g, s, t, unique_block_len)?
@@ -440,36 +440,4 @@ fn simple_unique_blocks(g: &Graph, unique_block_len: usize) -> Vec<LinearBlock> 
 pub fn pseudo_hap_decompose(g: &Graph, unique_block_len: usize) -> Vec<LinearBlock> {
     let mut decomposer = PrimaryDecomposer::new(g, unique_block_len);
     decomposer.run()
-}
-
-pub struct GapInfo {
-    start: Vertex,
-    end: Vertex,
-    gap: i64,
-}
-
-//    s   t
-//   /     \
-//- u - v - w -
-fn detect_gap(g: &Graph, u: Vertex) -> Option<GapInfo> {
-    if let Some(bridge_p) = bridge_ahead(g, u) {
-        assert!(bridge_p.len() == 3);
-        //let v = bridge_p.vertices()[1];
-        let w = bridge_p.end();
-        let s_l = other_outgoing(g, u, bridge_p.links()[0])?;
-        let t_l = other_incoming(g, w, bridge_p.links()[1])?;
-        let s = s_l.end;
-        let t = t_l.start;
-
-        if is_deadend(g, s) && is_deadend(g, t) {
-            return Some(GapInfo {
-                start: s,
-                end: t,
-                gap: (bridge_p.total_length(g) as i64
-                        - Path::from_link(s_l).total_length(g) as i64
-                        - Path::from_link(t_l).total_length(g) as i64)
-            });
-        }
-    }
-    None
 }
