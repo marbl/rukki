@@ -190,8 +190,22 @@ impl <'a> HaploSearcher<'a> {
     fn grow_jump_forward(&self, path: &mut Path, group: TrioGroup) -> usize {
         let mut tot_grow = 0;
         loop {
+            //FIXME refactor, very ugly!
             let mut grow = self.grow_forward(path, group, true);
-            grow += self.jump_forward(path, group);
+            if grow > 0 {
+                tot_grow += grow;
+                continue;
+            }
+            grow += self.jump_forward(path, self.find_jump_ahead(path.end(), group), group);
+            if grow > 0 {
+                tot_grow += grow;
+                continue;
+            }
+            grow += self.jump_forward(path, self.find_gapped_jump_ahead(path, group), group);
+            if grow > 0 {
+                tot_grow += grow;
+                continue;
+            }
             grow += self.patch_forward(path, group);
             tot_grow += grow;
             if grow == 0 {
@@ -220,20 +234,24 @@ impl <'a> HaploSearcher<'a> {
         0
     }
 
-    fn jump_forward(&self, path: &mut Path, group: TrioGroup) -> usize {
-        if let Some(jump) = self.find_jump_ahead(path.end(), group) {
-            assert!(jump.len() > 1);
-            assert!(path.end() == jump.start());
-            //FIXME improve logging!
-            if path.can_merge_in(&jump)
-                && (&(jump.vertices())[0..(jump.len() - 1)]).iter().all(|v| !self.in_sccs.contains(&v.node_id))
-                && jump.vertices().iter().all(|v| self.check_available(v.node_id, group)) {
-                let add_on = jump.len() - 1;
-                path.merge_in(jump);
-                return add_on;
+    fn jump_forward(&self, path: &mut Path, opt_jump: Option<Path>, group: TrioGroup) -> usize {
+        match opt_jump {
+            None => 0,
+            Some(jump) => {
+                assert!(jump.len() > 1);
+                assert!(path.end() == jump.start());
+                //FIXME improve logging!
+                if path.can_merge_in(&jump)
+                    && (&(jump.vertices())[0..(jump.len() - 1)]).iter().all(|v| !self.in_sccs.contains(&v.node_id))
+                    && jump.vertices().iter().all(|v| self.check_available(v.node_id, group)) {
+                    let add_on = jump.len() - 1;
+                    path.merge_in(jump);
+                    add_on
+                } else {
+                    0
+                }
             }
         }
-        0
     }
 
     fn try_link(&self, mut path: Path, v: Vertex) -> Path {
@@ -335,6 +353,63 @@ impl <'a> HaploSearcher<'a> {
         None
     }
 
+    fn find_gapped_jump_ahead(&self, path: &Path, group:TrioGroup) -> Option<Path> {
+        const GAP_SIZE: i64 = 100;
+        let v = path.end();
+        let component = dfs::ShortNodeComponent::search_from(self.g, v, self.long_node_threshold);
+
+        //check that sources/sinks are clearly separated and that all have assignments
+        if !component.simple_boundary()
+            || !component.sources.iter()
+                    .chain(component.sinks.iter())
+                    .all(|x| self.assignments.contains(x.node_id)) {
+            return None;
+        }
+
+        let candidate_sources: Vec<Vertex> = component.sources.iter()
+            .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
+            .copied()
+            .collect();
+
+        if candidate_sources.len() != 1 || !path.vertices().contains(&candidate_sources[0]) {
+            return None;
+        }
+
+        let candidate_sinks: Vec<Vertex> = component.sinks.iter()
+            .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
+            .copied()
+            .collect();
+
+        if candidate_sinks.len() != 1 {
+            return None;
+        }
+
+        let w = candidate_sinks[0];
+
+        //FIXME optimize, this info should be logged within the short node component
+        if !dfs::sinks_ahead(self.g, v, self.long_node_threshold).contains(&w) {
+            //w can't be reached from v
+            return None;
+        }
+
+        debug!("Unique potential extension {}", self.g.v_str(w));
+        let mut p = Path::new(w.rc());
+        debug!("Growing path forward from {}", self.g.v_str(w.rc()));
+        self.grow_forward(&mut p, group, false);
+        debug!("Found path {}", p.print(self.g));
+        if p.in_path(v.node_id) {
+            //should be covered by find_jump_ahead by this point (if possible to extend)
+            return None;
+        }
+
+        p.append_general(GeneralizedLink::GAP(GapInfo {
+            start: p.end(),
+            end: v.rc(),
+            gap_size: GAP_SIZE}));
+
+        Some(p.reverse_complement())
+    }
+
     //FIXME maybe stop grow process immediately when this fails
     fn check_available(&self, node_id: usize, target_group: TrioGroup) -> bool {
         if let Some(&group) = self.used.get(&node_id) {
@@ -360,7 +435,9 @@ impl <'a> HaploSearcher<'a> {
         let mut steps = 0;
         while let Some(l) = self.group_extension(v, group) {
             let w = l.end;
+
             if path.in_path(w.node_id)
+                || self.in_sccs.contains(&w.node_id)
                 || (check_avail && !self.check_available(w.node_id, group)) {
                 break;
             } else {

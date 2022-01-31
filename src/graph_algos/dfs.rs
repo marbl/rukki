@@ -135,11 +135,11 @@ pub fn sinks_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> Vec<Vertex> {
     sinks
 }
 
-struct ShortNodeComponent {
-    sources: HashSet<Vertex>,
-    sinks: HashSet<Vertex>,
-    has_deadends: bool,
-    reached: HashSet<Vertex>,
+pub struct ShortNodeComponent {
+    pub sources: HashSet<Vertex>,
+    pub sinks: HashSet<Vertex>,
+    pub has_deadends: bool,
+    pub reached: HashSet<Vertex>,
 }
 
 impl ShortNodeComponent {
@@ -183,7 +183,7 @@ impl ShortNodeComponent {
     }
 
     //returns true if all nodes are distinct within sources/sinks union
-    fn simple_boundary(&self) -> bool {
+    pub fn simple_boundary(&self) -> bool {
         let mut used = HashSet::new();
         for v in self.sinks.iter().chain(self.sources.iter()) {
             if used.contains(&v.node_id) {
@@ -207,5 +207,27 @@ impl ShortNodeComponent {
             component.consider(g, o_l.end, o_l, length_threshold);
         }
         component
+    }
+
+    //todo refactor and simplify logic!
+    //if v is long searching ahead from it, otherwise search in both directions
+    pub fn search_from(g: &Graph, v: Vertex, length_threshold: usize) -> ShortNodeComponent {
+        if g.vertex_length(v) >= length_threshold {
+            Self::ahead_from_long(g, v, length_threshold)
+        } else {
+            let mut component = ShortNodeComponent {
+                sources: HashSet::new(),
+                sinks: HashSet::new(),
+                has_deadends: (g.outgoing_edge_cnt(v) == 0 || g.incoming_edge_cnt(v) == 0),
+                reached: std::iter::once(v).collect(),
+            };
+            for i_l in g.incoming_edges(v) {
+                component.consider(g, i_l.start, i_l, length_threshold);
+            }
+            for o_l in g.outgoing_edges(v) {
+                component.consider(g, o_l.end, o_l, length_threshold);
+            }
+            component
+        }
     }
 }
