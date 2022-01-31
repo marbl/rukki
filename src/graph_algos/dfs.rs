@@ -134,3 +134,78 @@ pub fn sinks_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> Vec<Vertex> {
     sinks.extend(dfs.exit_order().iter().filter(|&x| g.outgoing_edge_cnt(*x) == 0).copied());
     sinks
 }
+
+struct ShortNodeComponent {
+    sources: HashSet<Vertex>,
+    sinks: HashSet<Vertex>,
+    has_deadends: bool,
+    reached: HashSet<Vertex>,
+}
+
+impl ShortNodeComponent {
+
+    fn consider(&mut self, g: &Graph, v: Vertex, l: Link, length_threshold: usize) {
+        if !self.reached.contains(&v) {
+            self.reached.insert(v);
+
+            if g.vertex_length(v) >= length_threshold
+                && v == l.start {
+                //if v is long and we came into its end then it's a source
+                self.sources.insert(v);
+            } else {
+                //otherwise consider it's incoming edges
+                if g.incoming_edge_cnt(v) == 0 {
+                    self.has_deadends = true;
+                }
+                for i_l in g.incoming_edges(v) {
+                    if i_l != l {
+                        self.consider(g, i_l.start, i_l, length_threshold);
+                    }
+                }
+            }
+
+            if g.vertex_length(v) >= length_threshold
+                && v == l.end {
+                //if v is long and we came into its start then it's a sink
+                self.sinks.insert(v);
+            } else {
+                //otherwise consider it's outgoing edges
+                if g.outgoing_edge_cnt(v) == 0 {
+                    self.has_deadends = true;
+                }
+                for o_l in g.outgoing_edges(v) {
+                    if o_l != l {
+                        self.consider(g, o_l.end, o_l, length_threshold);
+                    }
+                }
+            }
+        }
+    }
+
+    //returns true if all nodes are distinct within sources/sinks union
+    fn simple_boundary(&self) -> bool {
+        let mut used = HashSet::new();
+        for v in self.sinks.iter().chain(self.sources.iter()) {
+            if used.contains(&v.node_id) {
+                return false;
+            }
+            used.insert(v.node_id);
+        }
+        return true;
+    }
+
+    pub fn ahead_from_long(g: &Graph, v: Vertex, length_threshold: usize) -> ShortNodeComponent {
+        assert!(g.vertex_length(v) >= length_threshold);
+        let mut component = ShortNodeComponent {
+            sources: std::iter::once(v).collect(),
+            sinks: HashSet::new(),
+            has_deadends: (g.outgoing_edge_cnt(v) == 0),
+            reached: std::iter::once(v).collect(),
+        };
+
+        for o_l in g.outgoing_edges(v) {
+            component.consider(g, o_l.end, o_l, length_threshold);
+        }
+        component
+    }
+}
