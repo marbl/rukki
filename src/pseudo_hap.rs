@@ -441,3 +441,29 @@ pub fn pseudo_hap_decompose(g: &Graph, unique_block_len: usize) -> Vec<LinearBlo
     let mut decomposer = PrimaryDecomposer::new(g, unique_block_len);
     decomposer.run()
 }
+
+//    s   t
+//   /     \
+//- u - v - w -
+pub fn detect_gap(g: &Graph, u: Vertex) -> Option<GapInfo> {
+    if let Some(bridge_p) = bridge_ahead(g, u) {
+        assert!(bridge_p.len() == 3);
+        //let v = bridge_p.vertices()[1];
+        let w = bridge_p.end();
+        let s_l = other_outgoing(g, u, bridge_p.link_at(0))?;
+        let t_l = other_incoming(g, w, bridge_p.link_at(1))?;
+        let s = s_l.end;
+        let t = t_l.start;
+
+        if is_deadend(g, s) && is_deadend(g, t) {
+            return Some(GapInfo {
+                start: s,
+                end: t,
+                gap_size: (bridge_p.total_length(g) as i64
+                           - Path::from_link(s_l).total_length(g) as i64
+                           - Path::from_link(t_l).total_length(g) as i64)
+            });
+        }
+    }
+    None
+}

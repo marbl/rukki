@@ -1,5 +1,6 @@
 use crate::graph::*;
 use crate::trio::*;
+use crate::pseudo_hap::*;
 use crate::graph_algos::*;
 use log::{debug, trace};
 use std::collections::HashSet;
@@ -158,8 +159,10 @@ impl <'a> HaploSearcher<'a> {
     //TODO maybe use single length threshold?
     pub fn find_all(&mut self) -> Vec<(Path, usize, TrioGroup)> {
         let mut answer = Vec::new();
+        let mut nodes: Vec<(usize, &Node)> = self.g.all_nodes().enumerate().collect();
+        nodes.sort_by_key(|(_, n)| n.length);
 
-        for (node_id, node) in self.g.all_nodes().enumerate() {
+        for (node_id, node) in nodes.into_iter().rev() {
             if self.used.contains_key(&node_id) {
                 continue;
             }
@@ -189,12 +192,32 @@ impl <'a> HaploSearcher<'a> {
         loop {
             let mut grow = self.grow_forward(path, group, true);
             grow += self.jump_forward(path, group);
+            grow += self.patch_forward(path, group);
+            tot_grow += grow;
             if grow == 0 {
                 break;
             }
-            tot_grow += grow;
         }
         tot_grow
+    }
+
+    fn patch_forward(&self, path: &mut Path, group: TrioGroup) -> usize {
+        let v = path.end();
+        if self.g.outgoing_edge_cnt(v) == 0 /* v is dead-end */
+            && self.g.incoming_edge_cnt(v) == 1 {
+            //todo maybe check that the 'joining' node is from other haplotype or is unassigned?
+            //todo maybe support case when dead-ends are themselves unassigned? (trivial procedure stops being 'symmetric'))
+            if let Some(gap_info) = detect_gap(self.g, self.g.incoming_edges(v)[0].start) {
+                let next_node = gap_info.end.node_id;
+                if self.assignments.group(next_node) == Some(group)
+                    && !path.in_path(next_node)
+                    && self.check_available(next_node, group) {
+                    path.append_general(GeneralizedLink::GAP(gap_info));
+                    return 1;
+                }
+            }
+        }
+        0
     }
 
     fn jump_forward(&self, path: &mut Path, group: TrioGroup) -> usize {
@@ -203,7 +226,6 @@ impl <'a> HaploSearcher<'a> {
             assert!(path.end() == jump.start());
             //FIXME improve logging!
             if path.can_merge_in(&jump)
-                //written this way only to skip last node, rewrite!
                 && (&(jump.vertices())[0..(jump.len() - 1)]).iter().all(|v| !self.in_sccs.contains(&v.node_id))
                 && jump.vertices().iter().all(|v| self.check_available(v.node_id, group)) {
                 let add_on = jump.len() - 1;
@@ -388,9 +410,10 @@ impl <'a> HaploSearcher<'a> {
         let mut suitable_extension = None;
         for l in self.g.outgoing_edges(v) {
             let w = l.end;
+            //currently require all extensions to be definite
             if self.assignments.is_definite(w.node_id) {
-                //FIXME helper method
-                if self.assignments.get(w.node_id).unwrap().group == group {
+                //and exactly one having correct group assignment
+                if self.assignments.group(w.node_id).unwrap() == group {
                     if suitable_extension.is_none() {
                         suitable_extension = Some(l);
                     } else {
