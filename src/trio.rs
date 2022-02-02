@@ -57,11 +57,20 @@ impl TrioGroup {
 
 #[derive(Clone, Debug)]
 pub struct Assignment<T>
-where T: Clone
 {
     pub group: T,
     pub confidence: Confidence,
     pub info: String,
+}
+
+impl <T> Assignment<T> {
+    fn new_basic(group: T) -> Assignment<T> {
+        Assignment {
+            group,
+            confidence: Confidence::MODERATE,
+            info: String::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -77,7 +86,7 @@ impl TrioInfo {
     }
 
     fn counts_str(&self) -> String {
-        format!("{}:{}", self.mat, self.pat)
+        format!("m{}:p{}", self.mat, self.pat)
     }
 }
 
@@ -98,6 +107,7 @@ pub fn read_trio(trio_str: &str) -> Vec<TrioInfo> {
 use crate::graph::Graph;
 
 //TODO add template parameter
+#[derive(Clone)]
 pub struct AssignmentStorage<'a> {
     storage: HashMap<usize, Assignment<TrioGroup>>,
     g: &'a Graph,
@@ -125,12 +135,34 @@ impl <'a> AssignmentStorage<'a> {
         self.storage.insert(node_id, assignment);
     }
 
+    pub fn update_group(&mut self, node_id: usize, group: TrioGroup) {
+        match self.group(node_id) {
+            //FIXME how to simultaneously check key and get mutable reference to stored value?
+            Some(exist_group) => {
+                self.storage.get_mut(&node_id).unwrap().group = TrioGroup::blend(exist_group, group)
+            }
+            None => {
+                self.assign(node_id, Assignment::<TrioGroup>::new_basic(group));
+            }
+        };
+    }
+
+    pub fn update_all(&mut self, iter: impl Iterator<Item=usize>, group: TrioGroup) {
+        for node_id in iter {
+            self.update_group(node_id, group);
+        }
+    }
+
     pub fn assign_by_name(&mut self, node_name: &str, assignment: Assignment<TrioGroup>) {
         self.assign(self.g.name2id(node_name), assignment);
     }
 
     pub fn get(&self, node_id: usize) -> Option<&Assignment<TrioGroup>> {
         self.storage.get(&node_id)
+    }
+
+    pub fn get_mut(&mut self, node_id: usize) -> Option<&mut Assignment<TrioGroup>> {
+        self.storage.get_mut(&node_id)
     }
 
     pub fn contains(&self, node_id: usize) -> bool {

@@ -4,7 +4,6 @@ use crate::pseudo_hap::*;
 use crate::graph_algos::*;
 use log::{debug, trace};
 use std::collections::HashSet;
-use std::collections::HashMap;
 
 //TODO add template parameter
 pub struct HomozygousAssigner<'a> {
@@ -126,7 +125,7 @@ pub struct HaploSearcher<'a> {
     assignments: &'a AssignmentStorage<'a>,
     long_node_threshold: usize,
     //TODO consider using same structure as for initial assignments
-    used: HashMap<usize, TrioGroup>,
+    used: AssignmentStorage<'a>,
     in_sccs: HashSet<usize>,
 }
 
@@ -137,22 +136,12 @@ impl <'a> HaploSearcher<'a> {
             g,
             assignments,
             long_node_threshold,
-            used: HashMap::new(),
+            used: AssignmentStorage::new(g),
             in_sccs: scc::nodes_in_sccs(g),
         }
     }
 
-    fn update_used(&mut self, path: &Path, group: TrioGroup) {
-        for v in path.vertices() {
-            let blended = match self.used.get(&v.node_id) {
-                Some(exist_group) => TrioGroup::blend(*exist_group, group),
-                None => group,
-            };
-            self.used.insert(v.node_id, blended);
-        }
-    }
-
-    pub fn used(&self) -> &HashMap<usize, TrioGroup> {
+    pub fn used(&self) -> &AssignmentStorage<'a> {
         &self.used
     }
 
@@ -163,14 +152,16 @@ impl <'a> HaploSearcher<'a> {
         nodes.sort_by_key(|(_, n)| n.length);
 
         for (node_id, node) in nodes.into_iter().rev() {
-            if self.used.contains_key(&node_id) {
+            if self.used.contains(node_id) {
                 continue;
             }
             //launch from long, definitely assigned nodes
             if node.length >= self.long_node_threshold && self.assignments.is_definite(node_id) {
                 let group = self.assignments.get(node_id).unwrap().group;
                 let path = self.haplo_path(node_id, group);
-                self.update_used(&path, group);
+                self.used.update_all(path.vertices().iter().map(|v| v.node_id), group);
+                self.used.get_mut(path.start().node_id).unwrap().info = String::from("path_boundary");
+                self.used.get_mut(path.end().node_id).unwrap().info = String::from("path_boundary");
                 answer.push((path, node_id, group));
             }
         }
@@ -189,26 +180,33 @@ impl <'a> HaploSearcher<'a> {
     //TODO maybe consume when grow?
     fn grow_jump_forward(&self, path: &mut Path, group: TrioGroup) -> usize {
         let mut tot_grow = 0;
+        debug!("Trying to extend forward from vertex {}", self.g.v_str(path.end()));
         loop {
             //FIXME refactor, very ugly!
             let mut grow = self.grow_forward(path, group, true);
             if grow > 0 {
+                debug!("Was able to extend in unambiguously assignment-aware way by {grow} nodes");
                 tot_grow += grow;
                 continue;
             }
             grow += self.jump_forward(path, self.find_jump_ahead(path.end(), group), group);
             if grow > 0 {
+                debug!("Was able to jump (and stitch) ahead by {grow} nodes");
                 tot_grow += grow;
                 continue;
             }
             grow += self.jump_forward(path, self.find_gapped_jump_ahead(path, group), group);
             if grow > 0 {
+                debug!("Was able to jump (via ambiguous region) ahead by {grow} nodes");
                 tot_grow += grow;
                 continue;
             }
             grow += self.patch_forward(path, group);
             tot_grow += grow;
-            if grow == 0 {
+            if grow > 0 {
+                debug!("Was able to patch broken bubble and extend by {grow} nodes");
+                tot_grow += grow;
+            } else {
                 break;
             }
         }
@@ -321,7 +319,10 @@ impl <'a> HaploSearcher<'a> {
                 .filter(|x| x != &v)
                 .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
                 .collect();
-            debug!("Compatible extension count: {}", potential_ext.len());
+
+            debug!("Compatible extension count: {} ({})", potential_ext.len(),
+                potential_ext.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
+
             if potential_ext.len() == 1 {
                 debug!("Unique potential extension {}", self.g.v_str(potential_ext[0]));
                 let mut p = Path::new(potential_ext[0].rc());
@@ -402,7 +403,7 @@ impl <'a> HaploSearcher<'a> {
             return None;
         }
 
-        p.append_general(GeneralizedLink::GAP(GapInfo {
+        p.append_general(GeneralizedLink::AMBIG(GapInfo {
             start: p.end(),
             end: v.rc(),
             gap_size: GAP_SIZE}));
@@ -412,7 +413,7 @@ impl <'a> HaploSearcher<'a> {
 
     //FIXME maybe stop grow process immediately when this fails
     fn check_available(&self, node_id: usize, target_group: TrioGroup) -> bool {
-        if let Some(&group) = self.used.get(&node_id) {
+        if let Some(group) = self.used.group(node_id) {
             assert!(group != TrioGroup::ISSUE);
             if TrioGroup::incompatible(group, target_group) {
                 if self.long_node(node_id) {

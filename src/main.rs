@@ -44,9 +44,13 @@ struct TrioSettings {
     #[clap(short, long)]
     parent_markers: String,
 
-    /// Node annotation output file
+    /// Marker-based annotation output file
     #[clap(short, long)]
-    node_annotation: Option<String>,
+    init_annotation: Option<String>,
+
+    /// Path-based annotation output file
+    #[clap(short, long)]
+    final_annotation: Option<String>,
 
     /// Marker-assisted extracted haplo-paths
     #[clap(long)]
@@ -98,7 +102,8 @@ fn main() {
             println!("Running trio marker analysis");
 
             match graph_analysis::run_trio_analysis(&args.input_graph, &settings.parent_markers,
-                            &settings.node_annotation, &settings.haplo_paths, settings.gaf_paths,
+                            &settings.init_annotation, &settings.final_annotation,
+                            &settings.haplo_paths, settings.gaf_paths,
                             settings.low_marker_count, settings.marker_ratio) {
                 Ok(()) => info!("Success"),
                 Err(e) => info!("Some error happened {:?}", e)

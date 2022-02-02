@@ -107,17 +107,17 @@ impl<'a> DFS<'a> {
     //todo return iterator
     //nodes that were reached, but not visited (initally blocked or too long)
     pub fn boundary(&self) -> Vec<Vertex> {
-        let mut boundary = Vec::new();
+        let mut boundary = HashSet::new();
         let visited : HashSet<Vertex> = self.tout.iter().copied().collect();
 
         for &v in &visited {
             for w in self.neighbors(v) {
                 if !visited.contains(&w) {
-                    boundary.push(w);
+                    boundary.insert(w);
                 }
             }
         }
-        boundary
+        boundary.into_iter().collect()
     }
 
 }
@@ -131,6 +131,7 @@ pub fn sinks_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> Vec<Vertex> {
     dfs.run_from(v);
     let mut sinks = dfs.boundary();
     assert!(sinks.iter().all(|&x| g.vertex_length(x) >= node_len_thr));
+    //extend to dead-ends
     sinks.extend(dfs.exit_order().iter().filter(|&x| g.outgoing_edge_cnt(*x) == 0).copied());
     sinks
 }

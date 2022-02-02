@@ -454,13 +454,21 @@ impl Graph {
         None
     }
 
-    pub fn v_str(&self, v: Vertex) -> String {
-        format!("{}{}", self.node(v.node_id).name, Direction::str(v.direction))
+    pub fn v_str_format(&self, v: Vertex, gaf: bool) -> String {
+        if gaf {
+            format!("{}{}", Direction::gaf_str(v.direction), self.node(v.node_id).name)
+        } else {
+            format!("{}{}", self.node(v.node_id).name, Direction::str(v.direction))
+        }
     }
 
-    pub fn gaf_str(&self, v: Vertex) -> String {
-        format!("{}{}", Direction::gaf_str(v.direction), self.node(v.node_id).name)
+    pub fn v_str(&self, v: Vertex) -> String {
+        self.v_str_format(v, false)
     }
+
+    //pub fn gaf_str(&self, v: Vertex) -> String {
+    //    format!("{}{}", Direction::gaf_str(v.direction), self.node(v.node_id).name)
+    //}
 
     pub fn l_str(&self, l: Link) -> String {
         format!("{}->{}", self.v_str(l.start), self.v_str(l.end))
@@ -489,6 +497,7 @@ impl GapInfo {
 pub enum GeneralizedLink {
     LINK(Link),
     GAP(GapInfo),
+    AMBIG(GapInfo),
 }
 
 //TODO think of refactoring
@@ -497,6 +506,7 @@ impl GeneralizedLink {
         match &self {
             Self::LINK(l) => l.start,
             Self::GAP(g) => g.start,
+            Self::AMBIG(a) => a.start,
         }
     }
 
@@ -504,13 +514,23 @@ impl GeneralizedLink {
         match &self {
             Self::LINK(l) => l.end,
             Self::GAP(g) => g.end,
+            Self::AMBIG(a) => a.end,
         }
     }
+
+    //pub fn is_gap(&self) -> bool {
+    //    match &self {
+    //        Self::LINK(l) => false,
+    //        Self::GAP(g) => true,
+    //        Self::AMBIG(a) => true,
+    //    }
+    //}
 
     pub fn overlap(&self) -> i64 {
         match &self {
             Self::LINK(l) => l.overlap as i64,
             Self::GAP(g) => -g.gap_size,
+            Self::AMBIG(a) => -a.gap_size,
         }
     }
 
@@ -518,6 +538,7 @@ impl GeneralizedLink {
         match &self {
             Self::LINK(l) => Self::LINK(l.rc()),
             Self::GAP(g) => Self::GAP(g.rc()),
+            Self::AMBIG(a) => Self::AMBIG(a.rc()),
         }
     }
 
@@ -651,15 +672,35 @@ impl Path {
     }
 
     pub fn print(&self, g: &Graph) -> String {
-        self.v_storage.iter().map(|&v| g.v_str(v)).collect::<Vec<String>>().join(",")
+        //self.v_storage.iter().map(|&v| g.v_str(v)).collect::<Vec<String>>().join(",")
+        self.print_format(g, false)
     }
 
-    pub fn print_gaf(&self, g: &Graph) -> String {
-        self.v_storage.iter().map(|&v| g.gaf_str(v)).collect::<Vec<String>>().join("")
-    }
+    //pub fn print_gaf(&self, g: &Graph) -> String {
+    //    self.v_storage.iter().map(|&v| g.gaf_str(v)).collect::<Vec<String>>().join("")
+    //}
+
+    //fn print_ungapped(g: &Graph, vertices: &[Vertex], gaf: bool) -> String {
+    //    let delim = if gaf { "" } else { "," };
+    //    vertices.iter().map(|&v| g.v_str_format(v, gaf))
+    //        .collect::<Vec<String>>().join(delim)
+    //}
 
     pub fn print_format(&self, g: &Graph, gaf: bool) -> String {
-        if gaf {self.print_gaf(g)} else {self.print(g)}
+        let delim = if gaf { "" } else { "," };
+        let mut ans = String::new();
+        for (i, &v) in self.v_storage.iter().enumerate() {
+            if i > 0 {
+                ans += match self.l_storage[i-1] {
+                    GeneralizedLink::AMBIG(_) => if gaf { ">AMBIG" } else { ",AMBIG" },
+                    GeneralizedLink::GAP(_) => if gaf { ">GAP" } else { ",GAP" },
+                    GeneralizedLink::LINK(_) => "",
+                }
+            }
+            if i > 0 { ans += delim; }
+            ans += &g.v_str_format(v, gaf);
+        }
+        ans
     }
 
     pub fn total_length(&self, g: &Graph) -> usize {

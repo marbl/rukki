@@ -28,8 +28,32 @@ fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
     Ok(g)
 }
 
+fn output_coloring(g: &Graph,
+                   assignments: &trio::AssignmentStorage,
+                   file_name: &str)
+                   -> Result<(), std::io::Error> {
+    let mut output = File::create(file_name)?;
+    writeln!(output, "node\tlength\tinfo\tassignment\tcolor")?;
+    for (node_id, n) in g.all_nodes().enumerate() {
+        assert!(g.name2id(&n.name) == node_id);
+        if let Some(assign) = assignments.get(node_id) {
+            let color = match assign.group {
+                trio::TrioGroup::PATERNAL => "#8888FF",
+                trio::TrioGroup::MATERNAL => "#FF8888",
+                trio::TrioGroup::ISSUE => "#fbb117",
+                trio::TrioGroup::HOMOZYGOUS => "#c5d165",
+            };
+            writeln!(output, "{}\t{}\t{}\t{:?}\t{}", n.name, n.length, assign.info
+                                                    , assign.group, color)?;
+        }
+    }
+    Ok(())
+}
+
 pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
-    init_node_annotation_fn: &Option<String>, haplo_paths_fn: &Option<String>,
+    init_node_annotation_fn: &Option<String>,
+    final_node_annotation_fn: &Option<String>,
+    haplo_paths_fn: &Option<String>,
     gaf_paths: bool, low_cnt_thr: usize, ratio_thr: f32) -> Result<(), Box<dyn Error>> {
     info!("Reading graph from {:?}", graph_fn);
     let g = Graph::read(&fs::read_to_string(graph_fn)?);
@@ -50,28 +74,30 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     let trio_infos = trio::read_trio(&fs::read_to_string(trio_markers_fn)?);
 
     info!("Assigning initial parental groups to the nodes");
-    let parental_groups = trio::assign_parental_groups(&g, &trio_infos, low_cnt_thr, ratio_thr);
+    let init_assign = trio::assign_parental_groups(&g, &trio_infos, low_cnt_thr, ratio_thr);
     info!("Detecting homozygous nodes");
     //TODO parameterize
-    let parental_groups = trio_walk::assign_homozygous(&g, parental_groups, 100_000);
+    let init_assign = trio_walk::assign_homozygous(&g, init_assign, 100_000);
 
     if let Some(output) = init_node_annotation_fn {
         info!("Writing initial node annotation to {}", output);
-        let mut output = File::create(output)?;
+        output_coloring(&g, &init_assign, output)?;
+    }
 
-        writeln!(output, "node\tlength\tmat:pat\tassignment\tcolor")?;
-        for (node_id, n) in g.all_nodes().enumerate() {
-            assert!(g.name2id(&n.name) == node_id);
-            if let Some(assign) = parental_groups.get(node_id) {
-                let color = match assign.group {
-                    trio::TrioGroup::PATERNAL => "#8888FF",
-                    trio::TrioGroup::MATERNAL => "#FF8888",
-                    trio::TrioGroup::ISSUE => "#fbb117",
-                    trio::TrioGroup::HOMOZYGOUS => "#c5d165",
-                };
-                writeln!(output, "{}\t{}\t{}\t{:?}\t{}", n.name, n.length, assign.info
-                                                       , assign.group, color)?;
-            }
+    //FIXME parameterize
+    let init_node_len_thr = 500_000;
+    let mut path_searcher = trio_walk::HaploSearcher::new(&g,
+        &init_assign, init_node_len_thr);
+
+    let haplo_paths = path_searcher.find_all();
+
+    let mut final_assign = path_searcher.used().clone();
+
+    for (node_id, _) in g.all_nodes().enumerate() {
+        if !final_assign.contains(node_id) && init_assign.contains(node_id) {
+            //FIXME how many times should we report HOMOZYGOUS node?!
+            //What if it has never been used? Are we confident enough?
+            final_assign.assign(node_id, init_assign.get(node_id).unwrap().clone())
         }
     }
 
@@ -80,11 +106,7 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
         let mut output = File::create(output)?;
 
         writeln!(output, "name\tpath\tassignment\tinit_node")?;
-        let init_node_len_thr = 500_000;
-        let mut path_searcher = trio_walk::HaploSearcher::new(&g,
-            &parental_groups, init_node_len_thr);
-
-        for (path, node_id, group) in path_searcher.find_all() {
+        for (path, node_id, group) in haplo_paths {
             assert!(path.vertices().contains(&Vertex::forward(node_id)));
             //info!("Identified {:?} path: {}", group, path.print(&g));
             writeln!(output, "path_from_{}\t{}\t{:?}\t{}",
@@ -94,12 +116,11 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
                 g.node(node_id).name)?;
         }
 
-        let used = path_searcher.used();
-
         for (node_id, n) in g.all_nodes().enumerate() {
-            if !used.contains_key(&node_id) {
-                let group_str = parental_groups.group(node_id)
-                                    .map_or(String::from("NA"), |x| format!("{:?}", x));
+            if !path_searcher.used().contains(node_id) {
+                let group_str = init_assign
+                    .group(node_id)
+                    .map_or(String::from("NA"), |x| format!("{:?}", x));
 
                 //println!("Unused node: {} length: {} group: {}", n.name, n.length, group_str);
                 writeln!(output, "unused_{}_len_{}\t{}\t{}\t{}",
@@ -112,7 +133,11 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
             //FIXME how many times should we report HOMOZYGOUS node?!
             //What if it has never been used? Are we confident enough?
         }
+    }
 
+    if let Some(output) = final_node_annotation_fn {
+        info!("Writing final node annotation to {}", output);
+        output_coloring(&g, &final_assign, output)?;
     }
 
     info!("All done");
