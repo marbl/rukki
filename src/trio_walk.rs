@@ -273,6 +273,7 @@ impl <'a> HaploSearcher<'a> {
         };
 
         !self.long_node(w.node_id)
+            && self.assignments.contains(w.node_id)
             && !self.incompatible_assignment(w.node_id, group)
             && self.g.incoming_edge_cnt(w) == 1
             && self.g.outgoing_edge_cnt(w) == 1
@@ -416,9 +417,11 @@ impl <'a> HaploSearcher<'a> {
         if let Some(group) = self.used.group(node_id) {
             assert!(group != TrioGroup::ISSUE);
             if TrioGroup::incompatible(group, target_group) {
-                if self.long_node(node_id) {
+                if self.long_node(node_id)
+                    && self.assignments.group(node_id) != Some(TrioGroup::HOMOZYGOUS) {
                     //FIXME increase this threshold
-                    debug!("Can't reuse long node {} in different haplotype", self.g.name(node_id));
+                    debug!("Can't reuse long node {} (not initially marked as homozygous) in different haplotype",
+                        self.g.name(node_id));
                     return false;
                 }
             } else {
@@ -451,12 +454,10 @@ impl <'a> HaploSearcher<'a> {
     }
 
     fn incompatible_assignment(&self, node_id: usize, target_group: TrioGroup) -> bool {
-        if let Some(assign) = self.assignments.get(node_id) {
-            if TrioGroup::incompatible(assign.group, target_group) {
-                return true;
-            }
+        match self.assignments.group(node_id) {
+            Some(group) => TrioGroup::incompatible(group, target_group),
+            None => false,
         }
-        false
     }
 
     fn check_assignment(&self, node_id: usize, target_group: TrioGroup) -> bool {
