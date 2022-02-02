@@ -119,6 +119,8 @@ pub fn assign_homozygous<'a>(g: &'a Graph,
     assigner.assignments
 }
 
+const MIN_GAP_SIZE: usize = 1000;
+
 //TODO add template parameter
 pub struct HaploSearcher<'a> {
     g: &'a Graph,
@@ -186,6 +188,12 @@ impl <'a> HaploSearcher<'a> {
             let mut grow = self.grow_forward(path, group, true);
             if grow > 0 {
                 debug!("Was able to extend in unambiguously assignment-aware way by {grow} nodes");
+                tot_grow += grow;
+                continue;
+            }
+            grow += self.jump_forward(path, self.find_bubble_jump_ahead(path.end(), group), group);
+            if grow > 0 {
+                debug!("Was able to jump across the bubble by {grow} nodes");
                 tot_grow += grow;
                 continue;
             }
@@ -355,8 +363,33 @@ impl <'a> HaploSearcher<'a> {
         None
     }
 
+    fn find_bubble_jump_ahead(&self, v: Vertex, _group: TrioGroup) -> Option<Path> {
+        use superbubble::SbSearchParams;
+        let sb_params = SbSearchParams {
+            //TODO think of relaxing a bit
+            max_length: self.long_node_threshold,
+            ..SbSearchParams::unrestricted()
+        };
+        //TODO think of growing within the bubble if possible (ensyre symmetry)
+        if let Some(bubble) = superbubble::find_superbubble(self.g, v, &sb_params) {
+            let w = bubble.end_vertex();
+            let gap_est = if bubble.length_range(self.g).0
+                            > self.g.vertex_length(v) + self.g.vertex_length(w) + MIN_GAP_SIZE {
+                bubble.length_range(self.g).0 - self.g.vertex_length(v) - self.g.vertex_length(w)
+            } else {
+                MIN_GAP_SIZE
+            };
+            Some(Path::from_general_link(GeneralizedLink::AMBIG(GapInfo {
+                start: v,
+                end: w,
+                gap_size: gap_est as i64,
+            })))
+        } else {
+            None
+        }
+    }
+
     fn find_gapped_jump_ahead(&self, path: &Path, group:TrioGroup) -> Option<Path> {
-        const GAP_SIZE: i64 = 100;
         let v = path.end();
         let component = dfs::ShortNodeComponent::search_from(self.g, v, self.long_node_threshold);
 
@@ -407,7 +440,7 @@ impl <'a> HaploSearcher<'a> {
         p.append_general(GeneralizedLink::AMBIG(GapInfo {
             start: p.end(),
             end: v.rc(),
-            gap_size: GAP_SIZE}));
+            gap_size: MIN_GAP_SIZE as i64}));
 
         Some(p.reverse_complement())
     }

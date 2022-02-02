@@ -562,10 +562,14 @@ impl Path {
     }
 
     pub fn from_link(l: Link) -> Path {
-        assert!(l.start.node_id != l.end.node_id);
+        Self::from_general_link(GeneralizedLink::LINK(l))
+    }
+
+    pub fn from_general_link(l: GeneralizedLink) -> Path {
+        assert!(l.start().node_id != l.end().node_id);
         Path {
-            v_storage: vec![l.start, l.end],
-            l_storage: vec![GeneralizedLink::LINK(l)],
+            v_storage: vec![l.start(), l.end()],
+            l_storage: vec![l],
         }
     }
 
