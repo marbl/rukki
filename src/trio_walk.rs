@@ -3,7 +3,7 @@ use crate::trio::*;
 use crate::pseudo_hap::*;
 use crate::graph_algos::*;
 use log::{debug, trace};
-use std::collections::HashSet;
+use std::collections::{HashSet,HashMap};
 
 //TODO add template parameter
 pub struct HomozygousAssigner<'a> {
@@ -129,17 +129,29 @@ pub struct HaploSearcher<'a> {
     //TODO consider using same structure as for initial assignments
     used: AssignmentStorage<'a>,
     in_sccs: HashSet<usize>,
+    small_tangle_index: HashMap<Vertex, scc::LocalizedTangle>,
 }
 
 impl <'a> HaploSearcher<'a> {
 
     pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage<'a>, long_node_threshold: usize) -> HaploSearcher<'a> {
+        let sccs = scc::strongly_connected(g);
+        let mut small_tangle_index = HashMap::new();
+
+        //FIXME parameterize component size separately!
+        for small_tangle in scc::find_small_localized(g,
+                                                      &sccs,
+                                                      long_node_threshold * 3) {
+            small_tangle_index.insert(small_tangle.entrance.start, small_tangle);
+        }
+
         HaploSearcher{
             g,
             assignments,
             long_node_threshold,
             used: AssignmentStorage::new(g),
-            in_sccs: scc::nodes_in_sccs(g),
+            in_sccs: scc::nodes_in_sccs(g, &sccs),
+            small_tangle_index,
         }
     }
 
@@ -194,6 +206,12 @@ impl <'a> HaploSearcher<'a> {
             grow += self.jump_forward(path, self.find_bubble_jump_ahead(path.end(), group), group);
             if grow > 0 {
                 debug!("Was able to jump across the bubble by {grow} nodes");
+                tot_grow += grow;
+                continue;
+            }
+            grow += self.jump_forward(path, self.find_small_tangle_jump_ahead(path.end(), group), group);
+            if grow > 0 {
+                debug!("Was able to jump across the small tangle by {grow} nodes");
                 tot_grow += grow;
                 continue;
             }
@@ -371,22 +389,30 @@ impl <'a> HaploSearcher<'a> {
             ..SbSearchParams::unrestricted()
         };
         //TODO think of growing within the bubble if possible (ensyre symmetry)
-        if let Some(bubble) = superbubble::find_superbubble(self.g, v, &sb_params) {
-            let w = bubble.end_vertex();
-            let gap_est = if bubble.length_range(self.g).0
-                            > self.g.vertex_length(v) + self.g.vertex_length(w) + MIN_GAP_SIZE {
-                bubble.length_range(self.g).0 - self.g.vertex_length(v) - self.g.vertex_length(w)
-            } else {
-                MIN_GAP_SIZE
-            };
-            Some(Path::from_general_link(GeneralizedLink::AMBIG(GapInfo {
-                start: v,
-                end: w,
-                gap_size: gap_est as i64,
-            })))
+        let bubble = superbubble::find_superbubble(self.g, v, &sb_params)?;
+        let w = bubble.end_vertex();
+        let gap_est = if bubble.length_range(self.g).0
+                        > self.g.vertex_length(v) + self.g.vertex_length(w) + MIN_GAP_SIZE {
+            bubble.length_range(self.g).0 - self.g.vertex_length(v) - self.g.vertex_length(w)
         } else {
-            None
-        }
+            MIN_GAP_SIZE
+        };
+        Some(Path::from_general_link(GeneralizedLink::AMBIG(GapInfo {
+            start: v,
+            end: w,
+            gap_size: gap_est as i64,
+        })))
+    }
+
+    fn find_small_tangle_jump_ahead(&self, v: Vertex, _group: TrioGroup) -> Option<Path> {
+        let small_tangle = self.small_tangle_index.get(&v)?;
+        Some(Path::from_general_link(GeneralizedLink::AMBIG(GapInfo {
+            start: small_tangle.entrance.start,
+            end: small_tangle.exit.end,
+            //TODO cache estimated size inside tangle
+            gap_size: std::cmp::max(scc::estimate_size_no_mult(small_tangle, self.g),
+                                    MIN_GAP_SIZE) as i64,
+        })))
     }
 
     fn find_gapped_jump_ahead(&self, path: &Path, group:TrioGroup) -> Option<Path> {

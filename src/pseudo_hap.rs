@@ -395,7 +395,7 @@ impl <'a> PrimaryDecomposer<'a> {
 //prioritization step is cheap
 fn simple_unique_blocks(g: &Graph, unique_block_len: usize) -> Vec<LinearBlock> {
     use superbubble::*;
-    let nodes_in_sccs = scc::nodes_in_sccs(g);
+    let nodes_in_sccs = scc::nodes_in_sccs(g, &scc::strongly_connected(g));
     let mut used_nodes = HashSet::new();
     //block and it's 'linear fraction' --
     // for single node always 1,
