@@ -312,9 +312,9 @@ impl <'a> HaploSearcher<'a> {
                     return Some(GapInfo {
                         start: v,
                         end: w,
-                        gap_size: (self.g.vertex_length(alt) as i64
+                        gap_size: std::cmp::max(self.g.vertex_length(alt) as i64
                                 - self.g.vertex_length(v) as i64
-                                - self.g.vertex_length(w) as i64),
+                                - self.g.vertex_length(w) as i64, MIN_GAP_SIZE as i64),
                     });
                 } else if component.sources.len() == 1 {
                     //haplotype merge-in case
@@ -326,9 +326,9 @@ impl <'a> HaploSearcher<'a> {
                             return Some(GapInfo {
                                 start: v,
                                 end: w,
-                                gap_size: (self.g.vertex_length(alt) as i64
+                                gap_size: std::cmp::max(self.g.vertex_length(alt) as i64
                                         - self.g.vertex_length(v) as i64
-                                        - self.g.vertex_length(w) as i64),
+                                        - self.g.vertex_length(w) as i64, MIN_GAP_SIZE as i64),
                             });
                         }
                     }
