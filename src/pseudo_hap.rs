@@ -1,6 +1,5 @@
 use crate::graph::*;
 use crate::graph_algos::*;
-use log::{debug, trace};
 use std::collections::HashSet;
 
 pub struct LinearBlock {
@@ -10,10 +9,10 @@ pub struct LinearBlock {
 
 impl LinearBlock {
 
-    pub fn print(&self, g: &Graph) -> String {
-        format!("<Block: path={}; known_alts=[{}]>", self.instance_path().print(g),
-            self.known_alt_nodes.iter().map(|&node_id| g.name(node_id)).collect::<Vec<&str>>().join(","))
-    }
+    //pub fn print(&self, g: &Graph) -> String {
+    //    format!("<Block: path={}; known_alts=[{}]>", self.instance_path().print(g),
+    //        self.known_alt_nodes.iter().map(|&node_id| g.name(node_id)).collect::<Vec<&str>>().join(","))
+    //}
 
     pub fn instance_path(&self) -> &Path {
         &self.instance_path

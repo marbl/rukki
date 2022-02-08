@@ -98,17 +98,17 @@ impl Link {
         }
     }
 
-    fn is_canonical(&self) -> bool {
-        self <= &self.rc()
-    }
+    //fn is_canonical(&self) -> bool {
+    //    self <= &self.rc()
+    //}
 
-    fn join_same(l1: &Link, l2: &Link) -> bool {
-        l1.start == l2.start && l1.end == l2.end
-    }
+    //fn join_same(l1: &Link, l2: &Link) -> bool {
+    //    l1.start == l2.start && l1.end == l2.end
+    //}
 
-    fn parallel(l1: &Link, l2: &Link) -> bool {
-        Self::join_same(l1, l2) || Self::join_same(l1, &l2.rc())
-    }
+    //fn parallel(l1: &Link, l2: &Link) -> bool {
+    //    Self::join_same(l1, l2) || Self::join_same(l1, &l2.rc())
+    //}
 }
 
 pub struct Graph {

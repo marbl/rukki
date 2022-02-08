@@ -4,7 +4,7 @@ use crate::pseudo_hap::*;
 use crate::graph_algos::*;
 //FIXME move to common
 use scc::only_or_none;
-use log::{debug, trace};
+use log::debug;
 use std::collections::{HashSet,HashMap};
 
 //TODO add template parameter
