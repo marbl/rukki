@@ -231,6 +231,7 @@ pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo], low_cnt
 
         //TODO maybe take max?
         if trio_info.total() < moderate_cnt_thr && node_len > trio_info.total() * min_marker_inv_density {
+            //FIXME continue?!!!
             debug!("Too few markers")
         }
 

@@ -210,6 +210,21 @@ impl ShortNodeComponent {
         component
     }
 
+    pub fn back_from_long(g: &Graph, v: Vertex, length_threshold: usize) -> ShortNodeComponent {
+        assert!(g.vertex_length(v) >= length_threshold);
+        let mut component = ShortNodeComponent {
+            sources: HashSet::new(),
+            sinks: std::iter::once(v).collect(),
+            has_deadends: (g.incoming_edge_cnt(v) == 0),
+            reached: std::iter::once(v).collect(),
+        };
+
+        for i_l in g.incoming_edges(v) {
+            component.consider(g, i_l.start, i_l, length_threshold);
+        }
+        component
+    }
+
     //todo refactor and simplify logic!
     //if v is long searching ahead from it, otherwise search in both directions
     pub fn search_from(g: &Graph, v: Vertex, length_threshold: usize) -> ShortNodeComponent {

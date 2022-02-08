@@ -40,8 +40,8 @@ fn output_coloring(g: &Graph,
             let color = match assign.group {
                 trio::TrioGroup::PATERNAL => "#8888FF",
                 trio::TrioGroup::MATERNAL => "#FF8888",
-                trio::TrioGroup::ISSUE => "#fbb117",
-                trio::TrioGroup::HOMOZYGOUS => "#c5d165",
+                trio::TrioGroup::ISSUE => "#FFDE24",
+                trio::TrioGroup::HOMOZYGOUS => "#7900D6",
             };
             writeln!(output, "{}\t{}\t{}\t{:?}\t{}", n.name, n.length, assign.info
                                                     , assign.group, color)?;

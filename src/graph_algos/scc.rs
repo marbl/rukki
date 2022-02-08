@@ -39,7 +39,7 @@ pub fn strongly_connected(graph: &Graph) -> Vec<Vec<Vertex>> {
     non_trivial_sccs
 }
 
-pub fn nodes_in_sccs(g: &Graph, sccs: &Vec<Vec<Vertex>>) -> HashSet<usize> {
+pub fn nodes_in_sccs(_g: &Graph, sccs: &Vec<Vec<Vertex>>) -> HashSet<usize> {
     HashSet::from_iter(sccs.iter()
         .flat_map(|comp| comp.iter().map(|v| v.node_id)))
 }
@@ -169,7 +169,7 @@ pub fn estimate_size_no_mult(tangle: &LocalizedTangle, g: &Graph) -> usize {
         .sum()
 }
 
-fn only_or_none<T>(mut iter: impl Iterator<Item=T>) -> Option<T> {
+pub fn only_or_none<T>(mut iter: impl Iterator<Item=T>) -> Option<T> {
     let e = iter.next()?;
     match iter.next() {
         None => Some(e),

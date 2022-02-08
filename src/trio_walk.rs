@@ -2,6 +2,8 @@ use crate::graph::*;
 use crate::trio::*;
 use crate::pseudo_hap::*;
 use crate::graph_algos::*;
+//FIXME move to common
+use scc::only_or_none;
 use log::{debug, trace};
 use std::collections::{HashSet,HashMap};
 
@@ -228,13 +230,18 @@ impl <'a> HaploSearcher<'a> {
                 continue;
             }
             grow += self.patch_forward(path, group);
-            tot_grow += grow;
             if grow > 0 {
                 debug!("Was able to patch broken bubble and extend by {grow} nodes");
                 tot_grow += grow;
-            } else {
-                break;
+                continue;
             }
+            grow += self.generalized_patch_forward(path, group);
+            if grow > 0 {
+                debug!("Was able to patch more general broken haplotype and extend by {grow} nodes");
+                tot_grow += grow;
+                continue;
+            }
+            break;
         }
         tot_grow
     }
@@ -243,7 +250,7 @@ impl <'a> HaploSearcher<'a> {
         let v = path.end();
         if self.g.outgoing_edge_cnt(v) == 0 /* v is dead-end */
             && self.g.incoming_edge_cnt(v) == 1 {
-            //todo maybe check that the 'joining' node is from other haplotype or is unassigned?
+            //FIXME maybe check that the 'joining' node is from other haplotype or is unassigned?
             //todo maybe support case when dead-ends are themselves unassigned? (trivial procedure stops being 'symmetric'))
             if let Some(gap_info) = detect_gap(self.g, self.g.incoming_edges(v)[0].start) {
                 let next_node = gap_info.end.node_id;
@@ -253,6 +260,93 @@ impl <'a> HaploSearcher<'a> {
                     path.append_general(GeneralizedLink::GAP(gap_info));
                     return 1;
                 }
+            }
+        }
+        0
+    }
+
+    fn find_unbroken_alt_candidate(&self, v: Vertex) -> Option<Vertex> {
+        //not necessary, but improves 'symmetry'
+        assert!(self.g.vertex_length(v) >= self.long_node_threshold);
+
+        //dead-end case
+        if self.g.outgoing_edge_cnt(v) == 0 {
+            let component = dfs::ShortNodeComponent::back_from_long(self.g,
+                                            v, self.long_node_threshold);
+
+            //think of maybe relaxing
+            if !component.simple_boundary() {
+                return None;
+            }
+
+            only_or_none(component.sinks.iter().copied().filter(|&s| s != v))
+        } else if self.g.outgoing_edge_cnt(v) == 1 {
+            //haplotype merge-in case
+            Some(self.g.outgoing_edges(v)[0].end)
+        } else {
+            None
+        }
+    }
+
+    //FIXME very asymmetric condition :(
+    fn generalized_gap(&self, v: Vertex, group: TrioGroup) -> Option<GapInfo> {
+        //FIXME might be much easier to augment graph with extra 'gap' links after all!
+        if self.g.vertex_length(v) < self.long_node_threshold {
+            return None;
+        }
+        let alt = self.find_unbroken_alt_candidate(v)?;
+        if self.assignments.is_definite(alt.node_id)
+            && TrioGroup::incompatible(group, self.assignments.group(alt.node_id).unwrap()) {
+            let component = dfs::ShortNodeComponent::ahead_from_long(self.g,
+                                            alt, self.long_node_threshold);
+
+            //think of maybe relaxing
+            if !component.simple_boundary() {
+                return None;
+            }
+
+            if component.sources.iter().all(|x| self.assignments.is_definite(x.node_id)) {
+                if let Some(&w) = only_or_none(component.sources.iter()
+                                .filter(|s| self.assignments.group(s.node_id).unwrap() == group)) {
+                    //dead-end case
+                    return Some(GapInfo {
+                        start: v,
+                        end: w,
+                        gap_size: (self.g.vertex_length(alt) as i64
+                                - self.g.vertex_length(v) as i64
+                                - self.g.vertex_length(w) as i64),
+                    });
+                } else if component.sources.len() == 1 {
+                    //haplotype merge-in case
+                    assert!(component.sources.iter().next() == Some(&alt));
+                    if component.sinks.iter().all(|x| self.assignments.is_definite(x.node_id)) {
+                        if let Some(&w) = only_or_none(component.sinks.iter()
+                                        .filter(|s| self.assignments.group(s.node_id).unwrap() == group)) {
+                            //FIXME code duplication!
+                            return Some(GapInfo {
+                                start: v,
+                                end: w,
+                                gap_size: (self.g.vertex_length(alt) as i64
+                                        - self.g.vertex_length(v) as i64
+                                        - self.g.vertex_length(w) as i64),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn generalized_patch_forward(&self, path: &mut Path, group: TrioGroup) -> usize {
+        let v = path.end();
+        if let Some(gap_info) = self.generalized_gap(v, group) {
+            let next_node = gap_info.end.node_id;
+            assert!(self.assignments.group(next_node) == Some(group));
+            if !path.in_path(next_node)
+                && self.check_available(next_node, group) {
+                path.append_general(GeneralizedLink::GAP(gap_info));
+                return 1;
             }
         }
         0
