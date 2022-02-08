@@ -7,12 +7,9 @@ use clap::{AppSettings, Parser, Subcommand};
 
 /// Assembly graph analysis suite
 #[derive(Parser)]
+#[clap(global_setting(AppSettings::DeriveDisplayOrder))]
 #[clap(about, version, author)]
 struct Args {
-    /// GFA file
-    //#[clap(short, long)]
-    input_graph: String,
-
     //TODO add those
     ///// Sets a custom config file. Could have been an Option<T> with no default too
     //#[clap(short = "c", long = "config", default_value = "default.conf")]
@@ -32,56 +29,66 @@ enum Commands {
     /// Trio-marker based analysis
     #[clap(setting(AppSettings::ArgRequiredElseHelp))]
     Trio(TrioSettings),
-    /// Primary-alt style analysis
-    #[clap(setting(AppSettings::ArgRequiredElseHelp))]
-    PriAlt(PriAltSettings),
+    // /// Primary-alt style analysis
+    // #[clap(setting(AppSettings::ArgRequiredElseHelp))]
+    // PriAlt(PriAltSettings),
 }
 
 //TODO use PathBuf?
 #[derive(clap::Args)]
 struct TrioSettings {
+    /// GFA file
+    #[clap(short, long)]
+    graph: String,
+
     /// Parental markers file
     #[clap(short, long)]
-    parent_markers: String,
+    markers: String,
 
     /// Marker-based annotation output file
-    #[clap(short, long)]
-    init_annotation: Option<String>,
+    #[clap(long)]
+    init_assign: Option<String>,
 
     /// Path-based annotation output file
-    #[clap(short, long)]
-    final_annotation: Option<String>,
+    #[clap(long)]
+    final_assign: Option<String>,
 
     /// Marker-assisted extracted haplo-paths
-    #[clap(long)]
-    haplo_paths: Option<String>,
+    #[clap(long, short)]
+    paths: Option<String>,
 
     /// Use GAF ([<>]<name1>)+ format for paths
-    #[clap(short, long)]
-    gaf_paths: bool,
+    #[clap(long)]
+    gaf_format: bool,
 
+    /// Minimal number of parent-specific markers required for unitig classification
     #[clap(long, default_value_t = 10)]
     low_marker_count: usize,
 
+    /// Minimal excess of parent-specific markers required for unitig classification (float)
     #[clap(long, default_value_t = 5.0)]
     marker_ratio: f32,
+
 }
 
 //TODO use PathBuf?
 #[derive(clap::Args)]
 struct PriAltSettings {
+    /// GFA file
+    #[clap(short, long)]
+    graph: String,
 
     /// colors output file
     #[clap(short, long)]
-    colors: Option<String>,
+    assign: Option<String>,
 
     /// Extracted primary and alt paths
     #[clap(long)]
     paths: Option<String>,
 
-    /// Use GAF ([<>]<name1>)+ format for paths
+    /// Use GAF ([<>]utg_name)+ format for paths
     #[clap(short, long)]
-    gaf_paths: bool,
+    gaf_format: bool,
 
 }
 
@@ -101,24 +108,24 @@ fn main() {
         Commands::Trio(settings) => {
             println!("Running trio marker analysis");
 
-            match graph_analysis::run_trio_analysis(&args.input_graph, &settings.parent_markers,
-                            &settings.init_annotation, &settings.final_annotation,
-                            &settings.haplo_paths, settings.gaf_paths,
+            match graph_analysis::run_trio_analysis(&settings.graph, &settings.markers,
+                            &settings.init_assign, &settings.final_assign,
+                            &settings.paths, settings.gaf_format,
                             settings.low_marker_count, settings.marker_ratio) {
                 Ok(()) => info!("Success"),
                 Err(e) => info!("Some error happened {:?}", e)
             }
         }
 
-        Commands::PriAlt(settings) => {
-            println!("Extracting primary/alt paths");
-            match graph_analysis::run_primary_alt_analysis(&args.input_graph,
-                                        &settings.colors, &settings.paths,
-                                        settings.gaf_paths) {
-                Ok(()) => info!("Success"),
-                Err(e) => info!("Some error happened {:?}", e)
-            }
-        }
+        //Commands::PriAlt(settings) => {
+        //    println!("Extracting primary/alt paths");
+        //    match graph_analysis::run_primary_alt_analysis(&settings.graph,
+        //                                &settings.assign, &settings.paths,
+        //                                settings.gaf_paths) {
+        //        Ok(()) => info!("Success"),
+        //        Err(e) => info!("Some error happened {:?}", e)
+        //    }
+        //}
     }
 
 }
