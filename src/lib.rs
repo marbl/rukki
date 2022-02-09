@@ -5,12 +5,13 @@ use std::io::Write;
 use log::info;
 use std::collections::HashSet;
 
-mod graph;
-//ASK why tests don't compile without the pub
+//tests don't compile without the pub
+//FIXME what to do?
+pub mod graph;
 pub mod graph_algos;
-mod trio;
-mod trio_walk;
-mod pseudo_hap;
+pub mod trio;
+pub mod trio_walk;
+pub mod pseudo_hap;
 
 pub use graph::Graph;
 pub use graph::Vertex;
