@@ -17,6 +17,7 @@ pub struct HomozygousAssigner<'a> {
 impl <'a> HomozygousAssigner<'a> {
 
     fn marking_round(&mut self) -> usize {
+        //FIXME call only on the outer bubble chains
         let mut marked = 0;
         //TODO think how it should work with generalized super-bubbles
         //(probably should give a chance to extend even the node is already marked)
@@ -567,9 +568,15 @@ impl <'a> HaploSearcher<'a> {
 
     //FIXME maybe stop grow process immediately when this fails
     fn check_available(&self, node_id: usize, target_group: TrioGroup) -> bool {
-        if let Some(group) = self.used.group(node_id) {
-            assert!(group != TrioGroup::ISSUE);
-            if TrioGroup::incompatible(group, target_group) {
+        if let Some(init_group) = self.assignments.group(node_id) {
+            if TrioGroup::incompatible(init_group, target_group) {
+                //if target group is incompatible with initial assignment (incl. ISSUE)
+                return false;
+            }
+        }
+        if let Some(used_group) = self.used.group(node_id) {
+            if TrioGroup::incompatible(used_group, target_group) {
+                //node already used in different haplotype
                 if self.long_node(node_id)
                     && self.assignments.group(node_id) != Some(TrioGroup::HOMOZYGOUS) {
                     //FIXME increase this threshold
