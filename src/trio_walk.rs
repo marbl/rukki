@@ -169,7 +169,7 @@ impl <'a> HaploSearcher<'a> {
         nodes.sort_by_key(|(_, n)| n.length);
 
         for (node_id, node) in nodes.into_iter().rev() {
-            if self.used.contains(node_id) {
+            if self.used.contains(node_id) || self.in_sccs.contains(&node_id) {
                 continue;
             }
             //launch from long, definitely assigned nodes
@@ -289,7 +289,8 @@ impl <'a> HaploSearcher<'a> {
         }
     }
 
-    //FIXME very asymmetric condition :(
+    //FIXME add debug prints
+    //TODO very asymmetric condition :(
     fn generalized_gap(&self, v: Vertex, group: TrioGroup) -> Option<GapInfo> {
         //FIXME might be much easier to augment graph with extra 'gap' links after all!
         if self.g.vertex_length(v) < self.long_node_threshold {
@@ -298,6 +299,7 @@ impl <'a> HaploSearcher<'a> {
         let alt = self.find_unbroken_alt_candidate(v)?;
         if self.assignments.is_definite(alt.node_id)
             && TrioGroup::incompatible(group, self.assignments.group(alt.node_id).unwrap()) {
+            //debug!("Searching for component ahead from {}", self.g.v_str(alt));
             let component = dfs::ShortNodeComponent::ahead_from_long(self.g,
                                             alt, self.long_node_threshold);
 
@@ -308,8 +310,10 @@ impl <'a> HaploSearcher<'a> {
 
             if component.sources.iter().all(|x| self.assignments.is_definite(x.node_id)) {
                 if let Some(&w) = only_or_none(component.sources.iter()
-                                .filter(|s| self.assignments.group(s.node_id).unwrap() == group)) {
+                                .filter(|s| self.assignments.group(s.node_id).unwrap() == group)
+                                .filter(|&s| self.g.incoming_edge_cnt(*s) == 0)) {
                     //dead-end case
+                    //debug!("Dead-end merge-in case success");
                     return Some(GapInfo {
                         start: v,
                         end: w,
@@ -324,6 +328,7 @@ impl <'a> HaploSearcher<'a> {
                         if let Some(&w) = only_or_none(component.sinks.iter()
                                         .filter(|s| self.assignments.group(s.node_id).unwrap() == group)) {
                             //FIXME code duplication!
+                            //debug!("Haplotype merge-in case success");
                             return Some(GapInfo {
                                 start: v,
                                 end: w,
@@ -568,6 +573,11 @@ impl <'a> HaploSearcher<'a> {
 
     //FIXME maybe stop grow process immediately when this fails
     fn check_available(&self, node_id: usize, target_group: TrioGroup) -> bool {
+        if self.in_sccs.contains(&node_id) {
+            //is part of some non-trivial SCC
+            return false;
+        }
+
         if let Some(init_group) = self.assignments.group(node_id) {
             if TrioGroup::incompatible(init_group, target_group) {
                 //if target group is incompatible with initial assignment (incl. ISSUE)
@@ -594,6 +604,7 @@ impl <'a> HaploSearcher<'a> {
         true
     }
 
+    //FIXME review check_avail logic
     fn grow_forward(&self, path: &mut Path, group: TrioGroup, check_avail: bool) -> usize {
         let mut v = path.end();
         let mut steps = 0;
