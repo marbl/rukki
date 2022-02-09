@@ -133,3 +133,28 @@ L a + b + 10M
     assert_eq!(g.outgoing_edges(w.rc()), vec![l.rc()]);
     assert_eq!(g.incoming_edges(w.rc()), vec![]);
 }
+
+#[test]
+#[should_panic]
+fn invalid_link() {
+    let s = "
+S a * LN:i:100
+S b * LN:i:200
+L a + b + 100M
+";
+    Graph::read(&s.replace(" ", "\t"));
+}
+
+#[test]
+fn basic_sanitize() {
+    let s = "
+S a * LN:i:100
+S b * LN:i:200
+L a + b + 100M
+L b - a - 50M
+";
+    let g = Graph::read_sanitize(&s.replace(" ", "\t"));
+    assert_eq!(2, g.node_cnt());
+    assert_eq!(1, g.link_cnt());
+    assert_eq!(99, g.all_links().next().unwrap().overlap);
+}

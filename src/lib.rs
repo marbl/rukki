@@ -21,7 +21,7 @@ pub use graph::Direction;
 
 fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
     info!("Reading graph from {:?}", graph_fn);
-    let g = Graph::read(&fs::read_to_string(graph_fn)?);
+    let g = Graph::read_sanitize(&fs::read_to_string(graph_fn)?);
 
     info!("Graph read successfully");
     info!("Node count: {}", g.node_cnt());
@@ -56,12 +56,7 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     final_node_annotation_fn: &Option<String>,
     haplo_paths_fn: &Option<String>,
     gaf_paths: bool, low_cnt_thr: usize, ratio_thr: f32) -> Result<(), Box<dyn Error>> {
-    info!("Reading graph from {:?}", graph_fn);
-    let g = Graph::read(&fs::read_to_string(graph_fn)?);
-
-    info!("Graph read successfully");
-    info!("Node count: {}", g.node_cnt());
-    info!("Link count: {}", g.link_cnt());
+    let g = read_graph(graph_fn)?;
 
     //for n in g.all_nodes() {
     //    println!("Node: {} length: {} cov: {}", n.name, n.length, n.coverage);

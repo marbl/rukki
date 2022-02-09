@@ -1,5 +1,6 @@
 use std::str;
 use std::collections::HashMap;
+use log::warn;
 
 //TODO which ones are redundant?
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -295,7 +296,7 @@ impl Graph {
     }
 
     //TODO switch to something iterable
-    pub fn read(graph_str: &str) -> Graph {
+    pub fn custom_read(graph_str: &str, collapse_multi_edges: bool, normalize_overlaps: bool) -> Graph {
         let mut g = Self::new();
 
         for line in graph_str.lines() {
@@ -309,6 +310,7 @@ impl Graph {
                                  Self::parse_tag(&split[3..split.len()], "LN:i:")
                                      .expect("Neither sequence nor LN tag provided")
                              };
+                assert!(length > 0);
                 let coverage = match Self::parse_tag::<usize>(&split[3..split.len()], "RC:i:") {
                     None => Self::parse_tag(&split[3..split.len()], "ll:f:")
                                         .unwrap_or(0.),
@@ -330,7 +332,26 @@ impl Graph {
                     node_id: g.name2id(split[3]),
                     direction: Direction::parse(split[4]),
                 };
-                let overlap = Self::parse_overlap(split[5]);
+                let mut overlap = Self::parse_overlap(split[5]);
+                if collapse_multi_edges {
+                    if let Some(connect) = g.connector(start, end) {
+                        if connect.overlap != overlap {
+                            warn!("Multiple links connecting {} and {} with different overlap sizes ({} and {})"
+                                    , g.v_str(start), g.v_str(end), overlap, connect.overlap)
+                        }
+                        continue;
+                    }
+                }
+                let max_ovl = std::cmp::min(g.vertex_length(start), g.vertex_length(end)) - 1;
+                if overlap > max_ovl {
+                    assert!(normalize_overlaps,
+                            "Invalid (too long) overlap of size {} between {} and {}",
+                            overlap, g.v_str(start), g.v_str(end));
+                    warn!("Normalizing overlap between {} and {} ({} -> {})",
+                            g.v_str(start), g.v_str(end),
+                            overlap, max_ovl);
+                    overlap = max_ovl;
+                }
                 g.add_link(Link{start, end, overlap});
             }
         }
@@ -355,6 +376,14 @@ impl Graph {
         }
 
         gfa
+    }
+
+    pub fn read(graph_str: &str) -> Self {
+        Self::custom_read(graph_str, false, false)
+    }
+
+    pub fn read_sanitize(graph_str: &str) -> Self {
+        Self::custom_read(graph_str, true, true)
     }
 
     //fn get_vertex(&self, name: &str, direction: Direction) -> Vertex {
@@ -444,6 +473,8 @@ impl Graph {
         self.all_links().count()
     }
 
+    //note that the graph supports multi-edges,
+    // if they are present returns only the first one
     pub fn connector(&self, v: Vertex, w: Vertex) -> Option<Link> {
         //TODO rewrite via filter
         for l in self.outgoing_edges(v) {
