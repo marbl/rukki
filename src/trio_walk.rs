@@ -266,14 +266,14 @@ impl <'a> HaploSearcher<'a> {
         0
     }
 
-    fn find_unbroken_alt_candidate(&self, v: Vertex) -> Option<Vertex> {
+    fn find_unbroken_alt_candidate(&self, v: Vertex, short_node_threshold: usize) -> Option<Vertex> {
         //not necessary, but improves 'symmetry'
-        assert!(self.g.vertex_length(v) >= self.long_node_threshold);
+        assert!(self.g.vertex_length(v) >= short_node_threshold);
 
         //dead-end case
         if self.g.outgoing_edge_cnt(v) == 0 {
             let component = dfs::ShortNodeComponent::back_from_long(self.g,
-                                            v, self.long_node_threshold);
+                                            v, short_node_threshold);
 
             //think of maybe relaxing
             if !component.simple_boundary() {
@@ -291,17 +291,17 @@ impl <'a> HaploSearcher<'a> {
 
     //FIXME add debug prints
     //TODO very asymmetric condition :(
-    fn generalized_gap(&self, v: Vertex, group: TrioGroup) -> Option<GapInfo> {
+    fn generalized_gap(&self, v: Vertex, group: TrioGroup, short_node_threshold: usize) -> Option<GapInfo> {
         //FIXME might be much easier to augment graph with extra 'gap' links after all!
-        if self.g.vertex_length(v) < self.long_node_threshold {
+        if self.g.vertex_length(v) < short_node_threshold {
             return None;
         }
-        let alt = self.find_unbroken_alt_candidate(v)?;
+        let alt = self.find_unbroken_alt_candidate(v, short_node_threshold)?;
         if self.assignments.is_definite(alt.node_id)
             && TrioGroup::incompatible(group, self.assignments.group(alt.node_id).unwrap()) {
             //debug!("Searching for component ahead from {}", self.g.v_str(alt));
             let component = dfs::ShortNodeComponent::ahead_from_long(self.g,
-                                            alt, self.long_node_threshold);
+                                            alt, short_node_threshold);
 
             //think of maybe relaxing
             if !component.simple_boundary() {
@@ -334,7 +334,7 @@ impl <'a> HaploSearcher<'a> {
                                 end: w,
                                 gap_size: std::cmp::max(self.g.vertex_length(alt) as i64
                                         - self.g.vertex_length(v) as i64
-                                        - self.g.vertex_length(w) as i64, MIN_GAP_SIZE as i64),
+                                        , MIN_GAP_SIZE as i64),
                             });
                         }
                     }
@@ -346,7 +346,8 @@ impl <'a> HaploSearcher<'a> {
 
     fn generalized_patch_forward(&self, path: &mut Path, group: TrioGroup) -> usize {
         let v = path.end();
-        if let Some(gap_info) = self.generalized_gap(v, group) {
+        //FIXME configure
+        if let Some(gap_info) = self.generalized_gap(v, group, 100_000) {
             let next_node = gap_info.end.node_id;
             assert!(self.assignments.group(next_node) == Some(group));
             if !path.in_path(next_node)
