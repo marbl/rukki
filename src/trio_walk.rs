@@ -313,7 +313,6 @@ impl <'a> HaploSearcher<'a> {
                                 .filter(|s| self.assignments.group(s.node_id).unwrap() == group)
                                 .filter(|&s| self.g.incoming_edge_cnt(*s) == 0)) {
                     //dead-end case
-                    //debug!("Dead-end merge-in case success");
                     return Some(GapInfo {
                         start: v,
                         end: w,
@@ -324,7 +323,8 @@ impl <'a> HaploSearcher<'a> {
                 } else if component.sources.len() == 1 {
                     //haplotype merge-in case
                     assert!(component.sources.iter().next() == Some(&alt));
-                    if component.sinks.iter().all(|x| self.assignments.is_definite(x.node_id)) {
+                    if !component.has_deadends
+                        && component.sinks.iter().all(|x| self.assignments.is_definite(x.node_id)) {
                         if let Some(&w) = only_or_none(component.sinks.iter()
                                         .filter(|s| self.assignments.group(s.node_id).unwrap() == group)) {
                             //FIXME code duplication!

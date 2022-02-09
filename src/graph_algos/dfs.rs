@@ -156,6 +156,7 @@ impl ShortNodeComponent {
             } else {
                 //otherwise consider it's incoming edges
                 if g.incoming_edge_cnt(v) == 0 {
+                    assert!(g.vertex_length(v) < length_threshold);
                     self.has_deadends = true;
                 }
                 for i_l in g.incoming_edges(v) {
@@ -172,6 +173,7 @@ impl ShortNodeComponent {
             } else {
                 //otherwise consider it's outgoing edges
                 if g.outgoing_edge_cnt(v) == 0 {
+                    assert!(g.vertex_length(v) < length_threshold);
                     self.has_deadends = true;
                 }
                 for o_l in g.outgoing_edges(v) {
@@ -200,7 +202,7 @@ impl ShortNodeComponent {
         let mut component = ShortNodeComponent {
             sources: std::iter::once(v).collect(),
             sinks: HashSet::new(),
-            has_deadends: (g.outgoing_edge_cnt(v) == 0),
+            has_deadends: false,
             reached: std::iter::once(v).collect(),
         };
 
@@ -215,7 +217,7 @@ impl ShortNodeComponent {
         let mut component = ShortNodeComponent {
             sources: HashSet::new(),
             sinks: std::iter::once(v).collect(),
-            has_deadends: (g.incoming_edge_cnt(v) == 0),
+            has_deadends: false,
             reached: std::iter::once(v).collect(),
         };
 
