@@ -300,6 +300,10 @@ impl <'a> HaploSearcher<'a> {
         if self.assignments.is_definite(alt.node_id)
             && TrioGroup::incompatible(group, self.assignments.group(alt.node_id).unwrap()) {
             //debug!("Searching for component ahead from {}", self.g.v_str(alt));
+            //FIXME also make it work when alt is short!
+            if self.g.vertex_length(alt) < short_node_threshold {
+                return None;
+            }
             let component = dfs::ShortNodeComponent::ahead_from_long(self.g,
                                             alt, short_node_threshold);
 
