@@ -4,7 +4,7 @@ use crate::pseudo_hap::*;
 use crate::graph_algos::*;
 //FIXME move to common
 use scc::only_or_none;
-use log::debug;
+use log::{info,debug};
 use std::collections::{HashSet,HashMap};
 
 //TODO add template parameter
@@ -83,7 +83,7 @@ impl <'a> HomozygousAssigner<'a> {
     }
 
     fn check_homozygous_fork_ahead(&self, v: Vertex) -> bool {
-        let long_ahead = dfs::sinks_ahead(self.g, v, self.node_len_thr);
+        let (long_ahead, _) = dfs::sinks_ahead(self.g, v, self.node_len_thr);
         let mut blended_group = None;
         for v_ahead in long_ahead {
             match self.assignments.group(v_ahead.node_id) {
@@ -93,6 +93,7 @@ impl <'a> HomozygousAssigner<'a> {
             //looking back we should only get to v.rc()
             //TODO improve with flow ideas
             if !dfs::sinks_ahead(self.g, v_ahead.rc(), self.node_len_thr)
+                .0
                 .iter()
                 .all(|&w| w == v.rc()) {
                 return false;
@@ -105,20 +106,21 @@ impl <'a> HomozygousAssigner<'a> {
 pub fn assign_homozygous<'a>(g: &'a Graph,
     assignments: AssignmentStorage<'a>,
     node_len_thr: usize) -> AssignmentStorage<'a> {
+    info!("Marking of homozygous nodes");
     let mut total_assigned = 0;
     let mut assigner = HomozygousAssigner {
         g, assignments, node_len_thr,
     };
     loop {
-        debug!("Marking round");
+        info!("Marking round");
         let marked = assigner.marking_round();
-        debug!("Marked {}", marked);
+        info!("Marked {}", marked);
         if marked == 0 {
             break;
         }
         total_assigned += marked;
     }
-    debug!("Total marked {}", total_assigned);
+    info!("Total marked {}", total_assigned);
     assigner.assignments
 }
 
@@ -200,7 +202,7 @@ impl <'a> HaploSearcher<'a> {
         debug!("Trying to extend forward from vertex {}", self.g.v_str(path.end()));
         loop {
             //FIXME refactor, very ugly!
-            let mut grow = self.grow_forward(path, group, true);
+            let mut grow = self.grow_forward(path, group, true, None);
             if grow > 0 {
                 debug!("Was able to extend in unambiguously assignment-aware way by {grow} nodes");
                 tot_grow += grow;
@@ -440,7 +442,7 @@ impl <'a> HaploSearcher<'a> {
         //1. all long nodes ahead should have assignment
         //2. only one should have correct assignment
         //3. this one should have unambiguous path backward to the vertex maybe stopping one link away
-        let long_ahead = dfs::sinks_ahead(self.g, v, self.long_node_threshold);
+        let (long_ahead, reachable_short) = dfs::sinks_ahead(self.g, v, self.long_node_threshold);
 
         //println!("Long ahead: {}", long_ahead.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
 
@@ -459,7 +461,8 @@ impl <'a> HaploSearcher<'a> {
                 debug!("Unique potential extension {}", self.g.v_str(potential_ext[0]));
                 let mut p = Path::new(potential_ext[0].rc());
                 debug!("Growing path forward from {}", self.g.v_str(potential_ext[0].rc()));
-                self.grow_forward(&mut p, group, false);
+                self.grow_forward(&mut p, group, false,
+                    Some(&|x: &Vertex| {reachable_short.contains(&x.rc())}));
                 debug!("Found path {}", p.print(self.g));
                 if !p.in_path(v.node_id) {
                     debug!("Tried linking via vertex");
@@ -553,7 +556,7 @@ impl <'a> HaploSearcher<'a> {
         let w = candidate_sinks[0];
 
         //FIXME optimize, this info should be logged within the short node component
-        if !dfs::sinks_ahead(self.g, v, self.long_node_threshold).contains(&w) {
+        if !dfs::sinks_ahead(self.g, v, self.long_node_threshold).0.contains(&w) {
             //w can't be reached from v
             return None;
         }
@@ -561,7 +564,8 @@ impl <'a> HaploSearcher<'a> {
         debug!("Unique potential extension {}", self.g.v_str(w));
         let mut p = Path::new(w.rc());
         debug!("Growing path forward from {}", self.g.v_str(w.rc()));
-        self.grow_forward(&mut p, group, false);
+        //FIXME put reachable nodes function here instead of None
+        self.grow_forward(&mut p, group, false, None);
         debug!("Found path {}", p.print(self.g));
         if p.in_path(v.node_id) {
             //should be covered by find_jump_ahead by this point (if possible to extend)
@@ -610,10 +614,11 @@ impl <'a> HaploSearcher<'a> {
     }
 
     //FIXME review check_avail logic
-    fn grow_forward(&self, path: &mut Path, group: TrioGroup, check_avail: bool) -> usize {
+    fn grow_forward(&self, path: &mut Path, group: TrioGroup, check_avail: bool,
+                    available_vertex_f: Option<&dyn Fn(&Vertex)->bool>) -> usize {
         let mut v = path.end();
         let mut steps = 0;
-        while let Some(l) = self.group_extension(v, group) {
+        while let Some(l) = self.group_extension(v, group, available_vertex_f) {
             let w = l.end;
 
             if path.in_path(w.node_id)
@@ -645,25 +650,35 @@ impl <'a> HaploSearcher<'a> {
         false
     }
 
-    //maybe move to graph or some GraphAlgoHelper?
-    fn unambiguous_extension(&self, v: Vertex) -> Option<Link> {
-        //TODO simplify?
-        match self.g.outgoing_edge_cnt(v) {
-            1 => Some(self.g.outgoing_edges(v)[0]),
-            _ => None,
-        }
-    }
+    ////maybe move to graph or some GraphAlgoHelper?
+    //fn unambiguous_extension(&self, v: Vertex) -> Option<Link> {
+    //    //TODO simplify?
+    //    match self.g.outgoing_edge_cnt(v) {
+    //        1 => Some(self.g.outgoing_edges(v)[0]),
+    //        _ => None,
+    //    }
+    //}
 
     //maybe move to graph or some GraphAlgoHelper?
-    fn group_extension(&self, v: Vertex, group: TrioGroup) -> Option<Link> {
-        if let Some(l) = self.unambiguous_extension(v) {
+    fn group_extension(&self, v: Vertex, group: TrioGroup,
+                    available_vertex_f: Option<&dyn Fn(&Vertex)->bool>) -> Option<Link> {
+        //FIXME use iterators
+        let filtered_outgoing = match available_vertex_f {
+            None => self.g.outgoing_edges(v),
+            Some(avail) => self.g.outgoing_edges(v).iter().copied()
+                            .filter(|l| avail(&l.end)).collect(),
+        };
+
+        if filtered_outgoing.len() == 1 {
+            let l = filtered_outgoing[0];
+            //FIXME might be unnecessary check (also checked later)
             if !self.incompatible_assignment(l.end.node_id, group) {
                 return Some(l);
             }
         }
 
         let mut suitable_extension = None;
-        for l in self.g.outgoing_edges(v) {
+        for l in filtered_outgoing {
             let w = l.end;
             //currently require all extensions to be definite
             if self.assignments.is_definite(w.node_id) {

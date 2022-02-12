@@ -124,7 +124,8 @@ impl<'a> DFS<'a> {
 
 //includes boundary vertices (longer than threshold) and visited dead-ends
 //currently will include v if it's a dead-end (but not if it's longer than threshold)
-pub fn sinks_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> Vec<Vertex> {
+//returns pair of sinks and all ('inner') visited vertices
+pub fn sinks_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> (Vec<Vertex>, HashSet<Vertex>) {
     let mut dfs = DFS::new_forward(g);
     dfs.set_max_node_len(node_len_thr);
     //inner_dfs(g, v, node_len_thr, &mut visited, &mut border);
@@ -133,7 +134,7 @@ pub fn sinks_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> Vec<Vertex> {
     assert!(sinks.iter().all(|&x| g.vertex_length(x) >= node_len_thr));
     //extend to dead-ends
     sinks.extend(dfs.exit_order().iter().filter(|&x| g.outgoing_edge_cnt(*x) == 0).copied());
-    sinks
+    (sinks, dfs.take_blocked())
 }
 
 pub struct ShortNodeComponent {
