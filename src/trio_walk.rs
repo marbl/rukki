@@ -137,6 +137,7 @@ pub struct HaploSearcher<'a> {
     small_tangle_index: HashMap<Vertex, scc::LocalizedTangle>,
 }
 
+//FIXME review usage of length threshold!
 impl <'a> HaploSearcher<'a> {
 
     pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage<'a>, long_node_threshold: usize) -> HaploSearcher<'a> {

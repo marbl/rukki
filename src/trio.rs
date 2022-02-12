@@ -9,7 +9,7 @@ pub enum Confidence {
     HIGH,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum TrioGroup {
     MATERNAL,
     PATERNAL,

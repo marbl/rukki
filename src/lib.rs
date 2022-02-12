@@ -34,7 +34,7 @@ fn output_coloring(g: &Graph,
                    file_name: &str)
                    -> Result<(), std::io::Error> {
     let mut output = File::create(file_name)?;
-    writeln!(output, "node\tlength\tinfo\tassignment\tcolor")?;
+    writeln!(output, "node\tassignment\tlength\tinfo\tcolor")?;
     for (node_id, n) in g.all_nodes().enumerate() {
         assert!(g.name2id(&n.name) == node_id);
         if let Some(assign) = assignments.get(node_id) {
@@ -44,8 +44,11 @@ fn output_coloring(g: &Graph,
                 trio::TrioGroup::ISSUE => "#FFDE24",
                 trio::TrioGroup::HOMOZYGOUS => "#7900D6",
             };
-            writeln!(output, "{}\t{}\t{}\t{:?}\t{}", n.name, n.length, assign.info
-                                                    , assign.group, color)?;
+            writeln!(output, "{}\t{:?}\t{}\t{}\t{}", n.name
+                                                   , assign.group
+                                                   , n.length
+                                                   , assign.info
+                                                   , color)?;
         }
     }
     Ok(())
@@ -71,7 +74,6 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
 
     info!("Assigning initial parental groups to the nodes");
     let init_assign = trio::assign_parental_groups(&g, &trio_infos, low_cnt_thr, ratio_thr);
-    info!("Detecting homozygous nodes");
     //TODO parameterize
     let init_assign = trio_walk::assign_homozygous(&g, init_assign, 100_000);
 
