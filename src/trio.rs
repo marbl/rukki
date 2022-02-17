@@ -306,13 +306,13 @@ pub fn parse_read_assignments<'a>(g: &'a Graph, assignments_fn: &str, load_homoz
 }
 
 //TODO add template parameter
-pub struct HomozygousAssigner<'a> {
+pub struct AssignmentImprover<'a> {
     g: &'a Graph,
     assignments: AssignmentStorage<'a>,
     node_len_thr: usize,
 }
 
-impl <'a> HomozygousAssigner<'a> {
+impl <'a> AssignmentImprover<'a> {
 
     fn marking_round(&mut self) -> usize {
         //FIXME call only on the outer bubble chains
@@ -347,22 +347,19 @@ impl <'a> HomozygousAssigner<'a> {
             //hit node with existing assignment
             return false;
         }
-        self.assignments.assign(v.node_id, Assignment::<TrioGroup>{
-            group: TrioGroup::HOMOZYGOUS,
-            confidence: Confidence::MODERATE,
-            info: String::from("HomozygousAssigner"),
-        });
+        if self.g.node(v.node_id).length >= self.node_len_thr {
+            self.assignments.assign(v.node_id, Assignment::<TrioGroup>{
+                group: TrioGroup::HOMOZYGOUS,
+                confidence: Confidence::MODERATE,
+                info: String::from("AssignmentImprover"),
+            });
+        }
         true
     }
 
     fn mark_chain_ahead(&mut self, v: Vertex) -> usize {
         //FIXME proper parameterization
-        let params = superbubble::SbSearchParams {
-            max_length: 200_000,
-            max_diff: 200_000,
-            max_count: 1000,
-        };
-
+        let params = superbubble::SbSearchParams::unrestricted();
         let mut marked = 0;
         for bubble in superbubble::find_chain_ahead(self.g, v, &params) {
             //set to match previous logic, maybe rethink
@@ -406,7 +403,7 @@ pub fn assign_homozygous<'a>(g: &'a Graph,
     node_len_thr: usize) -> AssignmentStorage<'a> {
     info!("Marking of homozygous nodes");
     let mut total_assigned = 0;
-    let mut assigner = HomozygousAssigner {
+    let mut assigner = AssignmentImprover {
         g, assignments, node_len_thr,
     };
     loop {
