@@ -32,7 +32,7 @@ fn haplo_paths() {
     let graph_fn = "tests/test_graphs/test1.gfa";
     let assignments_fn = "tests/test_graphs/test1.ann.csv";
     let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
-    let assignments = trio::parse_read_assignments(&g, assignments_fn, true).unwrap();
+    let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
 
     let mut haplo_searcher = trio_walk::HaploSearcher::new(&g, &assignments, 500_000);
     let mut answer: Vec<(TrioGroup, String)> = haplo_searcher.find_all().into_iter()

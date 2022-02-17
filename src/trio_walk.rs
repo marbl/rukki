@@ -603,7 +603,7 @@ mod tests {
         let graph_fn = "tests/test_graphs/scc_tangle.gfa";
         let assignments_fn = "tests/test_graphs/scc_tangle.ann.csv";
         let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
-        let assignments = trio::parse_read_assignments(&g, assignments_fn, true).unwrap();
+        let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
 
         let haplo_searcher = trio_walk::HaploSearcher::new(&g, &assignments, 500_000);
         let path = haplo_searcher.haplo_path(g.name2id("utig4-2545"), trio::TrioGroup::PATERNAL);
@@ -624,7 +624,7 @@ mod tests {
         let graph_fn = "tests/test_graphs/test_gap.gfa";
         let assignments_fn = "tests/test_graphs/test_gap.ann.csv";
         let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
-        let assignments = trio::parse_read_assignments(&g, assignments_fn, true).unwrap();
+        let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
 
         let haplo_searcher = trio_walk::HaploSearcher::new(&g, &assignments, 500_000);
         for node in ["utig4-1322", "utig4-1320", "utig4-947"] {

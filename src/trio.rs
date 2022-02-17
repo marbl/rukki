@@ -1,5 +1,5 @@
 use log::debug;
-use std::collections::HashMap;
+use std::collections::{HashMap,HashSet};
 use log::info;
 use crate::graph::*;
 use crate::graph_algos::dfs;
@@ -289,7 +289,7 @@ fn parse_group(group_str: &str) -> TrioGroup {
     }
 }
 
-pub fn parse_read_assignments<'a>(g: &'a Graph, assignments_fn: &str, load_homozygous: bool)
+pub fn parse_read_assignments<'a>(g: &'a Graph, assignments_fn: &str)
 -> std::io::Result<AssignmentStorage<'a>> {
     let mut assignments = AssignmentStorage::new(g);
     for line in std::fs::read_to_string(assignments_fn)?.lines() {
@@ -297,32 +297,65 @@ pub fn parse_read_assignments<'a>(g: &'a Graph, assignments_fn: &str, load_homoz
         if &split[0].to_lowercase() != "node" && &split[0].to_lowercase() != "contig" {
             let node_name = split[0];
             let group = parse_group(split[1]);
-            if load_homozygous || group != TrioGroup::HOMOZYGOUS {
-                assignments.update_group(g.name2id(node_name), group);
-            }
+            assignments.update_group(g.name2id(node_name), group);
         }
     }
     Ok(assignments)
 }
 
 //TODO add template parameter
-pub struct AssignmentImprover<'a> {
+pub struct HomozygousAssigner<'a> {
     g: &'a Graph,
     assignments: AssignmentStorage<'a>,
     node_len_thr: usize,
+    considered: HashSet<usize>,
 }
 
-impl <'a> AssignmentImprover<'a> {
+impl <'a> HomozygousAssigner<'a> {
+
+    pub fn new(g: &'a Graph, assignments: AssignmentStorage<'a>, node_len_thr: usize)
+    -> HomozygousAssigner<'a> {
+        HomozygousAssigner {
+            g, assignments, node_len_thr,
+            considered: HashSet::new(),
+        }
+    }
+
+    fn exclude_complicated(&mut self, max_component_size: usize) {
+        let mut accounted_long_starts = HashSet::new();
+        for v in self.g.all_vertices() {
+            if self.g.vertex_length(v) < self.node_len_thr
+                || accounted_long_starts.contains(&v) {
+                continue;
+            }
+
+            let short_node_component = dfs::ShortNodeComponent::ahead_from_long(self.g, v, self.node_len_thr);
+            if short_node_component.inner.len() > max_component_size {
+                for w in short_node_component.inner {
+                    self.considered.insert(w.node_id);
+                }
+            }
+            for s in &short_node_component.sources {
+                accounted_long_starts.insert(*s);
+            }
+            for t in &short_node_component.sinks {
+                accounted_long_starts.insert(t.rc());
+            }
+        }
+    }
 
     fn marking_round(&mut self) -> usize {
+        self.considered.clear();
+        self.exclude_complicated(100);
         //FIXME call only on the outer bubble chains
         let mut marked = 0;
         //TODO think how it should work with generalized super-bubbles
         //(probably should give a chance to extend even the node is already marked)
         for v in self.g.all_vertices() {
-            //the node is long, lacks any assignment (including ISSUE) and neighborhood checks out
-            if self.g.node(v.node_id).length >= self.node_len_thr
-                && self.assignments.get(v.node_id).is_none()
+            debug!("Considering vertex {}", self.g.v_str(v));
+            if !self.considered.contains(&v.node_id)
+                && (self.assignments.get(v.node_id).is_none()
+                    || self.assignments.group(v.node_id) == Some(TrioGroup::HOMOZYGOUS))
                 && self.check_homozygous_neighborhood(v) {
                 marked += self.mark_vertex_and_chains(v);
             }
@@ -331,30 +364,27 @@ impl <'a> AssignmentImprover<'a> {
     }
 
     fn mark_vertex_and_chains(&mut self, v: Vertex) -> usize {
+        debug!("Marking vertex {}", self.g.v_str(v));
         //hit node with existing assignment
-        if !self.mark_vertex(v) {
-            //already marked
-            return 0;
-        }
-        let mut marked = 1;
+        let mut marked = self.process_homozygous_vertex(v);
         marked += self.mark_chain_ahead(v);
         marked += self.mark_chain_ahead(v.rc());
+        debug!("Done marking");
         marked
     }
 
-    fn mark_vertex(&mut self, v: Vertex) -> bool {
-        if !self.assignments.get(v.node_id).is_none() {
-            //hit node with existing assignment
-            return false;
-        }
-        if self.g.node(v.node_id).length >= self.node_len_thr {
+    fn process_homozygous_vertex(&mut self, v: Vertex) -> usize {
+        self.considered.insert(v.node_id);
+        if self.assignments.get(v.node_id).is_none() {
             self.assignments.assign(v.node_id, Assignment::<TrioGroup>{
                 group: TrioGroup::HOMOZYGOUS,
                 confidence: Confidence::MODERATE,
                 info: String::from("AssignmentImprover"),
             });
+            1
+        } else {
+            0
         }
-        true
     }
 
     fn mark_chain_ahead(&mut self, v: Vertex) -> usize {
@@ -362,11 +392,7 @@ impl <'a> AssignmentImprover<'a> {
         let params = superbubble::SbSearchParams::unrestricted();
         let mut marked = 0;
         for bubble in superbubble::find_chain_ahead(self.g, v, &params) {
-            //set to match previous logic, maybe rethink
-            if !self.mark_vertex(bubble.end_vertex()) {
-                break;
-            }
-            marked += 1;
+            marked += self.process_homozygous_vertex(bubble.end_vertex());
         }
         marked
     }
@@ -378,34 +404,47 @@ impl <'a> AssignmentImprover<'a> {
     }
 
     fn check_homozygous_fork_ahead(&self, v: Vertex) -> bool {
-        let (long_ahead, _) = dfs::sinks_ahead(self.g, v, self.node_len_thr);
+        //trick is that v no longer has to itself be long
+        let (long_ahead, mut visited_vertices) = dfs::sinks_ahead(self.g, v, self.node_len_thr);
+        visited_vertices.extend(&long_ahead);
         let mut blended_group = None;
-        for v_ahead in long_ahead {
+
+        //todo maybe chack long_ahead size
+        for v_ahead in &long_ahead {
             match self.assignments.group(v_ahead.node_id) {
                 None | Some(TrioGroup::ISSUE) => return false,
                 og => blended_group = TrioGroup::optional_blend(blended_group, og),
             };
+        }
+
+        if blended_group != Some(TrioGroup::HOMOZYGOUS) {
+            return false;
+        }
+
+        for &v_ahead in &long_ahead {
+            let mut dfs = dfs::DFS::new_reverse(self.g);
+            dfs.set_max_node_len(self.node_len_thr);
+            dfs.extend_blocked(std::iter::once(v));
+            dfs.run_from(v_ahead);
+
             //looking back we should only get to v.rc()
             //TODO improve with flow ideas
-            if !dfs::sinks_ahead(self.g, v_ahead.rc(), self.node_len_thr)
-                .0
-                .iter()
-                .all(|&w| w == v.rc()) {
+            //TODO improve performance if necessary
+            if dfs.blocked().iter().chain(dfs.boundary().iter())
+                .any(|x| !visited_vertices.contains(x)) {
                 return false;
             }
         }
-        blended_group == Some(TrioGroup::HOMOZYGOUS)
+        true
     }
 }
 
 pub fn assign_homozygous<'a>(g: &'a Graph,
     assignments: AssignmentStorage<'a>,
     node_len_thr: usize) -> AssignmentStorage<'a> {
-    info!("Marking of homozygous nodes");
+    info!("Marking homozygous nodes");
     let mut total_assigned = 0;
-    let mut assigner = AssignmentImprover {
-        g, assignments, node_len_thr,
-    };
+    let mut assigner = HomozygousAssigner::new(g, assignments, node_len_thr);
     loop {
         info!("Marking round");
         let marked = assigner.marking_round();
@@ -417,4 +456,32 @@ pub fn assign_homozygous<'a>(g: &'a Graph,
     }
     info!("Total marked {}", total_assigned);
     assigner.assignments
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::graph::*;
+    use crate::trio;
+    use std::fs;
+
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
+    #[test]
+    fn homozygous_fork_test() {
+        init();
+
+        let graph_fn = "tests/test_graphs/test1.gfa";
+        let assignments_fn = "tests/test_graphs/test1.ann.csv";
+        let g = Graph::read(&fs::read_to_string(graph_fn).unwrap());
+        let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
+
+        let assigner = trio::HomozygousAssigner::new(&g, assignments, 100_000);
+        assert!(assigner.check_homozygous_fork_ahead(Vertex::forward(g.name2id("utig4-1237"))));
+        assert!(assigner.check_homozygous_fork_ahead(Vertex::reverse(g.name2id("utig4-1237"))));
+        assert!(!assigner.check_homozygous_fork_ahead(Vertex::forward(g.name2id("utig4-1554"))));
+        assert!(!assigner.check_homozygous_fork_ahead(Vertex::reverse(g.name2id("utig4-1554"))));
+    }
+
 }
