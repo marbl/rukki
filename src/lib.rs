@@ -75,7 +75,7 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     info!("Assigning initial parental groups to the nodes");
     let init_assign = trio::assign_parental_groups(&g, &trio_infos, low_cnt_thr, ratio_thr);
     //TODO parameterize
-    let init_assign = trio_walk::assign_homozygous(&g, init_assign, 100_000);
+    let init_assign = trio::assign_homozygous(&g, init_assign, 100_000);
 
     if let Some(output) = init_node_annotation_fn {
         info!("Writing initial node annotation to {}", output);

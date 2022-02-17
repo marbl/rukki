@@ -1,5 +1,9 @@
 use log::debug;
 use std::collections::HashMap;
+use log::info;
+use crate::graph::*;
+use crate::graph_algos::dfs;
+use crate::graph_algos::superbubble;
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub enum Confidence {
@@ -103,8 +107,6 @@ pub fn read_trio(trio_str: &str) -> Vec<TrioInfo> {
     }
     infos
 }
-
-use crate::graph::Graph;
 
 //TODO add template parameter
 #[derive(Clone)]
@@ -301,4 +303,121 @@ pub fn parse_read_assignments<'a>(g: &'a Graph, assignments_fn: &str, load_homoz
         }
     }
     Ok(assignments)
+}
+
+//TODO add template parameter
+pub struct HomozygousAssigner<'a> {
+    g: &'a Graph,
+    assignments: AssignmentStorage<'a>,
+    node_len_thr: usize,
+}
+
+impl <'a> HomozygousAssigner<'a> {
+
+    fn marking_round(&mut self) -> usize {
+        //FIXME call only on the outer bubble chains
+        let mut marked = 0;
+        //TODO think how it should work with generalized super-bubbles
+        //(probably should give a chance to extend even the node is already marked)
+        for v in self.g.all_vertices() {
+            //the node is long, lacks any assignment (including ISSUE) and neighborhood checks out
+            if self.g.node(v.node_id).length >= self.node_len_thr
+                && self.assignments.get(v.node_id).is_none()
+                && self.check_homozygous_neighborhood(v) {
+                marked += self.mark_vertex_and_chains(v);
+            }
+        }
+        marked
+    }
+
+    fn mark_vertex_and_chains(&mut self, v: Vertex) -> usize {
+        //hit node with existing assignment
+        if !self.mark_vertex(v) {
+            //already marked
+            return 0;
+        }
+        let mut marked = 1;
+        marked += self.mark_chain_ahead(v);
+        marked += self.mark_chain_ahead(v.rc());
+        marked
+    }
+
+    fn mark_vertex(&mut self, v: Vertex) -> bool {
+        if !self.assignments.get(v.node_id).is_none() {
+            //hit node with existing assignment
+            return false;
+        }
+        self.assignments.assign(v.node_id, Assignment::<TrioGroup>{
+            group: TrioGroup::HOMOZYGOUS,
+            confidence: Confidence::MODERATE,
+            info: String::from("HomozygousAssigner"),
+        });
+        true
+    }
+
+    fn mark_chain_ahead(&mut self, v: Vertex) -> usize {
+        //FIXME proper parameterization
+        let params = superbubble::SbSearchParams {
+            max_length: 200_000,
+            max_diff: 200_000,
+            max_count: 1000,
+        };
+
+        let mut marked = 0;
+        for bubble in superbubble::find_chain_ahead(self.g, v, &params) {
+            //set to match previous logic, maybe rethink
+            if !self.mark_vertex(bubble.end_vertex()) {
+                break;
+            }
+            marked += 1;
+        }
+        marked
+    }
+
+    //TODO checking only one is probably enough, since iterating over all vertices
+    fn check_homozygous_neighborhood(&self, v: Vertex) -> bool {
+        self.check_homozygous_fork_ahead(v)
+            || self.check_homozygous_fork_ahead(v.rc())
+    }
+
+    fn check_homozygous_fork_ahead(&self, v: Vertex) -> bool {
+        let (long_ahead, _) = dfs::sinks_ahead(self.g, v, self.node_len_thr);
+        let mut blended_group = None;
+        for v_ahead in long_ahead {
+            match self.assignments.group(v_ahead.node_id) {
+                None | Some(TrioGroup::ISSUE) => return false,
+                og => blended_group = TrioGroup::optional_blend(blended_group, og),
+            };
+            //looking back we should only get to v.rc()
+            //TODO improve with flow ideas
+            if !dfs::sinks_ahead(self.g, v_ahead.rc(), self.node_len_thr)
+                .0
+                .iter()
+                .all(|&w| w == v.rc()) {
+                return false;
+            }
+        }
+        blended_group == Some(TrioGroup::HOMOZYGOUS)
+    }
+}
+
+pub fn assign_homozygous<'a>(g: &'a Graph,
+    assignments: AssignmentStorage<'a>,
+    node_len_thr: usize) -> AssignmentStorage<'a> {
+    info!("Marking of homozygous nodes");
+    let mut total_assigned = 0;
+    let mut assigner = HomozygousAssigner {
+        g, assignments, node_len_thr,
+    };
+    loop {
+        info!("Marking round");
+        let marked = assigner.marking_round();
+        info!("Marked {}", marked);
+        if marked == 0 {
+            break;
+        }
+        total_assigned += marked;
+    }
+    info!("Total marked {}", total_assigned);
+    assigner.assignments
 }
