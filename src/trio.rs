@@ -277,3 +277,28 @@ pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo], low_cnt
     }
     assignments
 }
+
+fn parse_group(group_str: &str) -> TrioGroup {
+    match group_str {
+        "MATERNAL" => TrioGroup::MATERNAL,
+        "PATERNAL" => TrioGroup::PATERNAL,
+        "HOMOZYGOUS" => TrioGroup::HOMOZYGOUS,
+        _ => panic!("Invalid group string {group_str}"),
+    }
+}
+
+pub fn parse_read_assignments<'a>(g: &'a Graph, assignments_fn: &str, load_homozygous: bool)
+-> std::io::Result<AssignmentStorage<'a>> {
+    let mut assignments = AssignmentStorage::new(g);
+    for line in std::fs::read_to_string(assignments_fn)?.lines() {
+        let split: Vec<&str> = line.trim().split('\t').collect();
+        if &split[0].to_lowercase() != "node" && &split[0].to_lowercase() != "contig" {
+            let node_name = split[0];
+            let group = parse_group(split[1]);
+            if load_homozygous || group != TrioGroup::HOMOZYGOUS {
+                assignments.update_group(g.name2id(node_name), group);
+            }
+        }
+    }
+    Ok(assignments)
+}

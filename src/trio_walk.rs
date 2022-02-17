@@ -188,6 +188,7 @@ impl <'a> HaploSearcher<'a> {
         answer
     }
 
+    //TODO launch from vertex, not node to improve testing
     fn haplo_path(&self, node_id: usize, group: TrioGroup) -> Path {
         assert!(!self.incompatible_assignment(node_id, group));
         let mut path = Path::new(Vertex::forward(node_id));
@@ -269,7 +270,7 @@ impl <'a> HaploSearcher<'a> {
         0
     }
 
-    fn find_unbroken_alt_candidate(&self, v: Vertex, short_node_threshold: usize) -> Option<Vertex> {
+    fn find_unbroken_alt_candidate(&self, v: Vertex, short_node_threshold: usize) -> Option<(Vertex, i64)> {
         //not necessary, but improves 'symmetry'
         assert!(self.g.vertex_length(v) >= short_node_threshold);
 
@@ -284,9 +285,11 @@ impl <'a> HaploSearcher<'a> {
             }
 
             only_or_none(component.sinks.iter().copied().filter(|&s| s != v))
+                .map(|alt| (alt, self.g.vertex_length(alt) as i64 - self.g.vertex_length(v) as i64))
         } else if self.g.outgoing_edge_cnt(v) == 1 {
             //haplotype merge-in case
-            Some(self.g.outgoing_edges(v)[0].end)
+            let alt = self.g.outgoing_edges(v)[0].end;
+            Some((alt, self.g.vertex_length(alt) as i64))
         } else {
             None
         }
@@ -299,7 +302,7 @@ impl <'a> HaploSearcher<'a> {
         if self.g.vertex_length(v) < short_node_threshold {
             return None;
         }
-        let alt = self.find_unbroken_alt_candidate(v, short_node_threshold)?;
+        let (alt, curr_gap_est) = self.find_unbroken_alt_candidate(v, short_node_threshold)?;
         if self.assignments.is_definite(alt.node_id)
             && TrioGroup::incompatible(group, self.assignments.group(alt.node_id).unwrap()) {
             //debug!("Searching for component ahead from {}", self.g.v_str(alt));
@@ -323,8 +326,7 @@ impl <'a> HaploSearcher<'a> {
                     return Some(GapInfo {
                         start: v,
                         end: w,
-                        gap_size: std::cmp::max(self.g.vertex_length(alt) as i64
-                                - self.g.vertex_length(v) as i64
+                        gap_size: std::cmp::max(curr_gap_est
                                 - self.g.vertex_length(w) as i64, MIN_GAP_SIZE as i64),
                     });
                 } else if component.sources.len() == 1 {
@@ -339,8 +341,7 @@ impl <'a> HaploSearcher<'a> {
                             return Some(GapInfo {
                                 start: v,
                                 end: w,
-                                gap_size: std::cmp::max(self.g.vertex_length(alt) as i64
-                                        - self.g.vertex_length(v) as i64
+                                gap_size: std::cmp::max(curr_gap_est
                                         , MIN_GAP_SIZE as i64),
                             });
                         }
@@ -698,4 +699,63 @@ impl <'a> HaploSearcher<'a> {
         suitable_extension
     }
 
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::graph;
+    use crate::trio;
+    use crate::trio_walk;
+    use std::fs;
+    use log::info;
+
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
+    #[test]
+    fn scc_loop_jump() {
+        init();
+
+        let graph_fn = "tests/test_graphs/scc_tangle.gfa";
+        let assignments_fn = "tests/test_graphs/scc_tangle.ann.csv";
+        let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
+        let assignments = trio::parse_read_assignments(&g, assignments_fn, true).unwrap();
+
+        let haplo_searcher = trio_walk::HaploSearcher::new(&g, &assignments, 500_000);
+        let path = haplo_searcher.haplo_path(g.name2id("utig4-2545"), trio::TrioGroup::PATERNAL);
+        assert!(path.len() == 2);
+        if let graph::GeneralizedLink::AMBIG(ambig) = path.general_link_at(0) {
+            assert!(ambig.gap_size > 900_000 && ambig.gap_size < 1_000_000);
+        } else {
+            panic!();
+        }
+
+        assert_eq!(path.print(&g), String::from("utig4-2545+,AMBIG,utig4-648-"));
+    }
+
+    #[test]
+    fn gap_jump() {
+        init();
+
+        let graph_fn = "tests/test_graphs/test_gap.gfa";
+        let assignments_fn = "tests/test_graphs/test_gap.ann.csv";
+        let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
+        let assignments = trio::parse_read_assignments(&g, assignments_fn, true).unwrap();
+
+        let haplo_searcher = trio_walk::HaploSearcher::new(&g, &assignments, 500_000);
+        for node in ["utig4-1322", "utig4-1320", "utig4-947"] {
+            info!("Starting from {}", node);
+            println!("Print Starting from {}", node);
+            let path = haplo_searcher.haplo_path(g.name2id(node), trio::TrioGroup::MATERNAL);
+
+            assert!(path.len() == 4);
+            assert_eq!(path.print(&g), String::from("utig4-947+,utig4-1318-,utig4-1320+,GAP,utig4-1322+"));
+            if let graph::GeneralizedLink::GAP(gap) = path.general_link_at(2) {
+                assert_eq!(gap.gap_size, 36_423i64);
+            } else {
+                panic!();
+            }
+        }
+    }
 }
