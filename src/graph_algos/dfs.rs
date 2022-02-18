@@ -138,6 +138,21 @@ pub fn sinks_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> (Vec<Vertex>, H
     (sinks, dfs.take_blocked())
 }
 
+//includes boundary vertices (longer than threshold) and visited dead-ends
+//currently will include v if it's a dead-end (but not if it's longer than threshold)
+//returns pair of sources and all ('inner') visited vertices
+//visited vertices will overlap sources by short dead-ends
+pub fn sources_behind(g: &Graph, v: Vertex, node_len_thr: usize) -> (Vec<Vertex>, HashSet<Vertex>) {
+    let mut dfs = DFS::new_reverse(g);
+    dfs.set_max_node_len(node_len_thr);
+    //inner_dfs(g, v, node_len_thr, &mut visited, &mut border);
+    dfs.run_from(v);
+    let mut sources = dfs.boundary();
+    assert!(sources.iter().all(|&x| g.vertex_length(x) >= node_len_thr));
+    //extend to dead-ends
+    sources.extend(dfs.exit_order().iter().filter(|&x| g.incoming_edge_cnt(*x) == 0).copied());
+    (sources, dfs.take_blocked())
+}
 pub struct ShortNodeComponent {
     pub sources: HashSet<Vertex>,
     pub sinks: HashSet<Vertex>,

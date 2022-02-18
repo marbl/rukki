@@ -9,12 +9,132 @@ use std::collections::{HashSet,HashMap};
 
 const MIN_GAP_SIZE: usize = 1000;
 
+pub struct ExtensionHelper<'a> {
+    g: &'a Graph,
+    assignments: &'a AssignmentStorage<'a>,
+    _unassigned_compatible: bool,
+}
+
+impl <'a> ExtensionHelper<'a> {
+
+    fn incompatible_assignment(&self, node_id: usize, target_group: TrioGroup) -> bool {
+        match self.assignments.group(node_id) {
+            Some(group) => TrioGroup::incompatible(group, target_group),
+            None => false,
+        }
+    }
+
+    //maybe move to graph or some GraphAlgoHelper?
+    fn group_extension(&self, v: Vertex, group: TrioGroup,
+                    available_vertex_f: Option<&dyn Fn(&Vertex)->bool>) -> Option<Link> {
+        //FIXME use iterators
+        let filtered_outgoing = match available_vertex_f {
+            None => self.g.outgoing_edges(v),
+            Some(avail) => self.g.outgoing_edges(v).iter().copied()
+                            .filter(|l| avail(&l.end)).collect(),
+        };
+
+        if filtered_outgoing.len() == 1 {
+            let l = filtered_outgoing[0];
+            //FIXME might be unnecessary check (also checked later)
+            if !self.incompatible_assignment(l.end.node_id, group) {
+                return Some(l);
+            }
+        }
+
+        let mut suitable_extension = None;
+        for l in filtered_outgoing {
+            let w = l.end;
+            //currently require all extensions to be definite
+            if self.assignments.is_definite(w.node_id) {
+                //and exactly one having correct group assignment
+                if self.assignments.group(w.node_id).unwrap() == group {
+                    if suitable_extension.is_none() {
+                        suitable_extension = Some(l);
+                    } else {
+                        return None;
+                    }
+                }
+            } else {
+                return None;
+            }
+        }
+        suitable_extension
+    }
+
+    fn potential_jump_ext(&self, v: Vertex, group: TrioGroup,
+        long_node_threshold: usize) -> Option<Vertex> {
+        //Currently behavior is quite conservative:
+        //1. all long nodes ahead should have assignment
+        //2. only one should have correct assignment
+        //3. this one should have unambiguous path backward to the vertex maybe stopping one link away
+        let (long_ahead, _) = dfs::sinks_ahead(self.g, v, long_node_threshold);
+
+        //println!("Long ahead: {}", long_ahead.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
+
+        //if long_ahead.iter().all(|x| self.assignments.is_definite(x.node_id)) {
+        if !long_ahead.iter().all(|x| self.assignments.contains(x.node_id)) {
+            debug!("Not all long extensions had definite assignments");
+            return None;
+        }
+
+        let potential_ext: Vec<Vertex> = long_ahead.into_iter()
+            //.filter(|x| self.assignments.get(x.node_id).unwrap().group == group)
+            .filter(|x| x != &v)
+            .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
+            .collect();
+
+        debug!("Compatible extension count: {} ({})", potential_ext.len(),
+            potential_ext.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
+
+        match potential_ext.len() {
+            1 => Some(potential_ext[0]),
+            _ => None,
+        }
+    }
+
+    fn find_compatible_source_sink(&self, v: Vertex, group:TrioGroup, long_node_threshold: usize)
+    -> Option<(Vertex, Vertex)> {
+
+        let component = dfs::ShortNodeComponent::search_from(self.g, v, long_node_threshold);
+
+        //check that sources/sinks are clearly separated and that all have assignments
+        if !component.simple_boundary()
+            || !component.sources.iter()
+                    .chain(component.sinks.iter())
+                    .all(|x| self.assignments.contains(x.node_id)) {
+            return None;
+        }
+
+        let candidate_sources: Vec<Vertex> = component.sources.iter()
+            .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
+            .copied()
+            .collect();
+
+        if candidate_sources.len() != 1 {
+            return None;
+        }
+
+        let candidate_sinks: Vec<Vertex> = component.sinks.iter()
+            .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
+            .copied()
+            .collect();
+
+        if candidate_sinks.len() != 1 {
+            return None;
+        }
+
+        return Some((candidate_sources[0], candidate_sinks[0]));
+    }
+
+}
+
 //TODO add template parameter
 pub struct HaploSearcher<'a> {
     g: &'a Graph,
     assignments: &'a AssignmentStorage<'a>,
+    extension_helper: ExtensionHelper<'a>,
     long_node_threshold: usize,
-    //TODO consider using same structure as for initial assignments
     used: AssignmentStorage<'a>,
     in_sccs: HashSet<usize>,
     small_tangle_index: HashMap<Vertex, scc::LocalizedTangle>,
@@ -40,6 +160,11 @@ impl <'a> HaploSearcher<'a> {
             long_node_threshold,
             used: AssignmentStorage::new(g),
             in_sccs: scc::nodes_in_sccs(g, &sccs),
+            extension_helper: ExtensionHelper {
+                g,
+                assignments,
+                _unassigned_compatible: false,
+            },
             small_tangle_index,
         }
     }
@@ -73,7 +198,7 @@ impl <'a> HaploSearcher<'a> {
 
     //TODO launch from vertex, not node to improve testing
     fn haplo_path(&self, node_id: usize, group: TrioGroup) -> Path {
-        assert!(!self.incompatible_assignment(node_id, group));
+        assert!(!self.extension_helper.incompatible_assignment(node_id, group));
         let mut path = Path::new(Vertex::forward(node_id));
         self.grow_jump_forward(&mut path, group);
         path = path.reverse_complement();
@@ -105,7 +230,7 @@ impl <'a> HaploSearcher<'a> {
                 tot_grow += grow;
                 continue;
             }
-            grow += self.jump_forward(path, self.find_jump_ahead(path.end(), group), group);
+            grow += self.jump_forward(path, self.find_jump_path_ahead(path.end(), group), group);
             if grow > 0 {
                 debug!("Was able to jump (and stitch) ahead by {grow} nodes");
                 tot_grow += grow;
@@ -292,7 +417,7 @@ impl <'a> HaploSearcher<'a> {
 
         !self.long_node(w.node_id)
             && self.assignments.contains(w.node_id)
-            && !self.incompatible_assignment(w.node_id, group)
+            && !self.extension_helper.incompatible_assignment(w.node_id, group)
             && self.g.incoming_edge_cnt(w) == 1
             && self.g.outgoing_edge_cnt(w) == 1
             && (long_node_ahead(w)
@@ -321,56 +446,34 @@ impl <'a> HaploSearcher<'a> {
         path
     }
 
-    fn find_jump_ahead(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
-        debug!("Trying to jump ahead from {}", self.g.v_str(v));
-        //Currently behavior is quite conservative:
-        //1. all long nodes ahead should have assignment
-        //2. only one should have correct assignment
-        //3. this one should have unambiguous path backward to the vertex maybe stopping one link away
-        let (long_ahead, reachable_short) = dfs::sinks_ahead(self.g, v, self.long_node_threshold);
+    //FIXME inline
+    fn reachable_short(&self, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
+        dfs::sinks_ahead(self.g, v, node_len_thr).1
+    }
 
-        //println!("Long ahead: {}", long_ahead.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
-
-        //if long_ahead.iter().all(|x| self.assignments.is_definite(x.node_id)) {
-        if long_ahead.iter().all(|x| self.assignments.contains(x.node_id)) {
-            let potential_ext: Vec<Vertex> = long_ahead.into_iter()
-                //.filter(|x| self.assignments.get(x.node_id).unwrap().group == group)
-                .filter(|x| x != &v)
-                .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
-                .collect();
-
-            debug!("Compatible extension count: {} ({})", potential_ext.len(),
-                potential_ext.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
-
-            if potential_ext.len() == 1 {
-                debug!("Unique potential extension {}", self.g.v_str(potential_ext[0]));
-                let mut p = Path::new(potential_ext[0].rc());
-                debug!("Growing path forward from {}", self.g.v_str(potential_ext[0].rc()));
-                self.grow_forward(&mut p, group, false,
-                    Some(&|x: &Vertex| {reachable_short.contains(&x.rc())}));
-                debug!("Found path {}", p.print(self.g));
-                if !p.in_path(v.node_id) {
-                    debug!("Tried linking via vertex");
-                    p = self.try_link_with_vertex(p, v.rc(), group);
-                }
-                if !p.in_path(v.node_id) {
-                    debug!("Tried linking");
-                    p = self.try_link(p, v.rc());
-                }
-                if p.trim_to(&v.rc()) {
-                    assert!(p.len() > 1);
-                    let p = p.reverse_complement();
-                    debug!("Successfully found jump, path {}", p.print(self.g));
-                    return Some(p);
-                }
-                debug!("Couldn't trim to vertex {}", self.g.v_str(v.rc()));
-            }
-        } else {
-            debug!("Not all long extensions had definite assignments");
+    fn find_jump_path_ahead(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
+        let potential_ext = self.extension_helper.potential_jump_ext(v, group, self.long_node_threshold)?;
+        debug!("Unique potential extension {}", self.g.v_str(potential_ext));
+        let mut p = Path::new(potential_ext.rc());
+        debug!("Growing path forward from {}", self.g.v_str(potential_ext.rc()));
+        self.grow_forward(&mut p, group, false,
+            Some(&|x: &Vertex| {self.reachable_short(v, self.long_node_threshold).contains(&x.rc())}));
+        debug!("Found path {}", p.print(self.g));
+        if !p.in_path(v.node_id) {
+            debug!("Tried linking via vertex");
+            p = self.try_link_with_vertex(p, v.rc(), group);
         }
-
-        debug!("Can't find jump");
-
+        if !p.in_path(v.node_id) {
+            debug!("Tried linking");
+            p = self.try_link(p, v.rc());
+        }
+        if p.trim_to(&v.rc()) {
+            assert!(p.len() > 1);
+            let p = p.reverse_complement();
+            debug!("Successfully found jump, path {}", p.print(self.g));
+            return Some(p);
+        }
+        debug!("Couldn't trim to vertex {}", self.g.v_str(v.rc()));
         None
     }
 
@@ -408,44 +511,18 @@ impl <'a> HaploSearcher<'a> {
         })))
     }
 
+    //FIXME rename?
     fn find_gapped_jump_ahead(&self, path: &Path, group:TrioGroup) -> Option<Path> {
         let v = path.end();
-        let component = dfs::ShortNodeComponent::search_from(self.g, v, self.long_node_threshold);
-
-        //check that sources/sinks are clearly separated and that all have assignments
-        if !component.simple_boundary()
-            || !component.sources.iter()
-                    .chain(component.sinks.iter())
-                    .all(|x| self.assignments.contains(x.node_id)) {
+        let (u, w) = self.extension_helper.find_compatible_source_sink(v, group, self.long_node_threshold)?;
+        if !path.vertices().contains(&u) {
             return None;
         }
-
-        let candidate_sources: Vec<Vertex> = component.sources.iter()
-            .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
-            .copied()
-            .collect();
-
-        if candidate_sources.len() != 1 || !path.vertices().contains(&candidate_sources[0]) {
-            return None;
-        }
-
-        let candidate_sinks: Vec<Vertex> = component.sinks.iter()
-            .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
-            .copied()
-            .collect();
-
-        if candidate_sinks.len() != 1 {
-            return None;
-        }
-
-        let w = candidate_sinks[0];
-
         //FIXME optimize, this info should be logged within the short node component
         if !dfs::sinks_ahead(self.g, v, self.long_node_threshold).0.contains(&w) {
             //w can't be reached from v
             return None;
         }
-
         debug!("Unique potential extension {}", self.g.v_str(w));
         let mut p = Path::new(w.rc());
         debug!("Growing path forward from {}", self.g.v_str(w.rc()));
@@ -457,6 +534,7 @@ impl <'a> HaploSearcher<'a> {
             return None;
         }
 
+        //FIXME add size estimate
         p.append_general(GeneralizedLink::AMBIG(GapInfo {
             start: p.end(),
             end: v.rc(),
@@ -503,7 +581,7 @@ impl <'a> HaploSearcher<'a> {
                     available_vertex_f: Option<&dyn Fn(&Vertex)->bool>) -> usize {
         let mut v = path.end();
         let mut steps = 0;
-        while let Some(l) = self.group_extension(v, group, available_vertex_f) {
+        while let Some(l) = self.extension_helper.group_extension(v, group, available_vertex_f) {
             let w = l.end;
 
             if path.in_path(w.node_id)
@@ -517,13 +595,6 @@ impl <'a> HaploSearcher<'a> {
             }
         }
         steps
-    }
-
-    fn incompatible_assignment(&self, node_id: usize, target_group: TrioGroup) -> bool {
-        match self.assignments.group(node_id) {
-            Some(group) => TrioGroup::incompatible(group, target_group),
-            None => false,
-        }
     }
 
     fn check_assignment(&self, node_id: usize, target_group: TrioGroup) -> bool {
@@ -543,44 +614,6 @@ impl <'a> HaploSearcher<'a> {
     //        _ => None,
     //    }
     //}
-
-    //maybe move to graph or some GraphAlgoHelper?
-    fn group_extension(&self, v: Vertex, group: TrioGroup,
-                    available_vertex_f: Option<&dyn Fn(&Vertex)->bool>) -> Option<Link> {
-        //FIXME use iterators
-        let filtered_outgoing = match available_vertex_f {
-            None => self.g.outgoing_edges(v),
-            Some(avail) => self.g.outgoing_edges(v).iter().copied()
-                            .filter(|l| avail(&l.end)).collect(),
-        };
-
-        if filtered_outgoing.len() == 1 {
-            let l = filtered_outgoing[0];
-            //FIXME might be unnecessary check (also checked later)
-            if !self.incompatible_assignment(l.end.node_id, group) {
-                return Some(l);
-            }
-        }
-
-        let mut suitable_extension = None;
-        for l in filtered_outgoing {
-            let w = l.end;
-            //currently require all extensions to be definite
-            if self.assignments.is_definite(w.node_id) {
-                //and exactly one having correct group assignment
-                if self.assignments.group(w.node_id).unwrap() == group {
-                    if suitable_extension.is_none() {
-                        suitable_extension = Some(l);
-                    } else {
-                        return None;
-                    }
-                }
-            } else {
-                return None;
-            }
-        }
-        suitable_extension
-    }
 
 }
 
