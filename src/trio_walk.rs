@@ -12,15 +12,47 @@ const MIN_GAP_SIZE: usize = 1000;
 pub struct ExtensionHelper<'a> {
     g: &'a Graph,
     assignments: &'a AssignmentStorage<'a>,
-    _unassigned_compatible: bool,
+    //FIXME rename to 'consider unassigned' or 'allow unassigned'?
+    unassigned_compatible: bool,
 }
 
 impl <'a> ExtensionHelper<'a> {
 
-    fn incompatible_assignment(&self, node_id: usize, target_group: TrioGroup) -> bool {
+    fn compatible_assignment(&self, node_id: usize, target_group: TrioGroup) -> bool {
         match self.assignments.group(node_id) {
-            Some(group) => TrioGroup::incompatible(group, target_group),
-            None => false,
+            Some(group) => TrioGroup::compatible(group, target_group),
+            None => self.unassigned_compatible,
+        }
+    }
+
+    fn bearable_assignment(&self, node_id: usize) -> bool {
+        match self.assignments.group(node_id) {
+            Some(TrioGroup::ISSUE) => false,
+            None => self.unassigned_compatible,
+            _ => true,
+        }
+    }
+
+    //FIXME try switching to a &Vertex iterator to simplify calls
+    fn only_compatible_of_bearable(&self, v_it: impl Iterator<Item=Vertex> + Clone
+        , group: TrioGroup) -> Option<Vertex> {
+        //if NOT allowed to use unassigned 
+        // then check that all the vertices are assigned something 
+        // (other than ISSUE)
+        if v_it.clone().all(|v| self.bearable_assignment(v.node_id)) {
+            only_or_none(v_it.filter(|v| self.compatible_assignment(v.node_id, group)))
+        } else {
+            None
+        }
+    }
+
+    //FIXME code duplication
+    fn only_compatible_of_bearable_link(&self, links: &[Link], group:TrioGroup) -> Option<Link> {
+        if links.iter().all(|l| self.bearable_assignment(l.end.node_id)) {
+            only_or_none(links.iter().copied()
+                .filter(|l| self.compatible_assignment(l.end.node_id, group)))
+        } else {
+            None
         }
     }
 
@@ -34,32 +66,17 @@ impl <'a> ExtensionHelper<'a> {
                             .filter(|l| avail(&l.end)).collect(),
         };
 
+        //If only extension then being unassigned is Ok
+        //FIXME Probably obsolete with two-step strategy!
         if filtered_outgoing.len() == 1 {
             let l = filtered_outgoing[0];
-            //FIXME might be unnecessary check (also checked later)
-            if !self.incompatible_assignment(l.end.node_id, group) {
+            if self.assignments.group(l.end.node_id).map_or(true, 
+                |g| TrioGroup::compatible(g, group)) {
                 return Some(l);
             }
         }
 
-        let mut suitable_extension = None;
-        for l in filtered_outgoing {
-            let w = l.end;
-            //currently require all extensions to be definite
-            if self.assignments.is_definite(w.node_id) {
-                //and exactly one having correct group assignment
-                if self.assignments.group(w.node_id).unwrap() == group {
-                    if suitable_extension.is_none() {
-                        suitable_extension = Some(l);
-                    } else {
-                        return None;
-                    }
-                }
-            } else {
-                return None;
-            }
-        }
-        suitable_extension
+        self.only_compatible_of_bearable_link(&filtered_outgoing, group)
     }
 
     fn potential_jump_ext(&self, v: Vertex, group: TrioGroup,
@@ -70,27 +87,11 @@ impl <'a> ExtensionHelper<'a> {
         //3. this one should have unambiguous path backward to the vertex maybe stopping one link away
         let (long_ahead, _) = dfs::sinks_ahead(self.g, v, long_node_threshold);
 
+        //long_ahead.retain(|x| x != &v);
+
         //println!("Long ahead: {}", long_ahead.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
 
-        //if long_ahead.iter().all(|x| self.assignments.is_definite(x.node_id)) {
-        if !long_ahead.iter().all(|x| self.assignments.contains(x.node_id)) {
-            debug!("Not all long extensions had definite assignments");
-            return None;
-        }
-
-        let potential_ext: Vec<Vertex> = long_ahead.into_iter()
-            //.filter(|x| self.assignments.get(x.node_id).unwrap().group == group)
-            .filter(|x| x != &v)
-            .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
-            .collect();
-
-        debug!("Compatible extension count: {} ({})", potential_ext.len(),
-            potential_ext.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
-
-        match potential_ext.len() {
-            1 => Some(potential_ext[0]),
-            _ => None,
-        }
+        self.only_compatible_of_bearable(long_ahead.iter().filter(|&x| x != &v).copied(), group)
     }
 
     fn find_compatible_source_sink(&self, v: Vertex, group:TrioGroup, long_node_threshold: usize)
@@ -99,32 +100,17 @@ impl <'a> ExtensionHelper<'a> {
         let component = dfs::ShortNodeComponent::search_from(self.g, v, long_node_threshold);
 
         //check that sources/sinks are clearly separated and that all have assignments
-        if !component.simple_boundary()
-            || !component.sources.iter()
-                    .chain(component.sinks.iter())
-                    .all(|x| self.assignments.contains(x.node_id)) {
+        if !component.simple_boundary() {
             return None;
         }
 
-        let candidate_sources: Vec<Vertex> = component.sources.iter()
-            .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
-            .copied()
-            .collect();
+        let compatible_source = self.only_compatible_of_bearable(component.sources.iter().copied(), 
+                                        group)?;
 
-        if candidate_sources.len() != 1 {
-            return None;
-        }
+        let compatible_sink = self.only_compatible_of_bearable(component.sinks.iter().copied(), 
+                                        group)?;
 
-        let candidate_sinks: Vec<Vertex> = component.sinks.iter()
-            .filter(|x| TrioGroup::compatible(self.assignments.group(x.node_id).unwrap(), group))
-            .copied()
-            .collect();
-
-        if candidate_sinks.len() != 1 {
-            return None;
-        }
-
-        return Some((candidate_sources[0], candidate_sinks[0]));
+        return Some((compatible_source, compatible_sink));
     }
 
 }
@@ -163,7 +149,7 @@ impl <'a> HaploSearcher<'a> {
             extension_helper: ExtensionHelper {
                 g,
                 assignments,
-                _unassigned_compatible: false,
+                unassigned_compatible: false,
             },
             small_tangle_index,
         }
@@ -186,7 +172,7 @@ impl <'a> HaploSearcher<'a> {
             //launch from long, definitely assigned nodes
             if node.length >= self.long_node_threshold && self.assignments.is_definite(node_id) {
                 let group = self.assignments.get(node_id).unwrap().group;
-                let path = self.haplo_path(node_id, group);
+                let path = self.haplo_path(Vertex::forward(node_id), group);
                 self.used.update_all(path.vertices().iter().map(|v| v.node_id), group);
                 self.used.get_mut(path.start().node_id).unwrap().info = String::from("path_boundary");
                 self.used.get_mut(path.end().node_id).unwrap().info = String::from("path_boundary");
@@ -196,10 +182,9 @@ impl <'a> HaploSearcher<'a> {
         answer
     }
 
-    //TODO launch from vertex, not node to improve testing
-    fn haplo_path(&self, node_id: usize, group: TrioGroup) -> Path {
-        assert!(!self.extension_helper.incompatible_assignment(node_id, group));
-        let mut path = Path::new(Vertex::forward(node_id));
+    fn haplo_path(&self, v: Vertex, group: TrioGroup) -> Path {
+        assert!(self.assignments.group(v.node_id) == Some(group));
+        let mut path = Path::new(v);
         self.grow_jump_forward(&mut path, group);
         path = path.reverse_complement();
         self.grow_jump_forward(&mut path, group);
@@ -416,8 +401,9 @@ impl <'a> HaploSearcher<'a> {
         };
 
         !self.long_node(w.node_id)
+            //this check will never allow to patch with unassigned node
             && self.assignments.contains(w.node_id)
-            && !self.extension_helper.incompatible_assignment(w.node_id, group)
+            && self.extension_helper.compatible_assignment(w.node_id, group)
             && self.g.incoming_edge_cnt(w) == 1
             && self.g.outgoing_edge_cnt(w) == 1
             && (long_node_ahead(w)
@@ -639,7 +625,7 @@ mod tests {
         let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
 
         let haplo_searcher = trio_walk::HaploSearcher::new(&g, &assignments, 500_000);
-        let path = haplo_searcher.haplo_path(g.name2id("utig4-2545"), trio::TrioGroup::PATERNAL);
+        let path = haplo_searcher.haplo_path(graph::Vertex::forward(g.name2id("utig4-2545")), trio::TrioGroup::PATERNAL);
         assert!(path.len() == 2);
         if let graph::GeneralizedLink::AMBIG(ambig) = path.general_link_at(0) {
             assert!(ambig.gap_size > 900_000 && ambig.gap_size < 1_000_000);
@@ -663,7 +649,7 @@ mod tests {
         for node in ["utig4-1322", "utig4-1320", "utig4-947"] {
             info!("Starting from {}", node);
             println!("Print Starting from {}", node);
-            let path = haplo_searcher.haplo_path(g.name2id(node), trio::TrioGroup::MATERNAL);
+            let path = haplo_searcher.haplo_path(graph::Vertex::forward(g.name2id(node)), trio::TrioGroup::MATERNAL);
 
             assert!(path.len() == 4);
             assert_eq!(path.print(&g), String::from("utig4-947+,utig4-1318-,utig4-1320+,GAP,utig4-1322+"));
