@@ -121,6 +121,8 @@ pub struct HaploSearcher<'a> {
     assignments: &'a AssignmentStorage<'a>,
     extension_helper: ExtensionHelper<'a>,
     long_node_threshold: usize,
+    //path intersections by homozygous nodes are always allowed
+    allow_intersections: bool,
     used: AssignmentStorage<'a>,
     in_sccs: HashSet<usize>,
     small_tangle_index: HashMap<Vertex, scc::LocalizedTangle>,
@@ -129,7 +131,8 @@ pub struct HaploSearcher<'a> {
 //FIXME review usage of length threshold!
 impl <'a> HaploSearcher<'a> {
 
-    pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage<'a>, long_node_threshold: usize) -> HaploSearcher<'a> {
+    pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage<'a>, 
+        long_node_threshold: usize) -> HaploSearcher<'a> {
         let sccs = scc::strongly_connected(g);
         let mut small_tangle_index = HashMap::new();
 
@@ -144,6 +147,7 @@ impl <'a> HaploSearcher<'a> {
             g,
             assignments,
             long_node_threshold,
+            allow_intersections: false,
             used: AssignmentStorage::new(g),
             in_sccs: scc::nodes_in_sccs(g, &sccs),
             extension_helper: ExtensionHelper {
@@ -155,8 +159,21 @@ impl <'a> HaploSearcher<'a> {
         }
     }
 
+    pub fn new_assigning(g: &'a Graph, 
+        assignments: &'a AssignmentStorage<'a>, 
+        long_node_threshold: usize) -> HaploSearcher<'a> {
+        let mut searcher = Self::new(g, assignments, long_node_threshold);
+        searcher.allow_intersections = true;
+        searcher.extension_helper.unassigned_compatible = true;
+        searcher
+    }
+
     pub fn used(&self) -> &AssignmentStorage<'a> {
         &self.used
+    }
+
+    pub fn take_used(self) -> AssignmentStorage<'a> {
+        self.used
     }
 
     //TODO maybe use single length threshold?
@@ -542,21 +559,23 @@ impl <'a> HaploSearcher<'a> {
                 return false;
             }
         }
-        if let Some(used_group) = self.used.group(node_id) {
-            if TrioGroup::incompatible(used_group, target_group) {
-                //node already used in different haplotype
-                if self.long_node(node_id)
-                    && self.assignments.group(node_id) != Some(TrioGroup::HOMOZYGOUS) {
-                    //FIXME increase this threshold
-                    debug!("Can't reuse long node {} (not initially marked as homozygous) in different haplotype",
-                        self.g.name(node_id));
+        if !self.allow_intersections {
+            if let Some(used_group) = self.used.group(node_id) {
+                if TrioGroup::incompatible(used_group, target_group) {
+                    //node already used in different haplotype
+                    if self.long_node(node_id)
+                        && self.assignments.group(node_id) != Some(TrioGroup::HOMOZYGOUS) {
+                        //FIXME increase this threshold
+                        debug!("Can't reuse long node {} (not initially marked as homozygous) in different haplotype",
+                            self.g.name(node_id));
+                        return false;
+                    }
+                } else {
+                    //node already used within the same haplotype
+                    debug!("Tried to reuse node {} twice within the same haplotype: {:?}",
+                            self.g.name(node_id), target_group);
                     return false;
                 }
-            } else {
-                //node already used within the same haplotype
-                debug!("Tried to reuse node {} twice within the same haplotype: {:?}",
-                        self.g.name(node_id), target_group);
-                return false;
             }
         }
         true

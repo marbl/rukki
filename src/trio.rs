@@ -124,6 +124,10 @@ impl <'a> AssignmentStorage<'a> {
         }
     }
 
+    pub fn assigned(&self) -> impl Iterator<Item=usize> + '_ {
+        self.storage.keys().copied()
+    }
+
     pub fn is_definite(&self, node_id: usize) -> bool {
         if let Some(assign) = self.storage.get(&node_id) {
             if TrioGroup::is_definite(&assign.group) {
@@ -379,7 +383,7 @@ impl <'a> HomozygousAssigner<'a> {
             self.assignments.assign(v.node_id, Assignment::<TrioGroup>{
                 group: TrioGroup::HOMOZYGOUS,
                 confidence: Confidence::MODERATE,
-                info: String::from("AssignmentImprover"),
+                info: String::from("HomozygousAssigner"),
             });
             1
         } else {

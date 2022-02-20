@@ -54,6 +54,38 @@ fn output_coloring(g: &Graph,
     Ok(())
 }
 
+fn augment_by_path_search<'a>(g: &'a Graph, 
+    assignments: &'a trio::AssignmentStorage<'a>, 
+    init_node_len_thr: usize) -> trio::AssignmentStorage<'a> {
+
+    let mut assigning_path_searcher = trio_walk::HaploSearcher::new_assigning(&g,
+        &assignments, init_node_len_thr);
+
+    assigning_path_searcher.find_all();
+    let tentative_assignments = assigning_path_searcher.used();
+
+    let mut init_assign = assignments.clone();
+    for node_id in tentative_assignments.assigned() {
+        let tentative_group = tentative_assignments.group(node_id).unwrap();
+        //any mixed assignment has chance to be erroneous due to graph issues
+        if !tentative_group.is_definite() {
+            continue;
+        }
+        match init_assign.group(node_id) {
+            None => {
+                info!("Assigning tentative group {:?} to node {}", tentative_group, g.name(node_id));
+                init_assign.assign(node_id, trio::Assignment::<trio::TrioGroup> {
+                    group: tentative_group,
+                    confidence: trio::Confidence::MODERATE,
+                    info: String::from("PreliminaryLaunch"),
+                });},
+            Some(init_group) => assert!(init_group == tentative_group 
+                    || init_group == trio::TrioGroup::HOMOZYGOUS),
+        }
+    }
+    init_assign
+}
+
 pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     init_node_annotation_fn: &Option<String>,
     final_node_annotation_fn: &Option<String>,
@@ -82,10 +114,14 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
         output_coloring(&g, &init_assign, output)?;
     }
 
-    //FIXME parameterize
     let init_node_len_thr = 500_000;
+    //FIXME parameterize
+    let augment_assign = augment_by_path_search(&g, 
+        &init_assign, 
+        init_node_len_thr);
+
     let mut path_searcher = trio_walk::HaploSearcher::new(&g,
-        &init_assign, init_node_len_thr);
+        &augment_assign, init_node_len_thr);
 
     let haplo_paths = path_searcher.find_all();
 
