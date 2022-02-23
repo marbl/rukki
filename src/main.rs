@@ -106,7 +106,7 @@ fn main() {
 
     match &args.subcmd {
         Commands::Trio(settings) => {
-            println!("Running trio marker analysis");
+            info!("Running trio marker analysis");
 
             match graph_analysis::run_trio_analysis(&settings.graph, &settings.markers,
                             &settings.init_assign, &settings.final_assign,
@@ -118,7 +118,7 @@ fn main() {
         }
 
         //Commands::PriAlt(settings) => {
-        //    println!("Extracting primary/alt paths");
+        //    info!("Extracting primary/alt paths");
         //    match graph_analysis::run_primary_alt_analysis(&settings.graph,
         //                                &settings.assign, &settings.paths,
         //                                settings.gaf_paths) {
