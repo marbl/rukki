@@ -36,8 +36,8 @@ impl <'a> ExtensionHelper<'a> {
     //FIXME try switching to a &Vertex iterator to simplify calls
     fn only_compatible_of_bearable(&self, v_it: impl Iterator<Item=Vertex> + Clone
         , group: TrioGroup) -> Option<Vertex> {
-        //if NOT allowed to use unassigned 
-        // then check that all the vertices are assigned something 
+        //if NOT allowed to use unassigned
+        // then check that all the vertices are assigned something
         // (other than ISSUE)
         if v_it.clone().all(|v| self.bearable_assignment(v.node_id)) {
             only_or_none(v_it.filter(|v| self.compatible_assignment(v.node_id, group)))
@@ -56,21 +56,26 @@ impl <'a> ExtensionHelper<'a> {
         }
     }
 
-    //maybe move to graph or some GraphAlgoHelper?
-    fn group_extension(&self, v: Vertex, group: TrioGroup,
-                    available_vertex_f: Option<&dyn Fn(&Vertex)->bool>) -> Option<Link> {
-        //FIXME use iterators
-        let filtered_outgoing = match available_vertex_f {
+    //FIXME use iterators
+    fn available_extensions(&self, v: Vertex,
+                    available_vertex_f: Option<&dyn Fn(&Vertex)->bool>) -> Vec<Link> {
+        match available_vertex_f {
             None => self.g.outgoing_edges(v),
             Some(avail) => self.g.outgoing_edges(v).iter().copied()
                             .filter(|l| avail(&l.end)).collect(),
-        };
+        }
+    }
+
+    //maybe move to graph or some GraphAlgoHelper?
+    fn group_extension(&self, v: Vertex, group: TrioGroup,
+                    available_vertex_f: Option<&dyn Fn(&Vertex)->bool>) -> Option<Link> {
+        let filtered_outgoing = self.available_extensions(v, available_vertex_f);
 
         //If only extension then being unassigned is Ok
         //FIXME Probably obsolete with two-step strategy!
         if filtered_outgoing.len() == 1 {
             let l = filtered_outgoing[0];
-            if self.assignments.group(l.end.node_id).map_or(true, 
+            if self.assignments.group(l.end.node_id).map_or(true,
                 |g| TrioGroup::compatible(g, group)) {
                 return Some(l);
             }
@@ -104,10 +109,10 @@ impl <'a> ExtensionHelper<'a> {
             return None;
         }
 
-        let compatible_source = self.only_compatible_of_bearable(component.sources.iter().copied(), 
+        let compatible_source = self.only_compatible_of_bearable(component.sources.iter().copied(),
                                         group)?;
 
-        let compatible_sink = self.only_compatible_of_bearable(component.sinks.iter().copied(), 
+        let compatible_sink = self.only_compatible_of_bearable(component.sinks.iter().copied(),
                                         group)?;
 
         return Some((compatible_source, compatible_sink));
@@ -131,7 +136,7 @@ pub struct HaploSearcher<'a> {
 //FIXME review usage of length threshold!
 impl <'a> HaploSearcher<'a> {
 
-    pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage<'a>, 
+    pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage<'a>,
         long_node_threshold: usize) -> HaploSearcher<'a> {
         let sccs = scc::strongly_connected(g);
         let mut small_tangle_index = HashMap::new();
@@ -159,8 +164,8 @@ impl <'a> HaploSearcher<'a> {
         }
     }
 
-    pub fn new_assigning(g: &'a Graph, 
-        assignments: &'a AssignmentStorage<'a>, 
+    pub fn new_assigning(g: &'a Graph,
+        assignments: &'a AssignmentStorage<'a>,
         long_node_threshold: usize) -> HaploSearcher<'a> {
         let mut searcher = Self::new(g, assignments, long_node_threshold);
         searcher.allow_intersections = true;
@@ -214,31 +219,19 @@ impl <'a> HaploSearcher<'a> {
         debug!("Trying to extend forward from vertex {}", self.g.v_str(path.end()));
         loop {
             //FIXME refactor, very ugly!
-            let mut grow = self.grow_forward(path, group, true, None);
+            let mut grow = self.local_grow(path, group, true, None);
             if grow > 0 {
-                debug!("Was able to extend in unambiguously assignment-aware way by {grow} nodes");
+                debug!("Was able to locally extend by {grow} nodes");
                 tot_grow += grow;
                 continue;
             }
-            grow += self.jump_forward(path, self.find_bubble_jump_ahead(path.end(), group), group);
-            if grow > 0 {
-                debug!("Was able to jump across the bubble by {grow} nodes");
-                tot_grow += grow;
-                continue;
-            }
-            grow += self.jump_forward(path, self.find_small_tangle_jump_ahead(path.end(), group), group);
-            if grow > 0 {
-                debug!("Was able to jump across the small tangle by {grow} nodes");
-                tot_grow += grow;
-                continue;
-            }
-            grow += self.jump_forward(path, self.find_jump_path_ahead(path.end(), group), group);
+            grow += self.jump_forward(path, self.find_jump_path_ahead(path.end(), group), group, None);
             if grow > 0 {
                 debug!("Was able to jump (and stitch) ahead by {grow} nodes");
                 tot_grow += grow;
                 continue;
             }
-            grow += self.jump_forward(path, self.find_gapped_jump_ahead(path, group), group);
+            grow += self.jump_forward(path, self.find_gapped_jump_ahead(path, group), group, None);
             if grow > 0 {
                 debug!("Was able to jump (via ambiguous region) ahead by {grow} nodes");
                 tot_grow += grow;
@@ -377,7 +370,8 @@ impl <'a> HaploSearcher<'a> {
         0
     }
 
-    fn jump_forward(&self, path: &mut Path, opt_jump: Option<Path>, group: TrioGroup) -> usize {
+    fn jump_forward(&self, path: &mut Path, opt_jump: Option<Path>, group: TrioGroup,
+        available_vertex_f: Option<&dyn Fn(&Vertex)->bool>) -> usize {
         match opt_jump {
             None => 0,
             Some(jump) => {
@@ -386,7 +380,8 @@ impl <'a> HaploSearcher<'a> {
                 //FIXME improve logging!
                 if path.can_merge_in(&jump)
                     && (&(jump.vertices())[0..(jump.len() - 1)]).iter().all(|v| !self.in_sccs.contains(&v.node_id))
-                    && jump.vertices().iter().all(|v| self.check_available(v.node_id, group)) {
+                    && jump.vertices().iter().all(|v| self.check_available(v.node_id, group))
+                    && (available_vertex_f.is_none() || jump.vertices().iter().all(|v| available_vertex_f.unwrap()(v))) {
                     let add_on = jump.len() - 1;
                     path.merge_in(jump);
                     add_on
@@ -459,7 +454,7 @@ impl <'a> HaploSearcher<'a> {
         debug!("Unique potential extension {}", self.g.v_str(potential_ext));
         let mut p = Path::new(potential_ext.rc());
         debug!("Growing path forward from {}", self.g.v_str(potential_ext.rc()));
-        self.grow_forward(&mut p, group, false,
+        self.local_grow(&mut p, group, false,
             Some(&|x: &Vertex| {self.reachable_short(v, self.long_node_threshold).contains(&x.rc())}));
         debug!("Found path {}", p.print(self.g));
         if !p.in_path(v.node_id) {
@@ -530,7 +525,7 @@ impl <'a> HaploSearcher<'a> {
         let mut p = Path::new(w.rc());
         debug!("Growing path forward from {}", self.g.v_str(w.rc()));
         //FIXME put reachable nodes function here instead of None
-        self.grow_forward(&mut p, group, false, None);
+        self.local_grow(&mut p, group, false, None);
         debug!("Found path {}", p.print(self.g));
         if p.in_path(v.node_id) {
             //should be covered by find_jump_ahead by this point (if possible to extend)
@@ -581,8 +576,41 @@ impl <'a> HaploSearcher<'a> {
         true
     }
 
+    fn local_grow(&self, path: &mut Path, group: TrioGroup, check_avail: bool,
+                    //FIXME how do I typedef things like this?
+                    available_vertex_f: Option<&dyn Fn(&Vertex)->bool>) -> usize {
+        let mut tot_grow = 0;
+        loop {
+            let mut grow = self.grow_forward(path, group, true, None);
+            if grow > 0 {
+                debug!("Was able to extend in unambiguously assignment-aware way by {grow} nodes");
+                tot_grow += grow;
+                continue;
+            }
+            grow += self.jump_forward(path, self.find_bubble_jump_ahead(path.end(), group),
+                                        group, available_vertex_f);
+            if grow > 0 {
+                debug!("Was able to jump across the bubble by {grow} nodes");
+                tot_grow += grow;
+                continue;
+            }
+            grow += self.jump_forward(path, self.find_small_tangle_jump_ahead(path.end(), group),
+                                        group, available_vertex_f);
+            if grow > 0 {
+                debug!("Was able to jump across the small tangle by {grow} nodes");
+                tot_grow += grow;
+                continue;
+            }
+
+            assert!(grow == 0);
+            break;
+        }
+        tot_grow
+    }
+
     //FIXME review check_avail logic
     fn grow_forward(&self, path: &mut Path, group: TrioGroup, check_avail: bool,
+                    //FIXME how do I typedef things like this?
                     available_vertex_f: Option<&dyn Fn(&Vertex)->bool>) -> usize {
         let mut v = path.end();
         let mut steps = 0;
@@ -590,6 +618,7 @@ impl <'a> HaploSearcher<'a> {
             let w = l.end;
 
             if path.in_path(w.node_id)
+                //FIXME relax this condition
                 || self.in_sccs.contains(&w.node_id)
                 || (check_avail && !self.check_available(w.node_id, group)) {
                 break;
