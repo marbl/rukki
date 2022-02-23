@@ -54,8 +54,8 @@ fn output_coloring(g: &Graph,
     Ok(())
 }
 
-fn augment_by_path_search<'a>(g: &'a Graph, 
-    assignments: &'a trio::AssignmentStorage<'a>, 
+fn augment_by_path_search<'a>(g: &'a Graph,
+    assignments: &'a trio::AssignmentStorage<'a>,
     init_node_len_thr: usize) -> trio::AssignmentStorage<'a> {
 
     let mut assigning_path_searcher = trio_walk::HaploSearcher::new_assigning(&g,
@@ -79,7 +79,7 @@ fn augment_by_path_search<'a>(g: &'a Graph,
                     confidence: trio::Confidence::MODERATE,
                     info: String::from("PreliminaryLaunch"),
                 });},
-            Some(init_group) => assert!(init_group == tentative_group 
+            Some(init_group) => assert!(init_group == tentative_group
                     || init_group == trio::TrioGroup::HOMOZYGOUS),
         }
     }
@@ -108,6 +108,8 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     let init_assign = trio::assign_parental_groups(&g, &trio_infos, low_cnt_thr, ratio_thr);
     //TODO parameterize
     let init_assign = trio::assign_homozygous(&g, init_assign, 100_000);
+    //FIXME think if should be unique threshold
+    let init_assign = trio::assign_small_bubbles(&g, init_assign, 100_000);
 
     if let Some(output) = init_node_annotation_fn {
         info!("Writing initial node annotation to {}", output);
@@ -116,8 +118,8 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
 
     let init_node_len_thr = 500_000;
     //FIXME parameterize
-    let augment_assign = augment_by_path_search(&g, 
-        &init_assign, 
+    let augment_assign = augment_by_path_search(&g,
+        &init_assign,
         init_node_len_thr);
 
     let mut path_searcher = trio_walk::HaploSearcher::new(&g,

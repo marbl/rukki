@@ -3,6 +3,7 @@ use std::collections::{HashMap,HashSet};
 use log::info;
 use crate::graph::*;
 use crate::graph_algos::dfs;
+use crate::graph_algos::scc::only_or_none;
 use crate::graph_algos::superbubble;
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
@@ -460,6 +461,66 @@ pub fn assign_homozygous<'a>(g: &'a Graph,
     }
     info!("Total marked {}", total_assigned);
     assigner.assignments
+}
+
+fn bubble_end(g: &Graph, u: Vertex) -> Option<Vertex> {
+    if g.outgoing_edge_cnt(u) < 2 {
+        return None;
+    }
+    let mut opt_w = None;
+    for v in g.outgoing_edges(u).iter().map(|l1| l1.end) {
+        if g.incoming_edge_cnt(v) > 1 {
+            return None;
+        }
+        assert!(g.incoming_edge_cnt(v) == 1);
+        let l2 = only_or_none(g.outgoing_edges(v).into_iter())?;
+        if let Some(w) = opt_w {
+            if w != l2.end {
+                return None;
+            }
+        } else {
+            opt_w = Some(l2.end);
+        }
+    }
+    assert!(opt_w.is_some());
+    opt_w
+}
+
+//FIXME two thresholds?
+pub fn assign_small_bubbles<'a>(g: &'a Graph,
+    mut assignments: AssignmentStorage<'a>,
+    node_len_thr: usize) -> AssignmentStorage<'a> {
+    let end_cov = |l: &Link| {g.node(l.end.node_id).coverage};
+
+    for v in g.all_vertices() {
+        if g.vertex_length(v) < node_len_thr || !assignments.is_definite(v.node_id) {
+            continue;
+        }
+        if let Some(w) = bubble_end(g, v) {
+            if g.outgoing_edges(v).iter().all(|&l| g.vertex_length(l.end) < node_len_thr
+                                                    && !assignments.contains(l.end.node_id))
+                && w.node_id != v.node_id {
+                let group = assignments.group(v.node_id).unwrap();
+                for l in g.outgoing_edges(v) {
+                    assignments.assign(l.end.node_id,
+                            Assignment::<TrioGroup>{
+                                        group,
+                                        confidence: Confidence::MODERATE,
+                                        info: String::from("SmallBubble"),
+                    });
+                }
+                //assignments.assign(g.outgoing_edges(v).iter()
+                //                            .max_by(|a, b| end_cov(a).partial_cmp(&end_cov(b)).unwrap())
+                //                            .unwrap().end.node_id,
+                //        Assignment::<TrioGroup>{
+                //                    group,
+                //                    confidence: Confidence::MODERATE,
+                //                    info: String::from("SmallBubble"),
+                //});
+            }
+        }
+    }
+    assignments
 }
 
 #[cfg(test)]
