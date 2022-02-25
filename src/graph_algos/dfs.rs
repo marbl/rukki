@@ -153,6 +153,25 @@ pub fn sources_behind(g: &Graph, v: Vertex, node_len_thr: usize) -> (Vec<Vertex>
     sources.extend(dfs.exit_order().iter().filter(|&x| g.incoming_edge_cnt(*x) == 0).copied());
     (sources, dfs.take_blocked())
 }
+
+pub fn reachable_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
+    let (sinks, mut short_ahead) = sinks_ahead(g, v, node_len_thr);
+    short_ahead.extend(&sinks);
+    short_ahead
+}
+
+pub fn reachable_behind(g: &Graph, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
+    let (sources, mut short_behind) = sources_behind(g, v, node_len_thr);
+    short_behind.extend(&sources);
+    short_behind
+}
+
+pub fn reachable_between(g: &Graph, v: Vertex, w: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
+    reachable_ahead(g, v, node_len_thr)
+        .intersection(&reachable_behind(g, w, node_len_thr))
+        .copied().collect()
+}
+
 pub struct ShortNodeComponent {
     pub sources: HashSet<Vertex>,
     pub sinks: HashSet<Vertex>,
