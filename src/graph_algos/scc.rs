@@ -169,6 +169,7 @@ pub fn estimate_size_no_mult(tangle: &LocalizedTangle, g: &Graph) -> usize {
         .sum()
 }
 
+//FIXME move from here!
 pub fn only_or_none<T>(mut iter: impl Iterator<Item=T>) -> Option<T> {
     let e = iter.next()?;
     match iter.next() {

@@ -65,6 +65,10 @@ struct TrioSettings {
     #[clap(long, default_value_t = 10)]
     low_marker_count: usize,
 
+    /// At least (node_length / <value>) parent-specific markers required for unitig classification
+    #[clap(long, default_value_t = 10_000)]
+    low_marker_inv_density: usize,
+
     /// Minimal excess of parent-specific markers required for unitig classification (float)
     #[clap(long, default_value_t = 5.0)]
     marker_ratio: f32,
@@ -111,7 +115,8 @@ fn main() {
             match graph_analysis::run_trio_analysis(&settings.graph, &settings.markers,
                             &settings.init_assign, &settings.final_assign,
                             &settings.paths, settings.gaf_format,
-                            settings.low_marker_count, settings.marker_ratio) {
+                            settings.low_marker_count, settings.marker_ratio,
+                            settings.low_marker_inv_density) {
                 Ok(()) => info!("Success"),
                 Err(e) => info!("Some error happened {:?}", e)
             }

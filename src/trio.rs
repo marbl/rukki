@@ -186,9 +186,9 @@ impl <'a> AssignmentStorage<'a> {
 
 }
 
-pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo], low_cnt_thr : usize, ratio_thr : f32) -> AssignmentStorage<'a> {
+pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo],
+        low_cnt_thr: usize, ratio_thr: f32, min_marker_inv_density: usize) -> AssignmentStorage<'a> {
     let mut assignments = AssignmentStorage::new(g);
-    let min_marker_inv_density = 10_000;
     let moderate_cnt_thr = low_cnt_thr * 10;
     let high_cnt_thr =  moderate_cnt_thr * 10;
 
@@ -239,9 +239,11 @@ pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo], low_cnt
         //TODO maybe take max?
         if trio_info.total() < moderate_cnt_thr && node_len > trio_info.total() * min_marker_inv_density {
             //FIXME continue?!!!
-            debug!("Too few markers")
+            debug!("Marker density lower than 1 / {}", min_marker_inv_density);
+            continue;
         }
 
+        //FIXME refactor!
         if trio_info.mat >= trio_info.pat {
             debug!("Looks more maternal");
             match classify_cnts(trio_info.mat, trio_info.pat) {
@@ -463,65 +465,42 @@ pub fn assign_homozygous<'a>(g: &'a Graph,
     assigner.assignments
 }
 
-fn bubble_end(g: &Graph, u: Vertex) -> Option<Vertex> {
-    if g.outgoing_edge_cnt(u) < 2 {
-        return None;
-    }
-    let mut opt_w = None;
-    for v in g.outgoing_edges(u).iter().map(|l1| l1.end) {
-        if g.incoming_edge_cnt(v) > 1 {
-            return None;
-        }
-        assert!(g.incoming_edge_cnt(v) == 1);
-        let l2 = only_or_none(g.outgoing_edges(v).into_iter())?;
-        if let Some(w) = opt_w {
-            if w != l2.end {
-                return None;
-            }
-        } else {
-            opt_w = Some(l2.end);
-        }
-    }
-    assert!(opt_w.is_some());
-    opt_w
-}
-
-//FIXME two thresholds?
-pub fn assign_small_bubbles<'a>(g: &'a Graph,
-    mut assignments: AssignmentStorage<'a>,
-    node_len_thr: usize) -> AssignmentStorage<'a> {
-    let end_cov = |l: &Link| {g.node(l.end.node_id).coverage};
-
-    for v in g.all_vertices() {
-        if g.vertex_length(v) < node_len_thr || !assignments.is_definite(v.node_id) {
-            continue;
-        }
-        if let Some(w) = bubble_end(g, v) {
-            if g.outgoing_edges(v).iter().all(|&l| g.vertex_length(l.end) < node_len_thr
-                                                    && !assignments.contains(l.end.node_id))
-                && w.node_id != v.node_id {
-                let group = assignments.group(v.node_id).unwrap();
-                for l in g.outgoing_edges(v) {
-                    assignments.assign(l.end.node_id,
-                            Assignment::<TrioGroup>{
-                                        group,
-                                        confidence: Confidence::MODERATE,
-                                        info: String::from("SmallBubble"),
-                    });
-                }
-                //assignments.assign(g.outgoing_edges(v).iter()
-                //                            .max_by(|a, b| end_cov(a).partial_cmp(&end_cov(b)).unwrap())
-                //                            .unwrap().end.node_id,
-                //        Assignment::<TrioGroup>{
-                //                    group,
-                //                    confidence: Confidence::MODERATE,
-                //                    info: String::from("SmallBubble"),
-                //});
-            }
-        }
-    }
-    assignments
-}
+////FIXME two thresholds?
+//pub fn assign_small_bubbles<'a>(g: &'a Graph,
+//    mut assignments: AssignmentStorage<'a>,
+//    node_len_thr: usize) -> AssignmentStorage<'a> {
+//    let end_cov = |l: &Link| {g.node(l.end.node_id).coverage};
+//
+//    for v in g.all_vertices() {
+//        if g.vertex_length(v) < node_len_thr || !assignments.is_definite(v.node_id) {
+//            continue;
+//        }
+//        if let Some(w) = superbubble::trivial_bubble_end(g, v) {
+//            if g.outgoing_edges(v).iter().all(|&l| g.vertex_length(l.end) < node_len_thr
+//                                                    && !assignments.contains(l.end.node_id))
+//                && w.node_id != v.node_id {
+//                let group = assignments.group(v.node_id).unwrap();
+//                for l in g.outgoing_edges(v) {
+//                    assignments.assign(l.end.node_id,
+//                            Assignment::<TrioGroup>{
+//                                        group,
+//                                        confidence: Confidence::MODERATE,
+//                                        info: String::from("SmallBubble"),
+//                    });
+//                }
+//                //assignments.assign(g.outgoing_edges(v).iter()
+//                //                            .max_by(|a, b| end_cov(a).partial_cmp(&end_cov(b)).unwrap())
+//                //                            .unwrap().end.node_id,
+//                //        Assignment::<TrioGroup>{
+//                //                    group,
+//                //                    confidence: Confidence::MODERATE,
+//                //                    info: String::from("SmallBubble"),
+//                //});
+//            }
+//        }
+//    }
+//    assignments
+//}
 
 #[cfg(test)]
 mod tests {

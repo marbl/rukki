@@ -90,7 +90,8 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     init_node_annotation_fn: &Option<String>,
     final_node_annotation_fn: &Option<String>,
     haplo_paths_fn: &Option<String>,
-    gaf_paths: bool, low_cnt_thr: usize, ratio_thr: f32) -> Result<(), Box<dyn Error>> {
+    gaf_paths: bool, low_cnt_thr: usize, ratio_thr: f32,
+    low_inv_density: usize) -> Result<(), Box<dyn Error>> {
     let g = read_graph(graph_fn)?;
 
     //for n in g.all_nodes() {
@@ -105,11 +106,11 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     let trio_infos = trio::read_trio(&fs::read_to_string(trio_markers_fn)?);
 
     info!("Assigning initial parental groups to the nodes");
-    let init_assign = trio::assign_parental_groups(&g, &trio_infos, low_cnt_thr, ratio_thr);
+    let init_assign = trio::assign_parental_groups(&g, &trio_infos,
+        low_cnt_thr, ratio_thr, low_inv_density);
     //TODO parameterize
     let init_assign = trio::assign_homozygous(&g, init_assign, 100_000);
-    //FIXME think if should be unique threshold
-    let init_assign = trio::assign_small_bubbles(&g, init_assign, 100_000);
+    //let init_assign = trio::assign_small_bubbles(&g, init_assign, 100_000);
 
     if let Some(output) = init_node_annotation_fn {
         info!("Writing initial node annotation to {}", output);

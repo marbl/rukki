@@ -1,10 +1,11 @@
+use crate::graph;
 use crate::graph::*;
 use crate::trio::*;
 use crate::pseudo_hap::*;
 use crate::graph_algos::*;
 //FIXME move to common
 use scc::only_or_none;
-use log::debug;
+use log::{debug,warn};
 use std::collections::{HashSet,HashMap};
 
 const MIN_GAP_SIZE: usize = 1000;
@@ -69,35 +70,41 @@ impl <'a> ExtensionHelper<'a> {
     //maybe move to graph or some GraphAlgoHelper?
     fn group_extension(&self, v: Vertex, group: TrioGroup,
                     consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Link> {
+        //debug!("Looking at (subset of) outgoing edges for {}", self.g.v_str(v));
         let filtered_outgoing = self.considered_extensions(v, consider_vertex_f);
 
-        //If only extension then being unassigned is Ok
+        //If only extension then being unassigned is always ok
         //FIXME Probably obsolete with two-step strategy!
         if filtered_outgoing.len() == 1 {
             let l = filtered_outgoing[0];
             if self.assignments.group(l.end.node_id).map_or(true,
                 |g| TrioGroup::compatible(g, group)) {
+                debug!("Candidate adjacent extension {} (was unique considered)", self.g.l_str(l));
                 return Some(l);
             }
         }
 
-        self.only_compatible_of_bearable_link(&filtered_outgoing, group)
+        let ext = self.only_compatible_of_bearable_link(&filtered_outgoing, group);
+        if let Some(l) = ext {
+            debug!("Candidate adjacent extension {}", self.g.v_str(l.end));
+        }
+        ext
     }
 
-    fn potential_jump_ext(&self, v: Vertex, group: TrioGroup,
-        long_node_threshold: usize) -> Option<Vertex> {
-        //Currently behavior is quite conservative:
-        //1. all long nodes ahead should have assignment
-        //2. only one should have correct assignment
-        //3. this one should have unambiguous path backward to the vertex maybe stopping one link away
-        let (long_ahead, _) = dfs::sinks_ahead(self.g, v, long_node_threshold);
+    //fn potential_jump_ext(&self, v: Vertex, group: TrioGroup,
+    //    long_node_threshold: usize) -> Option<Vertex> {
+    //    //Currently behavior is quite conservative:
+    //    //1. all long nodes ahead should have assignment
+    //    //2. only one should have correct assignment
+    //    //3. this one should have unambiguous path backward to the vertex maybe stopping one link away
+    //    let (long_ahead, _) = dfs::sinks_ahead(self.g, v, long_node_threshold);
 
-        //long_ahead.retain(|x| x != &v);
+    //    //long_ahead.retain(|x| x != &v);
 
-        //println!("Long ahead: {}", long_ahead.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
+    //    //println!("Long ahead: {}", long_ahead.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
 
-        self.only_compatible_of_bearable(long_ahead.iter().filter(|&x| x != &v).copied(), group)
-    }
+    //    self.only_compatible_of_bearable(long_ahead.iter().filter(|&x| x != &v).copied(), group)
+    //}
 
     fn find_compatible_source_sink(&self, v: Vertex, group:TrioGroup, long_node_threshold: usize)
     -> Option<(Vertex, Vertex)> {
@@ -128,6 +135,7 @@ pub struct HaploSearcher<'a> {
     long_node_threshold: usize,
     //path intersections by homozygous nodes are always allowed
     allow_intersections: bool,
+    try_fill_ambig: bool,
     used: AssignmentStorage<'a>,
     in_sccs: HashSet<usize>,
     small_tangle_index: HashMap<Vertex, scc::LocalizedTangle>,
@@ -153,6 +161,7 @@ impl <'a> HaploSearcher<'a> {
             assignments,
             long_node_threshold,
             allow_intersections: false,
+            try_fill_ambig: true,
             used: AssignmentStorage::new(g),
             in_sccs: scc::nodes_in_sccs(g, &sccs),
             extension_helper: ExtensionHelper {
@@ -169,6 +178,7 @@ impl <'a> HaploSearcher<'a> {
         long_node_threshold: usize) -> HaploSearcher<'a> {
         let mut searcher = Self::new(g, assignments, long_node_threshold);
         searcher.allow_intersections = true;
+        searcher.try_fill_ambig = false;
         searcher.extension_helper.unassigned_compatible = true;
         searcher
     }
@@ -221,17 +231,17 @@ impl <'a> HaploSearcher<'a> {
         assert!(u.node_id != w.node_id);
 
         if !self.check_available(w.node_id, group) {
+            debug!("Next 'target' vertex {} was unavailable", self.g.v_str(w));
             return None;
         }
 
-        if let Some(link_p) = self.try_link(v, w, group) {
-            return Some(link_p);
-        }
+        debug!("Found next 'target' vertex {}", self.g.v_str(w));
 
         let reachable_vertices = dfs::reachable_between(self.g, v, w,
                                                           self.long_node_threshold);
 
         let mut p1 = Path::new(v);
+        debug!("Constrained forward extension from {}", self.g.v_str(v));
         self.grow_local(&mut p1, group, Some(&|x| reachable_vertices.contains(&x)));
         if p1.in_path(w.node_id) {
             //TODO think if actually guaranteed
@@ -241,6 +251,7 @@ impl <'a> HaploSearcher<'a> {
         }
 
         let mut p2 = Path::new(w.rc());
+        debug!("Constrained backward extension from {}", self.g.v_str(w));
         self.grow_local(&mut p2, group, Some(&|x| reachable_vertices.contains(&x.rc())));
         let p2 = p2.reverse_complement();
         if p2.in_path(v.node_id) {
@@ -254,12 +265,27 @@ impl <'a> HaploSearcher<'a> {
         if let Some(trim_to) = p1.vertices().iter()
                                         .filter(|x| p2.in_path(x.node_id))
                                         .copied().next() {
+            debug!("Paths forward and backward overlapped");
+            debug!("Trimming path forward to {}", self.g.v_str(trim_to));
             assert!(p1.trim_to(&trim_to));
             p1.trim(1);
             //FIXME switch to debug_assert
             assert!(p1.vertices().iter().filter(|x| p2.in_path(x.node_id)).next().is_none());
+        } else if self.try_fill_ambig {
+            debug!("Will try to patch the gap between forward/backward paths");
+            //if paths don't overlap -- try linking
+            if let Some(link_p) = self.try_link(p1.end(), p2.end(), group) {
+                //TODO simplify? Here we know that p1 and p2 don't have common nodes
+                if p1.can_merge_in(&link_p) && link_p.can_merge_in(&p2) {
+                    debug!("Patch succesful");
+                    p1.merge_in(link_p);
+                    p1.merge_in(p2);
+                    return Some(p1);
+                }
+            }
         }
-        debug!("Putting gap between {} and {}", self.g.v_str(p1.end()), self.g.v_str(p2.start()));
+
+        debug!("Putting ambiguous gap between {} and {}", self.g.v_str(p1.end()), self.g.v_str(p2.start()));
         p1.append_general(GeneralizedLink::AMBIG(GapInfo {
             start: p1.end(),
             end: p2.start(),
@@ -275,6 +301,7 @@ impl <'a> HaploSearcher<'a> {
         loop {
             self.aimed_grow(path, group);
             if !self.unguided_grow(path, group) {
+                debug!("Stopping extension");
                 break;
             }
         }
@@ -282,16 +309,19 @@ impl <'a> HaploSearcher<'a> {
 
     //returns true if anything was done and false if couldn't extend
     fn aimed_grow(&self, path: &mut Path, group: TrioGroup) -> bool {
+        debug!("Initiating 'guided' extension from {}", self.g.v_str(path.end()));
         let mut something_done = false;
         while let Some(ext) = self.aimed_grow_ext(path.end(), group) {
             assert!(ext.vertices().iter().all(|v| self.check_available(v.node_id, group)));
-            debug!("Found extension {}", path.print(self.g));
+            debug!("Found extension {}", ext.print(self.g));
             if path.can_merge_in(&ext) {
                 debug!("Merging in");
                 path.merge_in(ext);
+                debug!("Will continue 'guided' extension from {}", self.g.v_str(path.end()));
                 something_done = true;
             } else {
-                debug!("Can't merge in");
+                warn!("Couldn't merge in guided extension from {}", self.g.v_str(path.end()));
+                break;
             }
         }
         something_done
@@ -300,6 +330,7 @@ impl <'a> HaploSearcher<'a> {
     //returns true if reached long node and false if ended in issue or couldn't extend anymore
     fn unguided_grow(&self, path: &mut Path, group: TrioGroup) -> bool {
         //self.grow(path, group, |v| self.local_next(v, group, consider_vertex_f))
+        debug!("Initiating unguided extension from {}", self.g.v_str(path.end()));
         while let Some(l) = self.unguided_next_or_gap(path.end(), group) {
             if self.check_available_append(path, l.end(), group) {
                 path.append_general(l);
@@ -338,6 +369,7 @@ impl <'a> HaploSearcher<'a> {
     }
 
     //FIXME isn't it obsolete with generalized_patch?
+    //FIXME rename
     fn patch_forward(&self, v: Vertex, group: TrioGroup) -> Option<GeneralizedLink> {
         if self.g.outgoing_edge_cnt(v) == 0 /* v is dead-end */
             && self.g.incoming_edge_cnt(v) == 1 {
@@ -346,6 +378,7 @@ impl <'a> HaploSearcher<'a> {
             if let Some(gap_info) = detect_gap(self.g, self.g.incoming_edges(v)[0].start) {
                 let next_node = gap_info.end.node_id;
                 if self.assignments.group(next_node) == Some(group) {
+                    debug!("Identified jump across gap to {}", self.g.v_str(gap_info.end));
                     return Some(GeneralizedLink::GAP(gap_info));
                 }
             }
@@ -379,6 +412,7 @@ impl <'a> HaploSearcher<'a> {
     }
 
     //FIXME add debug prints
+    //FIXME rename
     //TODO very asymmetric condition :(
     fn generalized_gap(&self, v: Vertex, group: TrioGroup, short_node_threshold: usize) -> Option<GapInfo> {
         //FIXME might be much easier to augment graph with extra 'gap' links after all!
@@ -435,12 +469,14 @@ impl <'a> HaploSearcher<'a> {
         None
     }
 
-    //fixme inline
+    //FIXME inline
+    //FIXME rename
     fn generalized_patch_forward(&self, v: Vertex, group: TrioGroup) -> Option<GeneralizedLink> {
         //FIXME configure
         if let Some(gap_info) = self.generalized_gap(v, group, 100_000) {
             let next_node = gap_info.end.node_id;
             assert!(self.assignments.group(next_node) == Some(group));
+            debug!("Identified jump across 'generalized' gap to {}", self.g.v_str(gap_info.end));
             Some(GeneralizedLink::GAP(gap_info))
         } else {
             None
@@ -473,7 +509,7 @@ impl <'a> HaploSearcher<'a> {
         self.g.node(node_id).length >= self.long_node_threshold
     }
 
-    fn link_vertex_check(&self, w: Vertex, group: TrioGroup) -> bool {
+    fn check_link_vertex(&self, w: Vertex, group: TrioGroup) -> bool {
         let long_node_ahead = |v: Vertex| {
             assert!(self.g.outgoing_edge_cnt(v) == 1);
             self.long_node(self.g.outgoing_edges(v)[0].end.node_id)
@@ -481,8 +517,7 @@ impl <'a> HaploSearcher<'a> {
 
         !self.long_node(w.node_id)
             //this check will never allow to patch with unassigned node
-            && self.assignments.contains(w.node_id)
-            && self.extension_helper.compatible_assignment(w.node_id, group)
+            //&& self.assignments.contains(w.node_id)
             && self.check_available(w.node_id, group)
             && self.g.incoming_edge_cnt(w) == 1
             && self.g.outgoing_edge_cnt(w) == 1
@@ -492,8 +527,10 @@ impl <'a> HaploSearcher<'a> {
     }
 
     fn try_link(&self, u: Vertex, w: Vertex, group: TrioGroup) -> Option<Path> {
+        debug!("Trying to link {} and {}", self.g.v_str(u), self.g.v_str(w));
         for l in self.g.outgoing_edges(u) {
             if l.end == w {
+                debug!("Found direct link {}", self.g.l_str(l));
                 return Some(Path::from_link(l))
             }
         }
@@ -506,10 +543,10 @@ impl <'a> HaploSearcher<'a> {
         for l in outgoing_edges {
             let v = l.end;
             //TODO think if checks are reasonable //FIXME think if we should check coverage too
-            if self.link_vertex_check(v, group) {
+            if self.check_link_vertex(v, group) {
                 if let Some(l2) = self.g.connector(v, w) {
                     debug!("Was able to link {} and {} via {}",
-                        self.g.v_str(u), self.g.v_str(w), self.g.v_str(w));
+                        self.g.v_str(u), self.g.v_str(w), self.g.v_str(v));
                     let mut path = Path::from_link(l);
                     path.append(l2);
                     return Some(path);
@@ -519,37 +556,60 @@ impl <'a> HaploSearcher<'a> {
         None
     }
 
-    //FIXME inline
-    fn reachable_short(&self, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
-        dfs::sinks_ahead(self.g, v, node_len_thr).1
-    }
+    //fn reachable_short(&self, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
+    //    dfs::sinks_ahead(self.g, v, node_len_thr).1
+    //}
 
-    fn find_jump_path_ahead(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
-        let potential_ext = self.extension_helper.potential_jump_ext(v, group, self.long_node_threshold)?;
-        debug!("Unique potential extension {}", self.g.v_str(potential_ext));
-        let mut p = Path::new(potential_ext.rc());
-        debug!("Growing path forward from {}", self.g.v_str(potential_ext.rc()));
-        let reachable_short = self.reachable_short(v, self.long_node_threshold);
-        self.grow_local(&mut p, group,
-            Some(&|x: Vertex| {reachable_short.contains(&x.rc())}));
-        debug!("Found path {}", p.print(self.g));
-        if !p.in_path(v.node_id) {
-            debug!("Tried linking");
-            if let Some(ext) = self.try_link(p.end(), v.rc(), group) {
-                if p.can_merge_in(&ext) {
-                    debug!("Succesful linking");
-                    p.merge_in(ext);
-                }
-            }
+    // fn find_jump_path_ahead(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
+    //     let potential_ext = self.extension_helper.potential_jump_ext(v, group, self.long_node_threshold)?;
+    //     debug!("Unique potential extension {}", self.g.v_str(potential_ext));
+    //     let mut p = Path::new(potential_ext.rc());
+    //     debug!("Growing path forward from {}", self.g.v_str(potential_ext.rc()));
+    //     let reachable_short = self.reachable_short(v, self.long_node_threshold);
+    //     self.grow_local(&mut p, group,
+    //         Some(&|x: Vertex| {reachable_short.contains(&x.rc())}));
+    //     debug!("Found path {}", p.print(self.g));
+    //     if !p.in_path(v.node_id) {
+    //         debug!("Tried linking");
+    //         if let Some(ext) = self.try_link(p.end(), v.rc(), group) {
+    //             if p.can_merge_in(&ext) {
+    //                 debug!("Succesful linking");
+    //                 p.merge_in(ext);
+    //             }
+    //         }
+    //     }
+    //     if p.trim_to(&v.rc()) {
+    //         assert!(p.len() > 1);
+    //         let p = p.reverse_complement();
+    //         debug!("Successfully found jump, path {}", p.print(self.g));
+    //         return Some(p);
+    //     }
+    //     debug!("Couldn't trim to vertex {}", self.g.v_str(v.rc()));
+    //     None
+    // }
+
+    //FIXME think if require v assignment
+    //TODO sometimes limiting the search here could help
+    fn choose_simple_bubble_side(&self, v: Vertex, group: TrioGroup) -> Option<GeneralizedLink> {
+        if !self.try_fill_ambig || self.assignments.group(v.node_id) == Some(TrioGroup::HOMOZYGOUS) {
+            return None;
         }
-        if p.trim_to(&v.rc()) {
-            assert!(p.len() > 1);
-            let p = p.reverse_complement();
-            debug!("Successfully found jump, path {}", p.print(self.g));
-            return Some(p);
+        let end_cov = |l: &Link| self.g.node(l.end.node_id).coverage;
+        let w = superbubble::trivial_bubble_end(self.g, v)?;
+        let filtered_outgoing_edges: Vec<Link> = self.g.outgoing_edges(v).into_iter()
+                                        .filter(|l| self.unassigned_or_compatible(l.end.node_id, group)).collect();
+        if filtered_outgoing_edges.len() > 0
+            && filtered_outgoing_edges.iter().all(|&l| self.g.vertex_length(l.end) < self.long_node_threshold)
+                                                //&& !assignments.contains(l.end.node_id))
+            && w.node_id != v.node_id {
+            let ext = filtered_outgoing_edges.into_iter()
+                                        .max_by(|a, b| end_cov(a).partial_cmp(&end_cov(b)).unwrap())
+                                        .unwrap();
+            debug!("Candidate simple bubble side {}", self.g.v_str(ext.end));
+            Some(GeneralizedLink::LINK(ext))
+        } else {
+            None
         }
-        debug!("Couldn't trim to vertex {}", self.g.v_str(v.rc()));
-        None
     }
 
     fn find_bubble_jump_ahead(&self, v: Vertex, _group: TrioGroup) -> Option<GeneralizedLink> {
@@ -568,6 +628,7 @@ impl <'a> HaploSearcher<'a> {
         } else {
             MIN_GAP_SIZE
         };
+        debug!("Candidate across-bubble jump to {}", self.g.v_str(w));
         Some(GeneralizedLink::AMBIG(GapInfo {
             start: v,
             end: w,
@@ -577,6 +638,7 @@ impl <'a> HaploSearcher<'a> {
 
     fn find_small_tangle_jump_ahead(&self, v: Vertex, _group: TrioGroup) -> Option<GeneralizedLink> {
         let small_tangle = self.small_tangle_index.get(&v)?;
+        debug!("Candidate tangle jump to {}", self.g.v_str(small_tangle.exit.end));
         Some(GeneralizedLink::AMBIG(GapInfo {
             start: small_tangle.entrance.start,
             end: small_tangle.exit.end,
@@ -586,36 +648,45 @@ impl <'a> HaploSearcher<'a> {
         }))
     }
 
-    //FIXME rename?
-    fn find_gapped_jump_ahead(&self, path: &Path, group:TrioGroup) -> Option<Path> {
-        let v = path.end();
-        let (u, w) = self.extension_helper.find_compatible_source_sink(v, group, self.long_node_threshold)?;
-        if !path.vertices().contains(&u) {
-            return None;
-        }
-        //FIXME optimize, this info should be logged within the short node component
-        if !dfs::sinks_ahead(self.g, v, self.long_node_threshold).0.contains(&w) {
-            //w can't be reached from v
-            return None;
-        }
-        debug!("Unique potential extension {}", self.g.v_str(w));
-        let mut p = Path::new(w.rc());
-        debug!("Growing path forward from {}", self.g.v_str(w.rc()));
-        //FIXME put reachable nodes function here instead of None
-        self.grow_local(&mut p, group, None);
-        debug!("Found path {}", p.print(self.g));
-        if p.in_path(v.node_id) {
-            //should be covered by find_jump_ahead by this point (if possible to extend)
-            return None;
-        }
+    // fn find_gapped_jump_ahead(&self, path: &Path, group:TrioGroup) -> Option<Path> {
+    //     let v = path.end();
+    //     let (u, w) = self.extension_helper.find_compatible_source_sink(v, group, self.long_node_threshold)?;
+    //     if !path.vertices().contains(&u) {
+    //         return None;
+    //     }
+    //     //FIXME optimize, this info should be logged within the short node component
+    //     if !dfs::sinks_ahead(self.g, v, self.long_node_threshold).0.contains(&w) {
+    //         //w can't be reached from v
+    //         return None;
+    //     }
+    //     debug!("Unique potential extension {}", self.g.v_str(w));
+    //     let mut p = Path::new(w.rc());
+    //     debug!("Growing path forward from {}", self.g.v_str(w.rc()));
+    //     //FIXME put reachable nodes function here instead of None
+    //     self.grow_local(&mut p, group, None);
+    //     debug!("Found path {}", p.print(self.g));
+    //     if p.in_path(v.node_id) {
+    //         //should be covered by find_jump_ahead by this point (if possible to extend)
+    //         return None;
+    //     }
 
-        //FIXME add size estimate
-        p.append_general(GeneralizedLink::AMBIG(GapInfo {
-            start: p.end(),
-            end: v.rc(),
-            gap_size: MIN_GAP_SIZE as i64}));
+    //     //FIXME add size estimate
+    //     p.append_general(GeneralizedLink::AMBIG(GapInfo {
+    //         start: p.end(),
+    //         end: v.rc(),
+    //         gap_size: MIN_GAP_SIZE as i64}));
 
-        Some(p.reverse_complement())
+    //     Some(p.reverse_complement())
+    // }
+
+    fn unassigned_or_compatible(&self, node_id: usize, group: TrioGroup) -> bool {
+        if let Some(assign_group) = self.assignments.group(node_id) {
+            if TrioGroup::incompatible(assign_group, group) {
+                //if target group is incompatible with initial assignment (incl. ISSUE)
+                return false;
+            }
+        }
+        true
     }
 
     //FIXME maybe stop grow process immediately when this fails
@@ -625,12 +696,10 @@ impl <'a> HaploSearcher<'a> {
             return false;
         }
 
-        if let Some(init_group) = self.assignments.group(node_id) {
-            if TrioGroup::incompatible(init_group, target_group) {
-                //if target group is incompatible with initial assignment (incl. ISSUE)
-                return false;
-            }
+        if !self.unassigned_or_compatible(node_id, target_group) {
+            return false;
         }
+
         if !self.allow_intersections {
             if let Some(used_group) = self.used.group(node_id) {
                 if TrioGroup::incompatible(used_group, target_group) {
@@ -666,10 +735,12 @@ impl <'a> HaploSearcher<'a> {
         let next_cand = self.find_small_tangle_jump_ahead(v, group)
             .or_else(|| self.extension_helper.group_extension(v, group, consider_vertex_f)
                         .map(|l| GeneralizedLink::LINK(l)))
+            .or_else(|| self.choose_simple_bubble_side(v, group))
             .or_else(|| self.find_bubble_jump_ahead(v, group));
         if let Some(vertex_f) = consider_vertex_f {
             if let Some(gl) = next_cand {
                 if !vertex_f(gl.end()) {
+                    debug!("Identified candidate {} wasn't in 'considered' set", self.g.v_str(gl.end()));
                     return None;
                 }
             }
@@ -696,10 +767,12 @@ impl <'a> HaploSearcher<'a> {
     fn grow_local(&self, path: &mut Path, group: TrioGroup,
                     consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> bool {
         //self.grow(path, group, |v| self.local_next(v, group, consider_vertex_f))
+        debug!("Locally growing from {}", self.g.v_str(path.end()));
         while let Some(l) = self.local_next(path.end(), group, consider_vertex_f) {
             if self.check_available_append(path, l.end(), group) {
                 path.append_general(l);
             } else {
+                debug!("Couldn't append vertex {} to the path", self.g.v_str(l.end()));
                 return false;
             }
         }

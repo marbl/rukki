@@ -3,6 +3,7 @@ use std::cmp;
 use std::collections::HashSet;
 use std::collections::HashMap;
 use log::debug;
+use super::scc::only_or_none;
 
 type DistRange = (usize, usize);
 
@@ -367,4 +368,28 @@ pub fn check_chain<F>(chain: &BubbleChain, mut f: F) -> bool
 where
 F: FnMut(&Vertex) -> bool {
     chain.iter().flat_map(|b| b.vertices()).all(&mut f)
+}
+
+//FIXME rename
+pub fn trivial_bubble_end(g: &Graph, u: Vertex) -> Option<Vertex> {
+    if g.outgoing_edge_cnt(u) < 2 {
+        return None;
+    }
+    let mut opt_w = None;
+    for v in g.outgoing_edges(u).iter().map(|l1| l1.end) {
+        if g.incoming_edge_cnt(v) > 1 {
+            return None;
+        }
+        assert!(g.incoming_edge_cnt(v) == 1);
+        let l2 = only_or_none(g.outgoing_edges(v).into_iter())?;
+        if let Some(w) = opt_w {
+            if w != l2.end {
+                return None;
+            }
+        } else {
+            opt_w = Some(l2.end);
+        }
+    }
+    assert!(opt_w.is_some());
+    opt_w
 }
