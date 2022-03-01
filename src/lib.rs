@@ -54,7 +54,7 @@ fn output_coloring(g: &Graph,
     Ok(())
 }
 
-fn augment_by_path_search<'a>(g: &'a Graph,
+pub fn augment_by_path_search<'a>(g: &'a Graph,
     assignments: &'a trio::AssignmentStorage<'a>,
     init_node_len_thr: usize) -> trio::AssignmentStorage<'a> {
 

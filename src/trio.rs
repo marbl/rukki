@@ -3,7 +3,6 @@ use std::collections::{HashMap,HashSet};
 use log::info;
 use crate::graph::*;
 use crate::graph_algos::dfs;
-use crate::graph_algos::scc::only_or_none;
 use crate::graph_algos::superbubble;
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
@@ -238,7 +237,6 @@ pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo],
 
         //TODO maybe take max?
         if trio_info.total() < moderate_cnt_thr && node_len > trio_info.total() * min_marker_inv_density {
-            //FIXME continue?!!!
             debug!("Marker density lower than 1 / {}", min_marker_inv_density);
             continue;
         }
@@ -292,6 +290,7 @@ fn parse_group(group_str: &str) -> TrioGroup {
         "MATERNAL" => TrioGroup::MATERNAL,
         "PATERNAL" => TrioGroup::PATERNAL,
         "HOMOZYGOUS" => TrioGroup::HOMOZYGOUS,
+        "ISSUE" => TrioGroup::ISSUE,
         _ => panic!("Invalid group string {group_str}"),
     }
 }
