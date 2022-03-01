@@ -27,7 +27,6 @@ struct Args {
 #[derive(Subcommand)]
 enum Commands {
     /// Trio-marker based analysis
-    #[clap(setting(AppSettings::ArgRequiredElseHelp))]
     Trio(TrioSettings),
     // /// Primary-alt style analysis
     // #[clap(setting(AppSettings::ArgRequiredElseHelp))]
