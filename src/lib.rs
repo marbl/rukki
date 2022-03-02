@@ -19,6 +19,47 @@ pub use graph::Path;
 pub use graph::Link;
 pub use graph::Direction;
 
+//TODO use PathBuf
+#[derive(clap::Args)]
+pub struct TrioSettings {
+    /// GFA file
+    #[clap(short, long)]
+    pub graph: String,
+
+    /// Parental markers file
+    #[clap(short, long)]
+    pub markers: String,
+
+    /// Marker-based annotation output file
+    #[clap(long)]
+    pub init_assign: Option<String>,
+
+    /// Path-based annotation output file
+    #[clap(long)]
+    pub final_assign: Option<String>,
+
+    /// Marker-assisted extracted haplo-paths
+    #[clap(long, short)]
+    pub paths: Option<String>,
+
+    /// Use GAF ([<>]<name1>)+ format for paths
+    #[clap(long)]
+    pub gaf_format: bool,
+
+    /// Minimal number of parent-specific markers required for unitig classification
+    #[clap(long, default_value_t = 10)]
+    pub low_marker_count: usize,
+
+    /// At least (node_length / <value>) parent-specific markers required for unitig classification
+    #[clap(long, default_value_t = 10_000)]
+    pub low_marker_inv_density: usize,
+
+    /// Minimal excess of parent-specific markers required for unitig classification (float)
+    #[clap(long, default_value_t = 5.0)]
+    pub marker_ratio: f32,
+
+}
+
 fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
     info!("Reading graph from {:?}", graph_fn);
     let g = Graph::read_sanitize(&fs::read_to_string(graph_fn)?);
@@ -86,13 +127,8 @@ pub fn augment_by_path_search<'a>(g: &'a Graph,
     init_assign
 }
 
-pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
-    init_node_annotation_fn: &Option<String>,
-    final_node_annotation_fn: &Option<String>,
-    haplo_paths_fn: &Option<String>,
-    gaf_paths: bool, low_cnt_thr: usize, ratio_thr: f32,
-    low_inv_density: usize) -> Result<(), Box<dyn Error>> {
-    let g = read_graph(graph_fn)?;
+pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> {
+    let g = read_graph(&settings.graph)?;
 
     //for n in g.all_nodes() {
     //    println!("Node: {} length: {} cov: {}", n.name, n.length, n.coverage);
@@ -102,17 +138,17 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
     //}
     //write!(output, "{}", g.as_gfa())?;
 
-    info!("Reading trio marker information from {}", trio_markers_fn);
-    let trio_infos = trio::read_trio(&fs::read_to_string(trio_markers_fn)?);
+    info!("Reading trio marker information from {}", &settings.markers);
+    let trio_infos = trio::read_trio(&fs::read_to_string(&settings.markers)?);
 
     info!("Assigning initial parental groups to the nodes");
     let init_assign = trio::assign_parental_groups(&g, &trio_infos,
-        low_cnt_thr, ratio_thr, low_inv_density);
+        settings.low_marker_count, settings.marker_ratio, settings.low_marker_inv_density);
     //TODO parameterize
     let init_assign = trio::assign_homozygous(&g, init_assign, 100_000);
     //let init_assign = trio::assign_small_bubbles(&g, init_assign, 100_000);
 
-    if let Some(output) = init_node_annotation_fn {
+    if let Some(output) = &settings.init_assign {
         info!("Writing initial node annotation to {}", output);
         output_coloring(&g, &init_assign, output)?;
     }
@@ -138,7 +174,7 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
         }
     }
 
-    if let Some(output) = haplo_paths_fn {
+    if let Some(output) = &settings.paths {
         info!("Searching for haplo-paths, output in {}", output);
         let mut output = File::create(output)?;
 
@@ -148,7 +184,7 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
             //info!("Identified {:?} path: {}", group, path.print(&g));
             writeln!(output, "path_from_{}\t{}\t{:?}\t{}",
                 g.node(node_id).name,
-                path.print_format(&g, gaf_paths),
+                path.print_format(&g, settings.gaf_format),
                 group,
                 g.node(node_id).name)?;
         }
@@ -163,7 +199,7 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
                 writeln!(output, "unused_{}_len_{}\t{}\t{}\t{}",
                     n.name,
                     n.length,
-                    Path::new(Vertex::forward(node_id)).print_format(&g, gaf_paths),
+                    Path::new(Vertex::forward(node_id)).print_format(&g, settings.gaf_format),
                     group_str,
                     node_id)?;
             }
@@ -172,7 +208,7 @@ pub fn run_trio_analysis(graph_fn: &str, trio_markers_fn: &str,
         }
     }
 
-    if let Some(output) = final_node_annotation_fn {
+    if let Some(output) = &settings.final_assign {
         info!("Writing final node annotation to {}", output);
         output_coloring(&g, &final_assign, output)?;
     }

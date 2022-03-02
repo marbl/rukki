@@ -1,5 +1,4 @@
 //use std::io;
-use std::env;
 #[macro_use]
 extern crate log;
 use env_logger::{Env, Builder, Target};
@@ -27,51 +26,10 @@ struct Args {
 #[derive(Subcommand)]
 enum Commands {
     /// Trio-marker based analysis
-    Trio(TrioSettings),
+    Trio(graph_analysis::TrioSettings),
     // /// Primary-alt style analysis
     // #[clap(setting(AppSettings::ArgRequiredElseHelp))]
     // PriAlt(PriAltSettings),
-}
-
-//TODO use PathBuf?
-#[derive(clap::Args)]
-struct TrioSettings {
-    /// GFA file
-    #[clap(short, long)]
-    graph: String,
-
-    /// Parental markers file
-    #[clap(short, long)]
-    markers: String,
-
-    /// Marker-based annotation output file
-    #[clap(long)]
-    init_assign: Option<String>,
-
-    /// Path-based annotation output file
-    #[clap(long)]
-    final_assign: Option<String>,
-
-    /// Marker-assisted extracted haplo-paths
-    #[clap(long, short)]
-    paths: Option<String>,
-
-    /// Use GAF ([<>]<name1>)+ format for paths
-    #[clap(long)]
-    gaf_format: bool,
-
-    /// Minimal number of parent-specific markers required for unitig classification
-    #[clap(long, default_value_t = 10)]
-    low_marker_count: usize,
-
-    /// At least (node_length / <value>) parent-specific markers required for unitig classification
-    #[clap(long, default_value_t = 10_000)]
-    low_marker_inv_density: usize,
-
-    /// Minimal excess of parent-specific markers required for unitig classification (float)
-    #[clap(long, default_value_t = 5.0)]
-    marker_ratio: f32,
-
 }
 
 //TODO use PathBuf?
@@ -95,15 +53,14 @@ struct PriAltSettings {
 
 }
 
-
 fn main() {
     //env_logger::init();
     let mut builder = Builder::from_env(Env::default().default_filter_or("info"));
     builder.target(Target::Stdout);
     builder.init();
-    info!("Starting up");
+    //info!("Starting up");
 
-    info!("Cmd arguments: {:?}", env::args());
+    //info!("Cmd arguments: {:?}", env::args());
 
     let args = Args::parse();
 
@@ -111,11 +68,7 @@ fn main() {
         Commands::Trio(settings) => {
             info!("Running trio marker analysis");
 
-            match graph_analysis::run_trio_analysis(&settings.graph, &settings.markers,
-                            &settings.init_assign, &settings.final_assign,
-                            &settings.paths, settings.gaf_format,
-                            settings.low_marker_count, settings.marker_ratio,
-                            settings.low_marker_inv_density) {
+            match graph_analysis::run_trio_analysis(&settings) {
                 Ok(()) => info!("Success"),
                 Err(e) => info!("Some error happened {:?}", e)
             }
