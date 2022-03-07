@@ -46,18 +46,29 @@ pub struct TrioSettings {
     #[clap(long)]
     pub gaf_format: bool,
 
-    /// Minimal number of parent-specific markers required for unitig classification
-    #[clap(long, default_value_t = 10)]
-    pub low_marker_count: usize,
+    /// Minimal number of parent-specific markers required for assigning parental group to a node (default: 100)
+    #[clap(long, default_value_t = 100)]
+    pub marker_cnt: usize,
 
-    /// At least (node_length / <value>) parent-specific markers required for unitig classification
+    /// Require at least (node_length / <value>) markers within the node for parental group assignment (default: 10000)
     #[clap(long, default_value_t = 10_000)]
-    pub low_marker_inv_density: usize,
+    pub marker_sparsity: usize,
 
-    /// Minimal excess of parent-specific markers required for unitig classification (float)
+    /// Sets minimal marker excess for assigning a parental group to <value>:1 (default: 5.)
     #[clap(long, default_value_t = 5.0)]
     pub marker_ratio: f32,
 
+    //// Minimal number of markers for assigning ISSUE label,  (by default == marker_cnt, will typically be set to a value >= marker_cnt)
+    //#[clap(long)]
+    //pub issue_cnt: Option<usize>,
+
+    ///// Require at least (node_length / <value>) markers for assigning ISSUE label (by default == marker_sparsity, will typically be set to a value >= marker_sparsity)
+    //#[clap(long)]
+    //pub issue_sparsity: Option<usize>,
+
+    ///// Nodes with primary marker excess BELOW <value>:1 will be considered for ISSUE label assignment Must be <= marker_ratio (by default: marker_ratio)
+    //#[clap(long)]
+    //pub issue_ratio: Option<f32>,
 }
 
 fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
@@ -143,7 +154,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
 
     info!("Assigning initial parental groups to the nodes");
     let init_assign = trio::assign_parental_groups(&g, &trio_infos,
-        settings.low_marker_count, settings.marker_ratio, settings.low_marker_inv_density);
+        settings.marker_cnt, settings.marker_sparsity, settings.marker_ratio);
     //TODO parameterize
     let init_assign = trio::assign_homozygous(&g, init_assign, 100_000);
     //let init_assign = trio::assign_small_bubbles(&g, init_assign, 100_000);

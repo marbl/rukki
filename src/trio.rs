@@ -186,21 +186,21 @@ impl <'a> AssignmentStorage<'a> {
 }
 
 pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo],
-        low_cnt_thr: usize, ratio_thr: f32, min_marker_inv_density: usize) -> AssignmentStorage<'a> {
+        assign_cnt: usize, assign_sparsity: usize, assign_ratio: f32) -> AssignmentStorage<'a> {
     let mut assignments = AssignmentStorage::new(g);
-    let moderate_cnt_thr = low_cnt_thr * 10;
+    let moderate_cnt_thr = assign_cnt * 10;
     let high_cnt_thr =  moderate_cnt_thr * 10;
 
-    debug!("Running with marker parameters confidence: high={} medium={}, low={}; Ratio: {}",
-            high_cnt_thr, moderate_cnt_thr, low_cnt_thr, ratio_thr);
-    assert!(high_cnt_thr as f32 / low_cnt_thr as f32 > ratio_thr);
+    debug!("Running parental group assignment with marker confidence thresholds: high={high_cnt_thr},
+medium={moderate_cnt_thr}, low={assign_cnt}; Maximal sparsity: 1:{assign_sparsity}; Ratio: {assign_ratio}");
+    assert!(high_cnt_thr as f32 / assign_cnt as f32 > assign_ratio);
 
     let issue_confidence = |x: usize| {
         if x > high_cnt_thr {
             Confidence::HIGH
         } else if x > moderate_cnt_thr {
             Confidence::MODERATE
-        } else if x > low_cnt_thr {
+        } else if x > assign_cnt {
             Confidence::LOW
         } else {
             Confidence::INCONCLUSIVE
@@ -209,13 +209,13 @@ pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo],
 
     let excess_confidence = |x: usize, y: usize| {
         assert!(x >= y);
-        if x > high_cnt_thr && y < low_cnt_thr {
+        if x > high_cnt_thr && y < assign_cnt {
             return Confidence::HIGH;
         }
-        if y == 0 || (x as f32 / y as f32) >= ratio_thr {
+        if y == 0 || (x as f32 / y as f32) >= assign_ratio {
             if x > moderate_cnt_thr {
                 return Confidence::MODERATE;
-            } else if x > low_cnt_thr {
+            } else if x > assign_cnt {
                 return Confidence::LOW;
             }
         }
@@ -236,8 +236,8 @@ pub fn assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo],
             trio_info.node_name, node_len, trio_info.counts_str());
 
         //TODO maybe take max?
-        if trio_info.total() < moderate_cnt_thr && node_len > trio_info.total() * min_marker_inv_density {
-            debug!("Marker density lower than 1 / {}", min_marker_inv_density);
+        if trio_info.total() < moderate_cnt_thr && node_len > trio_info.total() * assign_sparsity {
+            debug!("Marker density lower than 1 / {}", assign_sparsity);
             continue;
         }
 
