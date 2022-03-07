@@ -6,14 +6,6 @@ use crate::graph_algos::dfs;
 use crate::graph_algos::superbubble;
 use std::cmp::{min, max};
 
-//#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
-//pub enum Confidence {
-//    INCONCLUSIVE,
-//    LOW,
-//    MODERATE,
-//    HIGH,
-//}
-
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum TrioGroup {
     MATERNAL,
@@ -61,22 +53,11 @@ impl TrioGroup {
 }
 
 #[derive(Clone, Debug)]
-pub struct Assignment<T>
+pub struct Assignment
 {
-    pub group: T,
-    //pub confidence: Confidence,
+    pub group: TrioGroup,
     pub info: String,
 }
-
-//impl <T> Assignment<T> {
-//    fn new_basic(group: T) -> Assignment<T> {
-//        Assignment {
-//            group,
-//            //confidence: Confidence::MODERATE,
-//            info: String::new(),
-//        }
-//    }
-//}
 
 #[derive(Clone, Debug)]
 pub struct TrioInfo {
@@ -112,7 +93,7 @@ pub fn read_trio(trio_str: &str) -> Vec<TrioInfo> {
 //TODO add template parameter
 #[derive(Clone)]
 pub struct AssignmentStorage {
-    storage: HashMap<usize, Assignment<TrioGroup>>,
+    storage: HashMap<usize, Assignment>,
 }
 
 //TODO remove by_name methods
@@ -136,8 +117,8 @@ impl <'a> AssignmentStorage {
         false
     }
 
-    pub fn assign(&mut self, node_id: usize, group: TrioGroup, info: String) -> Option<Assignment::<TrioGroup>> {
-        self.storage.insert(node_id, Assignment::<TrioGroup>{group, info})
+    pub fn assign(&mut self, node_id: usize, group: TrioGroup, info: String) -> Option<Assignment> {
+        self.storage.insert(node_id, Assignment{group, info})
     }
 
     pub fn update_group(&mut self, node_id: usize, group: TrioGroup) {
@@ -158,15 +139,11 @@ impl <'a> AssignmentStorage {
         }
     }
 
-    //pub fn assign_by_name(&mut self, node_name: &str, assignment: Assignment<TrioGroup>) {
-    //    self.assign(self.g.name2id(node_name), assignment);
-    //}
-
-    pub fn get(&self, node_id: usize) -> Option<&Assignment<TrioGroup>> {
+    pub fn get(&self, node_id: usize) -> Option<&Assignment> {
         self.storage.get(&node_id)
     }
 
-    pub fn get_mut(&mut self, node_id: usize) -> Option<&mut Assignment<TrioGroup>> {
+    pub fn get_mut(&mut self, node_id: usize) -> Option<&mut Assignment> {
         self.storage.get_mut(&node_id)
     }
 
@@ -190,8 +167,8 @@ pub fn assign_parental_groups(g: &Graph, trio_infos: &[TrioInfo],
     let mut assignments = AssignmentStorage::new();
 
     info!("Running parental group assignment.");
-    debug!("Parental group assignment settings. Minimal marker count: {assign_cnt}; Minimal sparsity: 1 in {assign_sparsity}; Minimal ratio: {assign_ratio} to 1");
-    debug!("ISSUE labeling settings. Minimal marker count: {issue_cnt}; Minimal sparsity: 1 in {issue_sparsity}; Maximal ratio: {issue_ratio} to 1");
+    debug!("Parental group assignment settings: Minimal marker count -- {assign_cnt}; Minimal sparsity -- 1 in {assign_sparsity}; Minimal ratio -- {assign_ratio} to 1");
+    debug!("ISSUE labeling settings: Minimal marker count -- {issue_cnt}; Minimal sparsity -- 1 in {issue_sparsity}; Maximal ratio -- {issue_ratio} to 1");
     assert!(issue_ratio <= assign_ratio);
 
     let assign_node_f = |x: usize, y: usize, node_len: usize| {
@@ -235,107 +212,6 @@ pub fn assign_parental_groups(g: &Graph, trio_infos: &[TrioInfo],
     }
     assignments
 }
-
-//pub fn old_assign_parental_groups<'a>(g: &'a Graph, trio_infos: &[TrioInfo],
-//        assign_cnt: usize, assign_sparsity: usize, assign_ratio: f32) -> AssignmentStorage<'a> {
-//    let mut assignments = AssignmentStorage::new(g);
-//    let moderate_cnt_thr = assign_cnt * 10;
-//    let high_cnt_thr =  moderate_cnt_thr * 10;
-//
-//    debug!("Running parental group assignment with marker confidence thresholds: high={high_cnt_thr},
-//medium={moderate_cnt_thr}, low={assign_cnt}; Maximal sparsity: 1:{assign_sparsity}; Ratio: {assign_ratio}");
-//    assert!(high_cnt_thr as f32 / assign_cnt as f32 > assign_ratio);
-//
-//    let issue_confidence = |x: usize| {
-//        if x > high_cnt_thr {
-//            Confidence::HIGH
-//        } else if x > moderate_cnt_thr {
-//            Confidence::MODERATE
-//        } else if x > assign_cnt {
-//            Confidence::LOW
-//        } else {
-//            Confidence::INCONCLUSIVE
-//        }
-//    };
-//
-//    let excess_confidence = |x: usize, y: usize| {
-//        assert!(x >= y);
-//        if x > high_cnt_thr && y < assign_cnt {
-//            return Confidence::HIGH;
-//        }
-//        if y == 0 || (x as f32 / y as f32) >= assign_ratio {
-//            if x > moderate_cnt_thr {
-//                return Confidence::MODERATE;
-//            } else if x > assign_cnt {
-//                return Confidence::LOW;
-//            }
-//        }
-//        Confidence::INCONCLUSIVE
-//    };
-//
-//    let classify_cnts = |x: usize, y: usize| {
-//        assert!(x >= y);
-//        match excess_confidence(x, y) {
-//            Confidence::INCONCLUSIVE => (None, issue_confidence(x)),
-//            conf => (Some(conf), Confidence::INCONCLUSIVE),
-//        }
-//    };
-//
-//    for trio_info in trio_infos {
-//        let node_id = g.name2id(&trio_info.node_name);
-//        let node_len = g.node_length(node_id);
-//        debug!("Looking at node {} (len={}), mat:pat={}",
-//            trio_info.node_name, node_len, trio_info.counts_str());
-//
-//        //TODO maybe take max?
-//        if trio_info.total() < moderate_cnt_thr && node_len > trio_info.total() * assign_sparsity {
-//            debug!("Marker density lower than 1 / {assign_sparsity}");
-//            continue;
-//        }
-//
-//        //FIXME refactor!
-//        if trio_info.mat >= trio_info.pat {
-//            debug!("Looks more maternal");
-//            match classify_cnts(trio_info.mat, trio_info.pat) {
-//                (None, Confidence::INCONCLUSIVE) => {},
-//                (None, issue_conf) => assignments.assign(node_id,
-//                    Assignment::<TrioGroup>{
-//                        group: TrioGroup::ISSUE,
-//                        confidence: issue_conf,
-//                        //info: String::from("Marker issue")}),
-//                        info: trio_info.counts_str(),
-//                    }),
-//                (Some(conf), _) => assignments.assign(node_id,
-//                    Assignment::<TrioGroup>{
-//                        group: TrioGroup::MATERNAL,
-//                        confidence: conf,
-//                        //info: String::from("Maternal marker excess")}),
-//                        info: trio_info.counts_str(),
-//                    }),
-//            }
-//        } else {
-//            debug!("Looks more paternal");
-//            match classify_cnts(trio_info.pat, trio_info.mat) {
-//                (None, Confidence::INCONCLUSIVE) => {},
-//                (None, issue_conf) => assignments.assign(node_id,
-//                    Assignment::<TrioGroup>{
-//                        group: TrioGroup::ISSUE,
-//                        //confidence: issue_conf,
-//                        //info: String::from("Marker issue")}),
-//                        info: trio_info.counts_str(),
-//                    }),
-//                (Some(conf), _) => assignments.assign(node_id,
-//                    Assignment::<TrioGroup>{
-//                        group: TrioGroup::PATERNAL,
-//                        //confidence: conf,
-//                        //info: String::from("Paternal marker excess")}),
-//                        info: trio_info.counts_str(),
-//                    }),
-//            }
-//        }
-//    }
-//    assignments
-//}
 
 fn parse_group(group_str: &str) -> TrioGroup {
     match group_str {
@@ -513,43 +389,6 @@ pub fn assign_homozygous(g: &Graph,
     info!("Total marked {}", total_assigned);
     assigner.assignments
 }
-
-////FIXME two thresholds?
-//pub fn assign_small_bubbles<'a>(g: &'a Graph,
-//    mut assignments: AssignmentStorage<'a>,
-//    node_len_thr: usize) -> AssignmentStorage<'a> {
-//    let end_cov = |l: &Link| {g.node(l.end.node_id).coverage};
-//
-//    for v in g.all_vertices() {
-//        if g.vertex_length(v) < node_len_thr || !assignments.is_definite(v.node_id) {
-//            continue;
-//        }
-//        if let Some(w) = superbubble::trivial_bubble_end(g, v) {
-//            if g.outgoing_edges(v).iter().all(|&l| g.vertex_length(l.end) < node_len_thr
-//                                                    && !assignments.contains(l.end.node_id))
-//                && w.node_id != v.node_id {
-//                let group = assignments.group(v.node_id).unwrap();
-//                for l in g.outgoing_edges(v) {
-//                    assignments.assign(l.end.node_id,
-//                            Assignment::<TrioGroup>{
-//                                        group,
-//                                        confidence: Confidence::MODERATE,
-//                                        info: String::from("SmallBubble"),
-//                    });
-//                }
-//                //assignments.assign(g.outgoing_edges(v).iter()
-//                //                            .max_by(|a, b| end_cov(a).partial_cmp(&end_cov(b)).unwrap())
-//                //                            .unwrap().end.node_id,
-//                //        Assignment::<TrioGroup>{
-//                //                    group,
-//                //                    confidence: Confidence::MODERATE,
-//                //                    info: String::from("SmallBubble"),
-//                //});
-//            }
-//        }
-//    }
-//    assignments
-//}
 
 #[cfg(test)]
 mod tests {
