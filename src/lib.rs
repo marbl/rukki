@@ -46,8 +46,8 @@ pub struct TrioSettings {
     #[clap(long)]
     pub gaf_format: bool,
 
-    /// Minimal number of parent-specific markers required for assigning parental group to a node (default: 100)
-    #[clap(long, default_value_t = 100)]
+    /// Minimal number of parent-specific markers required for assigning parental group to a node (default: 10)
+    #[clap(long, default_value_t = 10)]
     pub marker_cnt: usize,
 
     /// Require at least (node_length / <value>) markers within the node for parental group assignment (default: 10000)
@@ -56,19 +56,19 @@ pub struct TrioSettings {
 
     /// Sets minimal marker excess for assigning a parental group to <value>:1 (default: 5.)
     #[clap(long, default_value_t = 5.0)]
-    pub marker_ratio: f32,
+    pub marker_ratio: f64,
 
-    //// Minimal number of markers for assigning ISSUE label,  (by default == marker_cnt, will typically be set to a value >= marker_cnt)
-    //#[clap(long)]
-    //pub issue_cnt: Option<usize>,
+    /// Minimal number of markers for assigning ISSUE label,  (by default == marker_cnt, will typically be set to a value >= marker_cnt)
+    #[clap(long)]
+    pub issue_cnt: Option<usize>,
 
-    ///// Require at least (node_length / <value>) markers for assigning ISSUE label (by default == marker_sparsity, will typically be set to a value >= marker_sparsity)
-    //#[clap(long)]
-    //pub issue_sparsity: Option<usize>,
+    /// Require at least (node_length / <value>) markers for assigning ISSUE label (by default == marker_sparsity, will typically be set to a value >= marker_sparsity)
+    #[clap(long)]
+    pub issue_sparsity: Option<usize>,
 
-    ///// Nodes with primary marker excess BELOW <value>:1 will be considered for ISSUE label assignment Must be <= marker_ratio (by default: marker_ratio)
-    //#[clap(long)]
-    //pub issue_ratio: Option<f32>,
+    /// Nodes with primary marker excess BELOW <value>:1 will be considered for ISSUE label assignment Must be <= marker_ratio (by default: marker_ratio)
+    #[clap(long)]
+    pub issue_ratio: Option<f64>,
 }
 
 fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
@@ -106,9 +106,9 @@ fn output_coloring(g: &Graph,
     Ok(())
 }
 
-pub fn augment_by_path_search<'a>(g: &'a Graph,
-    assignments: &'a trio::AssignmentStorage<'a>,
-    init_node_len_thr: usize) -> trio::AssignmentStorage<'a> {
+pub fn augment_by_path_search(g: &Graph,
+    assignments: &trio::AssignmentStorage,
+    init_node_len_thr: usize) -> trio::AssignmentStorage {
 
     let mut assigning_path_searcher = trio_walk::HaploSearcher::new_assigning(&g,
         &assignments, init_node_len_thr);
@@ -126,11 +126,8 @@ pub fn augment_by_path_search<'a>(g: &'a Graph,
         match init_assign.group(node_id) {
             None => {
                 info!("Assigning tentative group {:?} to node {}", tentative_group, g.name(node_id));
-                init_assign.assign(node_id, trio::Assignment::<trio::TrioGroup> {
-                    group: tentative_group,
-                    confidence: trio::Confidence::MODERATE,
-                    info: String::from("PreliminaryLaunch"),
-                });},
+                init_assign.assign(node_id, tentative_group, String::from("PreliminaryLaunch"));
+            },
             Some(init_group) => assert!(init_group == tentative_group
                     || init_group == trio::TrioGroup::HOMOZYGOUS),
         }
@@ -154,7 +151,11 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
 
     info!("Assigning initial parental groups to the nodes");
     let init_assign = trio::assign_parental_groups(&g, &trio_infos,
-        settings.marker_cnt, settings.marker_sparsity, settings.marker_ratio);
+        settings.marker_cnt, settings.marker_sparsity, settings.marker_ratio,
+        settings.issue_cnt.unwrap_or(settings.marker_cnt),
+    settings.issue_sparsity.unwrap_or(settings.marker_sparsity),
+        settings.issue_ratio.unwrap_or(settings.marker_ratio),
+    );
     //TODO parameterize
     let init_assign = trio::assign_homozygous(&g, init_assign, 100_000);
     //let init_assign = trio::assign_small_bubbles(&g, init_assign, 100_000);
@@ -178,10 +179,12 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let mut final_assign = path_searcher.used().clone();
 
     for (node_id, _) in g.all_nodes().enumerate() {
-        if !final_assign.contains(node_id) && init_assign.contains(node_id) {
+        if !final_assign.contains(node_id) {
             //FIXME how many times should we report HOMOZYGOUS node?!
             //What if it has never been used? Are we confident enough?
-            final_assign.assign(node_id, init_assign.get(node_id).unwrap().clone())
+            if let Some(init) = init_assign.get(node_id) {
+                final_assign.assign(node_id, init.group, init.info.clone());
+            }
         }
     }
 

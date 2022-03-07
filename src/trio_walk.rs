@@ -11,7 +11,7 @@ const MIN_GAP_SIZE: usize = 1000;
 
 pub struct ExtensionHelper<'a> {
     g: &'a Graph,
-    assignments: &'a AssignmentStorage<'a>,
+    assignments: &'a AssignmentStorage,
     //FIXME rename to 'consider unassigned' or 'allow unassigned'?
     unassigned_compatible: bool,
 }
@@ -129,13 +129,13 @@ impl <'a> ExtensionHelper<'a> {
 //TODO add template parameter
 pub struct HaploSearcher<'a> {
     g: &'a Graph,
-    assignments: &'a AssignmentStorage<'a>,
+    assignments: &'a AssignmentStorage,
     extension_helper: ExtensionHelper<'a>,
     long_node_threshold: usize,
     //path intersections by homozygous nodes are always allowed
     allow_intersections: bool,
     try_fill_ambig: bool,
-    used: AssignmentStorage<'a>,
+    used: AssignmentStorage,
     in_sccs: HashSet<usize>,
     small_tangle_index: HashMap<Vertex, scc::LocalizedTangle>,
 }
@@ -143,7 +143,7 @@ pub struct HaploSearcher<'a> {
 //FIXME review usage of length threshold!
 impl <'a> HaploSearcher<'a> {
 
-    pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage<'a>,
+    pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage,
         long_node_threshold: usize) -> HaploSearcher<'a> {
         let sccs = scc::strongly_connected(g);
         let mut small_tangle_index = HashMap::new();
@@ -161,7 +161,7 @@ impl <'a> HaploSearcher<'a> {
             long_node_threshold,
             allow_intersections: false,
             try_fill_ambig: true,
-            used: AssignmentStorage::new(g),
+            used: AssignmentStorage::new(),
             in_sccs: scc::nodes_in_sccs(g, &sccs),
             extension_helper: ExtensionHelper {
                 g,
@@ -173,7 +173,7 @@ impl <'a> HaploSearcher<'a> {
     }
 
     pub fn new_assigning(g: &'a Graph,
-        assignments: &'a AssignmentStorage<'a>,
+        assignments: &'a AssignmentStorage,
         long_node_threshold: usize) -> HaploSearcher<'a> {
         let mut searcher = Self::new(g, assignments, long_node_threshold);
         searcher.allow_intersections = true;
@@ -182,11 +182,11 @@ impl <'a> HaploSearcher<'a> {
         searcher
     }
 
-    pub fn used(&self) -> &AssignmentStorage<'a> {
+    pub fn used(&self) -> &AssignmentStorage {
         &self.used
     }
 
-    pub fn take_used(self) -> AssignmentStorage<'a> {
+    pub fn take_used(self) -> AssignmentStorage {
         self.used
     }
 
