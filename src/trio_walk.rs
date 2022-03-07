@@ -90,21 +90,6 @@ impl <'a> ExtensionHelper<'a> {
         ext
     }
 
-    //fn potential_jump_ext(&self, v: Vertex, group: TrioGroup,
-    //    long_node_threshold: usize) -> Option<Vertex> {
-    //    //Currently behavior is quite conservative:
-    //    //1. all long nodes ahead should have assignment
-    //    //2. only one should have correct assignment
-    //    //3. this one should have unambiguous path backward to the vertex maybe stopping one link away
-    //    let (long_ahead, _) = dfs::sinks_ahead(self.g, v, long_node_threshold);
-
-    //    //long_ahead.retain(|x| x != &v);
-
-    //    //println!("Long ahead: {}", long_ahead.iter().map(|x| self.g.v_str(*x)).collect::<Vec<String>>().join(";"));
-
-    //    self.only_compatible_of_bearable(long_ahead.iter().filter(|&x| x != &v).copied(), group)
-    //}
-
     fn find_compatible_source_sink(&self, v: Vertex, group:TrioGroup, long_node_threshold: usize)
     -> Option<(Vertex, Vertex)> {
 
@@ -482,28 +467,6 @@ impl <'a> HaploSearcher<'a> {
         }
     }
 
-    //FIXME remove
-    //returns Err if hit some issue (self-intersection, node reuse, etc)
-    //fn merge_all_in(&self, path: &mut Path, opt_jump: Option<Path>, group: TrioGroup) -> Result<usize, ()> {
-    //    match opt_jump {
-    //        None => Ok(0),
-    //        Some(jump) => {
-    //            assert!(jump.len() > 1);
-    //            assert!(path.end() == jump.start());
-    //            if path.can_merge_in(&jump)
-    //                //FIXME check_available includes a stronger check
-    //                //&& (&(jump.vertices())[0..(jump.len() - 1)]).iter().all(|v| !self.in_sccs.contains(&v.node_id))
-    //                && jump.vertices().iter().all(|v| self.check_available(v.node_id, group)) {
-    //                let add_on = jump.len() - 1;
-    //                path.merge_in(jump);
-    //                Ok(add_on)
-    //            } else {
-    //                Err(())
-    //            }
-    //        }
-    //    }
-    //}
-
     fn long_node(&self, node_id: usize) -> bool {
         self.g.node(node_id).length >= self.long_node_threshold
     }
@@ -554,38 +517,6 @@ impl <'a> HaploSearcher<'a> {
         }
         None
     }
-
-    //fn reachable_short(&self, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
-    //    dfs::sinks_ahead(self.g, v, node_len_thr).1
-    //}
-
-    // fn find_jump_path_ahead(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
-    //     let potential_ext = self.extension_helper.potential_jump_ext(v, group, self.long_node_threshold)?;
-    //     debug!("Unique potential extension {}", self.g.v_str(potential_ext));
-    //     let mut p = Path::new(potential_ext.rc());
-    //     debug!("Growing path forward from {}", self.g.v_str(potential_ext.rc()));
-    //     let reachable_short = self.reachable_short(v, self.long_node_threshold);
-    //     self.grow_local(&mut p, group,
-    //         Some(&|x: Vertex| {reachable_short.contains(&x.rc())}));
-    //     debug!("Found path {}", p.print(self.g));
-    //     if !p.in_path(v.node_id) {
-    //         debug!("Tried linking");
-    //         if let Some(ext) = self.try_link(p.end(), v.rc(), group) {
-    //             if p.can_merge_in(&ext) {
-    //                 debug!("Succesful linking");
-    //                 p.merge_in(ext);
-    //             }
-    //         }
-    //     }
-    //     if p.trim_to(&v.rc()) {
-    //         assert!(p.len() > 1);
-    //         let p = p.reverse_complement();
-    //         debug!("Successfully found jump, path {}", p.print(self.g));
-    //         return Some(p);
-    //     }
-    //     debug!("Couldn't trim to vertex {}", self.g.v_str(v.rc()));
-    //     None
-    // }
 
     //FIXME think if require v assignment
     //TODO sometimes limiting the search here could help
@@ -646,37 +577,6 @@ impl <'a> HaploSearcher<'a> {
                                     MIN_GAP_SIZE) as i64,
         }))
     }
-
-    // fn find_gapped_jump_ahead(&self, path: &Path, group:TrioGroup) -> Option<Path> {
-    //     let v = path.end();
-    //     let (u, w) = self.extension_helper.find_compatible_source_sink(v, group, self.long_node_threshold)?;
-    //     if !path.vertices().contains(&u) {
-    //         return None;
-    //     }
-    //     //FIXME optimize, this info should be logged within the short node component
-    //     if !dfs::sinks_ahead(self.g, v, self.long_node_threshold).0.contains(&w) {
-    //         //w can't be reached from v
-    //         return None;
-    //     }
-    //     debug!("Unique potential extension {}", self.g.v_str(w));
-    //     let mut p = Path::new(w.rc());
-    //     debug!("Growing path forward from {}", self.g.v_str(w.rc()));
-    //     //FIXME put reachable nodes function here instead of None
-    //     self.grow_local(&mut p, group, None);
-    //     debug!("Found path {}", p.print(self.g));
-    //     if p.in_path(v.node_id) {
-    //         //should be covered by find_jump_ahead by this point (if possible to extend)
-    //         return None;
-    //     }
-
-    //     //FIXME add size estimate
-    //     p.append_general(GeneralizedLink::AMBIG(GapInfo {
-    //         start: p.end(),
-    //         end: v.rc(),
-    //         gap_size: MIN_GAP_SIZE as i64}));
-
-    //     Some(p.reverse_complement())
-    // }
 
     fn unassigned_or_compatible(&self, node_id: usize, group: TrioGroup) -> bool {
         if let Some(assign_group) = self.assignments.group(node_id) {
