@@ -170,7 +170,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         settings.issue_ratio.unwrap_or(settings.marker_ratio),
     );
     //FIXME parameterize
-    let init_assign = trio::assign_homozygous(&g, init_assign, 100_000);
+    let init_assign = trio::assign_homozygous(&g, init_assign, 200_000);
     //let init_assign = trio::assign_small_bubbles(&g, init_assign, 100_000);
 
     if let Some(output) = &settings.init_assign {
