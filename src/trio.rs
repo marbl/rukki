@@ -356,23 +356,6 @@ impl <'a> HomozygousAssigner<'a> {
         visited_vertices.iter().all(|&x| {
             x == v || self.g.incoming_edges(x).iter().all(
                     |&l| visited_vertices.contains(&l.start))})
-
-        ////FIXME simplify by just checking the absense of edges from nodes outside of visited_vertices
-        //for &v_ahead in &long_ahead {
-        //    let mut dfs = dfs::DFS::new_reverse(self.g);
-        //    dfs.set_max_node_len(self.node_len_thr);
-        //    dfs.extend_blocked(std::iter::once(v));
-        //    dfs.run_from(v_ahead);
-
-        //    //looking back we should only get to v.rc()
-        //    //TODO improve with flow ideas
-        //    //TODO improve performance if necessary
-        //    if dfs.blocked().iter().chain(dfs.boundary().iter())
-        //        .any(|x| !visited_vertices.contains(x)) {
-        //        return false;
-        //    }
-        //}
-        //true
     }
 }
 
