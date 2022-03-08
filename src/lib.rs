@@ -34,6 +34,10 @@ pub struct TrioSettings {
     #[clap(long)]
     pub init_assign: Option<String>,
 
+    /// Refined annotation output file
+    #[clap(long)]
+    pub refined_assign: Option<String>,
+
     /// Final annotation output file
     #[clap(long)]
     pub final_assign: Option<String>,
@@ -184,6 +188,11 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let augment_assign = augment_by_path_search(&g,
         &init_assign,
         init_node_len_thr);
+
+    if let Some(output) = &settings.refined_assign {
+        info!("Writing refined node annotation to {}", output);
+        output_coloring(&g, &init_assign, output)?;
+    }
 
     let mut path_searcher = trio_walk::HaploSearcher::new(&g,
         &augment_assign, init_node_len_thr);
