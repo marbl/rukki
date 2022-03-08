@@ -155,11 +155,14 @@ fn haplo_paths_3() {
     let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
 
     let init_node_len_thr = 500_000;
-    assert_eq!(assignments.assigned().count(), 77);
+    assert_eq!(assignments.assigned().count(), 76);
 
     let augment_assign = augment_by_path_search(&g, &assignments, init_node_len_thr);
 
-    assert_eq!(augment_assign.assigned().count(), 81);
+    assert_eq!(augment_assign.group(g.name2id("utig4-1404")), Some(TrioGroup::PATERNAL));
+    assert_eq!(augment_assign.group(g.name2id("utig4-1403")), Some(TrioGroup::MATERNAL));
+
+    assert_eq!(augment_assign.assigned().count(), 82);
 
     let mut haplo_searcher = trio_walk::HaploSearcher::new(&g,
         &augment_assign, init_node_len_thr);
@@ -169,7 +172,7 @@ fn haplo_paths_3() {
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,
-            String::from("utig4-4093-,utig4-3587-,utig4-3588+,utig4-4041-,utig4-3592+,utig4-1535-,utig4-1533-,utig4-1529-,utig4-1531+,utig4-1892-,utig4-925-,utig4-923+,utig4-926+,utig4-1595+,utig4-1597+,utig4-1896+,utig4-1619-,utig4-1617+,utig4-65-,utig4-64+,utig4-67+,AMBIG,utig4-1477-,utig4-1476+,AMBIG,utig4-1249+,utig4-1252+,utig4-1254+,utig4-3626+,utig4-3631+,utig4-1027-,utig4-1025-,utig4-1022-,utig4-1019-,utig4-1020+,utig4-1387+,AMBIG,utig4-1392+,utig4-1393+,utig4-1450+,utig4-1451+,utig4-1795+,utig4-1406-,utig4-1402-,AMBIG,utig4-3448-,utig4-1409+,utig4-3446-,GAP,utig4-3456-")),
+            String::from("utig4-4093-,utig4-3587-,utig4-3588+,utig4-4041-,utig4-3592+,utig4-1535-,utig4-1533-,utig4-1529-,utig4-1531+,utig4-1892-,utig4-925-,utig4-923+,utig4-926+,utig4-1595+,utig4-1597+,utig4-1896+,utig4-1619-,utig4-1617+,utig4-65-,utig4-64+,utig4-67+,AMBIG,utig4-1477-,utig4-1476+,AMBIG,utig4-1249+,utig4-1252+,utig4-1254+,utig4-3626+,utig4-3631+,utig4-1027-,utig4-1025-,utig4-1022-,utig4-1019-,utig4-1020+,utig4-1387+,AMBIG,utig4-1392+,utig4-1393+,utig4-1450+,utig4-1451+,utig4-1795+,utig4-1406-,utig4-1402-,utig4-1403+,utig4-3448-,utig4-1409+,utig4-3446-,GAP,utig4-3456-")),
         (TrioGroup::PATERNAL,
             String::from("utig4-3455-,utig4-3445-,utig4-3447+,utig4-1410-,utig4-1408-,utig4-1404-,utig4-1402+,utig4-1405+,utig4-1795-,utig4-1452-,utig4-1450-,utig4-1394-,utig4-1392-,AMBIG,utig4-1387-,utig4-1021-,utig4-1019+,utig4-1023+,utig4-1024+,utig4-1026+,utig4-3630-,utig4-3626-,utig4-3627+,utig4-1257-,utig4-1253-,utig4-1249-,AMBIG,utig4-1476-,utig4-1478+,utig4-3650-,utig4-68-,utig4-64-,utig4-66+,utig4-1617-,utig4-1618+,utig4-1896-,utig4-1596-,utig4-1595-,utig4-927-,utig4-923-,utig4-924+,utig4-1892+,utig4-1530-,utig4-1529+,utig4-1532+,utig4-1534+,utig4-3593-,utig4-3591-,utig4-3589-,GAP,utig4-3384+"))]);
 }
