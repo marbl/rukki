@@ -258,7 +258,7 @@ impl <'a> HaploSearcher<'a> {
         } else if self.try_fill_ambig {
             debug!("Will try to patch the gap between forward/backward paths");
             //if paths don't overlap -- try linking
-            if let Some(link_p) = self.try_link(p1.end(), p2.end(), group) {
+            if let Some(link_p) = self.try_link(p1.end(), p2.start(), group) {
                 //TODO simplify? Here we know that p1 and p2 don't have common nodes
                 if p1.can_merge_in(&link_p) && link_p.can_merge_in(&p2) {
                     debug!("Patch succesful");
