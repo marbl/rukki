@@ -2,7 +2,7 @@ use std::fs;
 use std::fs::File;
 use std::error::Error;
 use std::io::Write;
-use log::info;
+use log::{info,debug};
 use std::collections::HashSet;
 
 //tests don't compile without the pub
@@ -34,7 +34,7 @@ pub struct TrioSettings {
     #[clap(long)]
     pub init_assign: Option<String>,
 
-    /// Path-based annotation output file
+    /// Final annotation output file
     #[clap(long)]
     pub final_assign: Option<String>,
 
@@ -109,6 +109,19 @@ fn output_coloring(g: &Graph,
 pub fn augment_by_path_search(g: &Graph,
     assignments: &trio::AssignmentStorage,
     init_node_len_thr: usize) -> trio::AssignmentStorage {
+    info!("Augmenting node annotation by path search. Round 1.");
+    let augment_assign = augment_by_path_search_round(&g,
+        &assignments,
+        init_node_len_thr);
+    info!("Augmenting node annotation by path search. Round 2.");
+    augment_by_path_search_round(&g,
+        &augment_assign,
+        init_node_len_thr)
+}
+
+fn augment_by_path_search_round(g: &Graph,
+    assignments: &trio::AssignmentStorage,
+    init_node_len_thr: usize) -> trio::AssignmentStorage {
 
     let mut assigning_path_searcher = trio_walk::HaploSearcher::new_assigning(&g,
         &assignments, init_node_len_thr);
@@ -125,8 +138,8 @@ pub fn augment_by_path_search(g: &Graph,
         }
         match init_assign.group(node_id) {
             None => {
-                info!("Assigning tentative group {:?} to node {}", tentative_group, g.name(node_id));
-                init_assign.assign(node_id, tentative_group, String::from("PreliminaryLaunch"));
+                debug!("Assigning tentative group {:?} to node {}", tentative_group, g.name(node_id));
+                init_assign.assign(node_id, tentative_group, String::from("PreliminaryPathSearch"));
             },
             Some(init_group) => assert!(init_group == tentative_group
                     || init_group == trio::TrioGroup::HOMOZYGOUS),
@@ -156,7 +169,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     settings.issue_sparsity.unwrap_or(settings.marker_sparsity),
         settings.issue_ratio.unwrap_or(settings.marker_ratio),
     );
-    //TODO parameterize
+    //FIXME parameterize
     let init_assign = trio::assign_homozygous(&g, init_assign, 100_000);
     //let init_assign = trio::assign_small_bubbles(&g, init_assign, 100_000);
 
@@ -166,6 +179,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     }
 
     let init_node_len_thr = 500_000;
+
     //FIXME parameterize
     let augment_assign = augment_by_path_search(&g,
         &init_assign,
