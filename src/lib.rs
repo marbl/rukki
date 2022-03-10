@@ -2,7 +2,7 @@ use std::fs;
 use std::fs::File;
 use std::error::Error;
 use std::io::Write;
-use log::{info,debug};
+use log::{info,warn,debug};
 use std::collections::HashSet;
 
 //tests don't compile without the pub
@@ -80,6 +80,10 @@ pub struct TrioSettings {
     /// Require primary marker excess BELOW <value>:1 for assigning ISSUE label. Must be <= marker_ratio (by default == marker_ratio)
     #[clap(long)]
     pub issue_ratio: Option<f64>,
+
+    /// Only nodes with coverage above <coeff> * <weighted mean coverage of 'solid' nodes> can be 'reclassified' as homozygous (negative turns off reclassification, 0. disables coverage check)
+    #[clap(long, default_value_t = 1.5)]
+    pub suspect_homozygous_cov_coeff: f64,
 }
 
 fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
@@ -165,6 +169,18 @@ fn augment_assignments(g: &Graph,
     assignments
 }
 
+fn weighted_mean_solid_cov(g: &Graph, solid_len_thr: usize) -> f64 {
+    let mut total_len = 0;
+    let mut total_cov = 0.;
+    for n in g.all_nodes() {
+        if n.length >= solid_len_thr {
+            total_len += n.length;
+            total_cov += n.coverage * (n.length as f64);
+        }
+    }
+    total_cov / total_len as f64
+}
+
 pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> {
     let g = read_graph(&settings.graph)?;
 
@@ -187,15 +203,25 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         settings.issue_ratio.unwrap_or(settings.marker_ratio),
     );
 
-    let assignments = trio::assign_homozygous(&g,
-        assignments, settings.trusted_len);
-
     if let Some(output) = &settings.init_assign {
         info!("Writing initial node annotation to {output}");
         output_coloring(&g, &assignments, output)?;
     }
 
     let solid_len_thr = settings.solid_len;
+
+    let suspect_homozygous_cov_thr = if settings.suspect_homozygous_cov_coeff <= 0. {
+        settings.suspect_homozygous_cov_coeff
+    } else {
+        let unique_est = weighted_mean_solid_cov(&g, solid_len_thr);
+        if unique_est == 0. {
+            warn!("Looks like the graph didn't have coverage information, which we were hoping to use. Consider providing it or changing --suspect-homozygous-cov-coeff");
+        }
+        settings.suspect_homozygous_cov_coeff * unique_est
+    };
+
+    let assignments = trio::assign_homozygous(&g, assignments,
+        settings.trusted_len, suspect_homozygous_cov_thr);
 
     let assignments = augment_by_path_search(&g,
         assignments,
@@ -273,7 +299,6 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
                     }
                 }
             }
-
         }
     }
 
