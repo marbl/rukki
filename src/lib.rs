@@ -13,11 +13,9 @@ pub mod trio;
 pub mod trio_walk;
 pub mod pseudo_hap;
 
-pub use graph::Graph;
-pub use graph::Vertex;
-pub use graph::Path;
-pub use graph::Link;
-pub use graph::Direction;
+pub use graph::*;
+
+use crate::trio::TrioGroup;
 
 //TODO use PathBuf
 #[derive(clap::Args)]
@@ -120,45 +118,51 @@ fn output_coloring(g: &Graph,
 }
 
 pub fn augment_by_path_search(g: &Graph,
-    assignments: &trio::AssignmentStorage,
+    assignments: trio::AssignmentStorage,
     solid_len_thr: usize) -> trio::AssignmentStorage {
     info!("Augmenting node annotation by path search. Round 1.");
-    let augment_assign = augment_by_path_search_round(&g,
-        &assignments,
+    let assignments = augment_by_path_search_round(&g,
+        assignments,
         solid_len_thr);
     info!("Augmenting node annotation by path search. Round 2.");
     augment_by_path_search_round(&g,
-        &augment_assign,
+        assignments,
         solid_len_thr)
 }
 
 fn augment_by_path_search_round(g: &Graph,
-    assignments: &trio::AssignmentStorage,
+    assignments: trio::AssignmentStorage,
     solid_len_thr: usize) -> trio::AssignmentStorage {
 
     let mut path_searcher = trio_walk::HaploSearcher::new_assigning(&g,
         &assignments, solid_len_thr);
 
     path_searcher.find_all();
-    let tentative_assignments = path_searcher.used();
+    let node_usage = path_searcher.take_used();
+    augment_assignments(g, assignments, &node_usage, true)
+}
 
-    let mut init_assign = assignments.clone();
-    for node_id in tentative_assignments.assigned() {
-        let tentative_group = tentative_assignments.group(node_id).unwrap();
+fn augment_assignments(g: &Graph,
+    mut assignments: trio::AssignmentStorage,
+    extra_assignments: &trio::AssignmentStorage,
+    exclude_homozygous: bool) -> trio::AssignmentStorage {
+    for node_id in extra_assignments.assigned() {
+        let tentative_group = extra_assignments.group(node_id).unwrap();
+        assert!(tentative_group != TrioGroup::ISSUE);
         //any mixed assignment has chance to be erroneous due to graph issues
-        if !tentative_group.is_definite() {
+        if exclude_homozygous && !tentative_group.is_definite() {
             continue;
         }
-        match init_assign.group(node_id) {
+        match assignments.group(node_id) {
             None => {
                 debug!("Assigning tentative group {:?} to node {}", tentative_group, g.name(node_id));
-                init_assign.assign(node_id, tentative_group, String::from("PreliminaryPathSearch"));
+                assignments.assign(node_id, tentative_group, String::from("PathSearch"));
             },
             Some(init_group) => assert!(init_group == tentative_group
                     || init_group == trio::TrioGroup::HOMOZYGOUS),
         }
     }
-    init_assign
+    assignments
 }
 
 pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> {
@@ -176,51 +180,48 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let trio_infos = trio::read_trio(&fs::read_to_string(&settings.markers)?);
 
     info!("Assigning initial parental groups to the nodes");
-    let init_assign = trio::assign_parental_groups(&g, &trio_infos,
+    let assignments = trio::assign_parental_groups(&g, &trio_infos,
         settings.marker_cnt, settings.marker_sparsity, settings.marker_ratio,
         settings.issue_cnt.unwrap_or(settings.marker_cnt),
     settings.issue_sparsity.unwrap_or(settings.marker_sparsity),
         settings.issue_ratio.unwrap_or(settings.marker_ratio),
     );
 
-    let init_assign = trio::assign_homozygous(&g,
-        init_assign, settings.trusted_len);
+    let assignments = trio::assign_homozygous(&g,
+        assignments, settings.trusted_len);
 
     if let Some(output) = &settings.init_assign {
-        info!("Writing initial node annotation to {}", output);
-        output_coloring(&g, &init_assign, output)?;
+        info!("Writing initial node annotation to {output}");
+        output_coloring(&g, &assignments, output)?;
     }
 
     let solid_len_thr = settings.solid_len;
 
-    let augment_assign = augment_by_path_search(&g,
-        &init_assign,
+    let assignments = augment_by_path_search(&g,
+        assignments,
         solid_len_thr);
 
     if let Some(output) = &settings.refined_assign {
-        info!("Writing refined node annotation to {}", output);
-        output_coloring(&g, &init_assign, output)?;
+        info!("Writing refined node annotation to {output}");
+        output_coloring(&g, &assignments, output)?;
     }
 
     let mut path_searcher = trio_walk::HaploSearcher::new(&g,
-        &augment_assign, solid_len_thr);
+        &assignments, solid_len_thr);
 
     let haplo_paths = path_searcher.find_all();
+    let node_usage = path_searcher.take_used();
 
-    let mut final_assign = path_searcher.used().clone();
+    let assignments = augment_assignments(&g, assignments,
+        &node_usage, false);
 
-    for (node_id, _) in g.all_nodes().enumerate() {
-        if !final_assign.contains(node_id) {
-            //FIXME how many times should we report HOMOZYGOUS node?!
-            //What if it has never been used? Are we confident enough?
-            if let Some(init) = init_assign.get(node_id) {
-                final_assign.assign(node_id, init.group, init.info.clone());
-            }
-        }
+    if let Some(output) = &settings.final_assign {
+        info!("Writing final node annotation to {output}");
+        output_coloring(&g, &assignments, output)?;
     }
 
     if let Some(output) = &settings.paths {
-        info!("Searching for haplo-paths, output in {}", output);
+        info!("Outputting haplo-paths to {output}");
         let mut output = File::create(output)?;
 
         writeln!(output, "name\tpath\tassignment\tinit_node")?;
@@ -234,28 +235,46 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
                 g.node(node_id).name)?;
         }
 
+        let mut write_node = |n: &Node, group: Option<TrioGroup>| {
+            let group_str = group.map_or(String::from("NA"), |x| format!("{:?}", x));
+            writeln!(output, "unused_{}_len_{}\t{}\t{}\t{}",
+                n.name,
+                n.length,
+                Direction::format_node(&n.name, Direction::FORWARD, settings.gaf_format),
+                group_str,
+                n.name)
+        };
+
         for (node_id, n) in g.all_nodes().enumerate() {
-            if !path_searcher.used().contains(node_id) {
-                let group_str = init_assign
-                    .group(node_id)
-                    .map_or(String::from("NA"), |x| format!("{:?}", x));
-
-                //println!("Unused node: {} length: {} group: {}", n.name, n.length, group_str);
-                writeln!(output, "unused_{}_len_{}\t{}\t{}\t{}",
-                    n.name,
-                    n.length,
-                    Path::new(Vertex::forward(node_id)).print_format(&g, settings.gaf_format),
-                    group_str,
-                    node_id)?;
+            let haplopath_assign = node_usage.group(node_id);
+            match assignments.group(node_id) {
+                None | Some(TrioGroup::ISSUE) => {
+                    assert!(!node_usage.contains(node_id));
+                    debug!("Node: {} length: {} not assigned to any haplotype (adding trivial NA path)",
+                        n.name, n.length);
+                    write_node(g.node(node_id), None)?;
+                }
+                Some(assign) => {
+                    if TrioGroup::compatible(assign, TrioGroup::MATERNAL)
+                        //not present in haplopaths paths or incompatible
+                        && haplopath_assign.map_or(true,
+                            |x| TrioGroup::incompatible(x, TrioGroup::MATERNAL)) {
+                        debug!("Node: {} length: {} not present in MATERNAL haplo-paths (adding trivial MATERNAL path)",
+                            n.name, n.length);
+                        write_node(g.node(node_id), Some(TrioGroup::MATERNAL))?;
+                    }
+                    if TrioGroup::compatible(assign, TrioGroup::PATERNAL)
+                        //not present in haplopaths paths or incompatible
+                        && haplopath_assign.map_or(true,
+                            |x| TrioGroup::incompatible(x, TrioGroup::PATERNAL)) {
+                        debug!("Node: {} length: {} not present in PATERNAL haplo-paths (adding trivial PATERNAL path)",
+                            n.name, n.length);
+                        write_node(g.node(node_id), Some(TrioGroup::PATERNAL))?;
+                    }
+                }
             }
-            //FIXME how many times should we report HOMOZYGOUS node?!
-            //What if it has never been used? Are we confident enough?
-        }
-    }
 
-    if let Some(output) = &settings.final_assign {
-        info!("Writing final node annotation to {}", output);
-        output_coloring(&g, &final_assign, output)?;
+        }
     }
 
     info!("All done");

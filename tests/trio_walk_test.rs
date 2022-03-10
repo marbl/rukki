@@ -58,7 +58,7 @@ fn augment_by_search() {
     let init_node_len_thr = 500_000;
     assert_eq!(assignments.assigned().count(), 14);
 
-    let augment_assign = augment_by_path_search(&g, &assignments, init_node_len_thr);
+    let augment_assign = augment_by_path_search(&g, assignments, init_node_len_thr);
 
     assert_eq!(augment_assign.assigned().count(), 17);
     assert_eq!(augment_assign.group(g.name2id("utig4-1421")), Some(TrioGroup::PATERNAL));
@@ -90,7 +90,7 @@ fn path_closing() {
     let init_node_len_thr = 500_000;
     assert_eq!(assignments.assigned().count(), 26);
 
-    let augment_assign = augment_by_path_search(&g, &assignments, init_node_len_thr);
+    let augment_assign = augment_by_path_search(&g, assignments, init_node_len_thr);
 
     assert_eq!(augment_assign.assigned().count(), 28);
     assert_eq!(augment_assign.group(g.name2id("utig4-1397")), Some(TrioGroup::MATERNAL));
@@ -125,7 +125,7 @@ fn haplo_paths_2() {
     let init_node_len_thr = 500_000;
     assert_eq!(assignments.assigned().count(), 42);
 
-    let augment_assign = augment_by_path_search(&g, &assignments, init_node_len_thr);
+    let augment_assign = augment_by_path_search(&g, assignments, init_node_len_thr);
 
     assert_eq!(augment_assign.group(g.name2id("utig4-414")), Some(TrioGroup::MATERNAL));
     assert_eq!(augment_assign.group(g.name2id("utig4-308")), Some(TrioGroup::MATERNAL));
@@ -157,7 +157,7 @@ fn haplo_paths_3() {
     let init_node_len_thr = 500_000;
     assert_eq!(assignments.assigned().count(), 76);
 
-    let augment_assign = augment_by_path_search(&g, &assignments, init_node_len_thr);
+    let augment_assign = augment_by_path_search(&g, assignments, init_node_len_thr);
 
     assert_eq!(augment_assign.group(g.name2id("utig4-1404")), Some(TrioGroup::PATERNAL));
     assert_eq!(augment_assign.group(g.name2id("utig4-1403")), Some(TrioGroup::MATERNAL));

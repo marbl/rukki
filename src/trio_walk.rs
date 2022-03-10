@@ -125,6 +125,8 @@ pub struct HaploSearcher<'a> {
     small_tangle_index: HashMap<Vertex, scc::LocalizedTangle>,
 }
 
+type HaploPath = (Path, usize, TrioGroup);
+
 //FIXME review usage of length threshold!
 impl <'a> HaploSearcher<'a> {
 
@@ -167,6 +169,7 @@ impl <'a> HaploSearcher<'a> {
         searcher
     }
 
+    //FIXME return from find_all
     pub fn used(&self) -> &AssignmentStorage {
         &self.used
     }
@@ -176,7 +179,7 @@ impl <'a> HaploSearcher<'a> {
     }
 
     //TODO maybe use single length threshold?
-    pub fn find_all(&mut self) -> Vec<(Path, usize, TrioGroup)> {
+    pub fn find_all(&mut self) -> Vec<HaploPath> {
         let mut answer = Vec::new();
         let mut nodes: Vec<(usize, &Node)> = self.g.all_nodes().enumerate().collect();
         nodes.sort_by_key(|(_, n)| n.length);

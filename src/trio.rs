@@ -6,6 +6,7 @@ use crate::graph_algos::dfs;
 use crate::graph_algos::superbubble;
 use std::cmp::{min, max};
 
+//TODO add UNASSIGNED to display useful info for all nodes
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum TrioGroup {
     MATERNAL,
@@ -50,6 +51,7 @@ impl TrioGroup {
             }
         }
     }
+
 }
 
 #[derive(Clone, Debug)]

@@ -10,7 +10,7 @@ pub enum Direction {
 }
 
 impl Direction {
-    fn flip(d: Direction) -> Direction {
+    pub fn flip(d: Direction) -> Direction {
         match d {
             Self::FORWARD => Self::REVERSE,
             Self::REVERSE => Self::FORWARD,
@@ -30,17 +30,25 @@ impl Direction {
         Self::parse_char(s.chars().next().unwrap())
     }
 
-    fn str(d: Direction) -> &'static str {
+    pub fn str(d: Direction) -> &'static str {
         match d {
             Self::FORWARD => "+",
             Self::REVERSE => "-",
         }
     }
 
-    fn gaf_str(d: Direction) -> &'static str {
+    pub fn gaf_str(d: Direction) -> &'static str {
         match d {
             Self::FORWARD => ">",
             Self::REVERSE => "<",
+        }
+    }
+
+    pub fn format_node(name: &str, d: Direction, gaf: bool) -> String {
+        if gaf {
+            format!("{}{}", Direction::gaf_str(d), name)
+        } else {
+            format!("{}{}", name, Direction::str(d))
         }
     }
 }
@@ -486,11 +494,7 @@ impl Graph {
     }
 
     pub fn v_str_format(&self, v: Vertex, gaf: bool) -> String {
-        if gaf {
-            format!("{}{}", Direction::gaf_str(v.direction), self.node(v.node_id).name)
-        } else {
-            format!("{}{}", self.node(v.node_id).name, Direction::str(v.direction))
-        }
+        Direction::format_node(&self.node(v.node_id).name, v.direction, gaf)
     }
 
     pub fn v_str(&self, v: Vertex) -> String {
