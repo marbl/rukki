@@ -62,6 +62,15 @@ pub struct TrioSettings {
     #[clap(long, default_value_t = 5.0)]
     pub marker_ratio: f64,
 
+    /// Longer nodes are unlikely to be spurious and likely to be reliably assigned based on markers (used in HOMOZYGOUS node labeling)
+    #[clap(long, default_value_t = 200_000)]
+    pub trusted_len: usize,
+
+    //TODO maybe check that it is > trusted_len
+    /// Longer nodes are unlikely to represent repeats, polymorphic variants, etc (used to seed and guide the path search)
+    #[clap(long, default_value_t = 500_000)]
+    pub solid_len: usize,
+
     /// Minimal number of markers for assigning ISSUE label (by default == marker_cnt, will typically be set to a value >= marker_cnt)
     #[clap(long)]
     pub issue_cnt: Option<usize>,
@@ -112,26 +121,26 @@ fn output_coloring(g: &Graph,
 
 pub fn augment_by_path_search(g: &Graph,
     assignments: &trio::AssignmentStorage,
-    init_node_len_thr: usize) -> trio::AssignmentStorage {
+    solid_len_thr: usize) -> trio::AssignmentStorage {
     info!("Augmenting node annotation by path search. Round 1.");
     let augment_assign = augment_by_path_search_round(&g,
         &assignments,
-        init_node_len_thr);
+        solid_len_thr);
     info!("Augmenting node annotation by path search. Round 2.");
     augment_by_path_search_round(&g,
         &augment_assign,
-        init_node_len_thr)
+        solid_len_thr)
 }
 
 fn augment_by_path_search_round(g: &Graph,
     assignments: &trio::AssignmentStorage,
-    init_node_len_thr: usize) -> trio::AssignmentStorage {
+    solid_len_thr: usize) -> trio::AssignmentStorage {
 
-    let mut assigning_path_searcher = trio_walk::HaploSearcher::new_assigning(&g,
-        &assignments, init_node_len_thr);
+    let mut path_searcher = trio_walk::HaploSearcher::new_assigning(&g,
+        &assignments, solid_len_thr);
 
-    assigning_path_searcher.find_all();
-    let tentative_assignments = assigning_path_searcher.used();
+    path_searcher.find_all();
+    let tentative_assignments = path_searcher.used();
 
     let mut init_assign = assignments.clone();
     for node_id in tentative_assignments.assigned() {
@@ -173,21 +182,20 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     settings.issue_sparsity.unwrap_or(settings.marker_sparsity),
         settings.issue_ratio.unwrap_or(settings.marker_ratio),
     );
-    //FIXME parameterize
-    let init_assign = trio::assign_homozygous(&g, init_assign, 200_000);
-    //let init_assign = trio::assign_small_bubbles(&g, init_assign, 100_000);
+
+    let init_assign = trio::assign_homozygous(&g,
+        init_assign, settings.trusted_len);
 
     if let Some(output) = &settings.init_assign {
         info!("Writing initial node annotation to {}", output);
         output_coloring(&g, &init_assign, output)?;
     }
 
-    let init_node_len_thr = 500_000;
+    let solid_len_thr = settings.solid_len;
 
-    //FIXME parameterize
     let augment_assign = augment_by_path_search(&g,
         &init_assign,
-        init_node_len_thr);
+        solid_len_thr);
 
     if let Some(output) = &settings.refined_assign {
         info!("Writing refined node annotation to {}", output);
@@ -195,7 +203,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     }
 
     let mut path_searcher = trio_walk::HaploSearcher::new(&g,
-        &augment_assign, init_node_len_thr);
+        &augment_assign, solid_len_thr);
 
     let haplo_paths = path_searcher.find_all();
 
