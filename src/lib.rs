@@ -64,10 +64,18 @@ pub struct TrioSettings {
     #[clap(long, default_value_t = 200_000)]
     pub trusted_len: usize,
 
+    /// Nodes with coverage below <coeff> * <weighted mean coverage of 'solid' nodes> can not be 'reclassified' as homozygous (negative turns off reclassification, 0. disables coverage check)
+    #[clap(long, default_value_t = 1.5)]
+    pub suspect_homozygous_cov_coeff: f64,
+
     //TODO maybe check that it is > trusted_len
     /// Longer nodes are unlikely to represent repeats, polymorphic variants, etc (used to seed and guide the path search)
     #[clap(long, default_value_t = 500_000)]
     pub solid_len: usize,
+
+    /// Minimal node length for assigning ISSUE label
+    #[clap(long, default_value_t = 50_000)]
+    pub issue_len: usize,
 
     /// Minimal number of markers for assigning ISSUE label (by default == marker_cnt, will typically be set to a value >= marker_cnt)
     #[clap(long)]
@@ -81,9 +89,6 @@ pub struct TrioSettings {
     #[clap(long)]
     pub issue_ratio: Option<f64>,
 
-    /// Only nodes with coverage above <coeff> * <weighted mean coverage of 'solid' nodes> can be 'reclassified' as homozygous (negative turns off reclassification, 0. disables coverage check)
-    #[clap(long, default_value_t = 1.5)]
-    pub suspect_homozygous_cov_coeff: f64,
 }
 
 fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
@@ -198,6 +203,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     info!("Assigning initial parental groups to the nodes");
     let assignments = trio::assign_parental_groups(&g, &trio_infos,
         settings.marker_cnt, settings.marker_sparsity, settings.marker_ratio,
+        settings.issue_len,
         settings.issue_cnt.unwrap_or(settings.marker_cnt),
     settings.issue_sparsity.unwrap_or(settings.marker_sparsity),
         settings.issue_ratio.unwrap_or(settings.marker_ratio),

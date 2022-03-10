@@ -165,6 +165,7 @@ impl <'a> AssignmentStorage {
 
 pub fn assign_parental_groups(g: &Graph, trio_infos: &[TrioInfo],
         assign_cnt: usize, assign_sparsity: usize, assign_ratio: f64,
+        issue_len: usize,
         issue_cnt: usize, issue_sparsity: usize, issue_ratio: f64) -> AssignmentStorage {
     let mut assignments = AssignmentStorage::new();
 
@@ -183,7 +184,7 @@ pub fn assign_parental_groups(g: &Graph, trio_infos: &[TrioInfo],
     let issue_node_f = |x: usize, y: usize, node_len: usize| {
         assert!(x >= y);
         let tot = x + y;
-        tot >= issue_cnt && node_len <= tot * issue_sparsity
+        node_len >= issue_len && tot >= issue_cnt && node_len <= tot * issue_sparsity
             && (x as f64) < issue_ratio * (y as f64) - 1e-6
     };
 
