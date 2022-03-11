@@ -504,7 +504,7 @@ impl <'a> HaploSearcher<'a> {
     //FIXME rename
     fn generalized_patch_forward(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
         //FIXME configure
-        if let Some(gap_info) = self.generalized_gap(v, group, 100_000) {
+        if let Some(gap_info) = self.generalized_gap(v, group, 200_000) {
             let next_node = gap_info.end.node_id;
             assert!(self.assignments.group(next_node) == Some(group));
             debug!("Identified jump across 'generalized' gap to {}", self.g.v_str(gap_info.end));
