@@ -563,7 +563,7 @@ impl <'a> HaploSearcher<'a> {
     //FIXME think if require v assignment
     //TODO sometimes limiting the search here could help
     fn choose_simple_bubble_side(&self, v: Vertex, group: TrioGroup) -> Option<GeneralizedLink> {
-        const FILLABLE_BUBBLE_LEN: i64 = 1000;
+        const FILLABLE_BUBBLE_LEN: i64 = 10000;
         const FILLABLE_BUBBLE_DIFF: i64 = 200;
         if self.ambig_filling_level < 2 {
             return None;
