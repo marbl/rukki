@@ -290,7 +290,7 @@ fn is_deadend(g: &Graph, v: Vertex) -> bool {
 fn visited_if_reachable(g: &Graph, v: Vertex, w: Vertex,
     direction: dfs::TraversalDirection, max_node_len: usize)
     -> Option<HashSet<Vertex>> {
-    let mut dfs = dfs::DFS::new(g, direction);
+    let mut dfs = dfs::DFS::new(g, direction, None);
     dfs.set_max_node_len(max_node_len);
     dfs.extend_blocked(std::iter::once(w));
     dfs.run_from(v);

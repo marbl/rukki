@@ -7,6 +7,31 @@ use scc::only_or_none;
 use log::{debug,warn};
 use std::collections::{HashSet,HashMap};
 
+// pub fn reachable_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
+//     let (sinks, mut short_ahead) = sinks_ahead(g, v, node_len_thr);
+//     short_ahead.extend(&sinks);
+//     short_ahead
+// }
+
+// pub fn reachable_behind(g: &Graph, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
+//     let (sources, mut short_behind) = sources_behind(g, v, node_len_thr);
+//     short_behind.extend(&sources);
+//     short_behind
+// }
+
+//TODO optimize
+pub fn reachable_between(g: &Graph, v: Vertex, w: Vertex,
+    node_len_thr: usize, subgraph_f: Option<&dyn Fn(Vertex)->bool>) -> HashSet<Vertex> {
+    let (sinks, mut short_ahead) = dfs::sinks_ahead(g, v, node_len_thr, subgraph_f);
+    short_ahead.extend(&sinks);
+    let (sources, mut short_behind) = dfs::sources_behind(g, w, node_len_thr, subgraph_f);
+    short_behind.extend(&sources);
+
+    short_ahead
+        .intersection(&short_behind)
+        .copied().collect()
+}
+
 const MIN_GAP_SIZE: usize = 1000;
 
 pub struct ExtensionHelper<'a> {
@@ -78,7 +103,7 @@ impl <'a> ExtensionHelper<'a> {
             let l = filtered_outgoing[0];
             if self.assignments.group(l.end.node_id).map_or(true,
                 |g| TrioGroup::compatible(g, group)) {
-                debug!("Candidate adjacent extension {} (was unique considered)", self.g.l_str(l));
+                debug!("Candidate adjacent extension {} (was unique considered)", self.g.v_str(l.end));
                 return Some(l);
             }
         }
@@ -230,8 +255,16 @@ impl <'a> HaploSearcher<'a> {
 
         debug!("Found next 'target' vertex {}", self.g.v_str(w));
 
-        let reachable_vertices = dfs::reachable_between(self.g, v, w,
-                                                          self.solid_len);
+        let mut reachable_vertices =
+            reachable_between(self.g, v, w,
+                self.solid_len,
+                Some(&|x: Vertex| self.unassigned_or_compatible(x.node_id, group)));
+
+        if reachable_vertices.len() == 0 {
+            reachable_vertices =
+                reachable_between(self.g, v, w,
+                    self.solid_len, None);
+        }
 
         let mut p1 = Path::new(v);
         debug!("Constrained forward extension from {}", self.g.v_str(v));

@@ -16,6 +16,7 @@ pub enum TraversalDirection {
 pub struct DFS<'a> {
     g: &'a Graph,
     direction: TraversalDirection,
+    consider_f: Option<&'a dyn Fn(Vertex)->bool>,
     blocked: HashSet<Vertex>,
     tout: Vec<Vertex>,
     node_len_thr: usize,
@@ -23,10 +24,13 @@ pub struct DFS<'a> {
 
 impl<'a> DFS<'a> {
 
-    pub fn new(g: &'a Graph, direction: TraversalDirection) -> DFS<'a> {
+    pub fn new(g: &'a Graph,
+        direction: TraversalDirection,
+        consider_f: Option<&'a dyn Fn(Vertex)->bool>) -> DFS<'a> {
         DFS {
             g,
             direction,
+            consider_f,
             blocked: HashSet::new(),
             tout: Vec::new(),
             node_len_thr: usize::MAX,
@@ -34,11 +38,11 @@ impl<'a> DFS<'a> {
     }
 
     pub fn new_forward(g: &'a Graph) -> DFS<'a> {
-        Self::new(g, TraversalDirection::FORWARD)
+        Self::new(g, TraversalDirection::FORWARD, None)
     }
 
     pub fn new_reverse(g: &'a Graph) -> DFS<'a> {
-        Self::new(g, TraversalDirection::REVERSE)
+        Self::new(g, TraversalDirection::REVERSE, None)
     }
 
     //FIXME make consume self and return new DFS
@@ -60,9 +64,13 @@ impl<'a> DFS<'a> {
     fn neighbors(&self, v: Vertex) -> Vec<Vertex> {
         match self.direction {
             TraversalDirection::FORWARD => self.g.outgoing_edges(v).iter()
-                                                 .map(|l| l.end).collect(),
+                                                 .map(|l| l.end)
+                                                 .filter(|&x| self.consider_f.is_none()
+                                                    || self.consider_f.unwrap()(x)).collect(),
             TraversalDirection::REVERSE => self.g.incoming_edges(v).iter()
-                                                 .map(|l| l.start).collect(),
+                                                 .map(|l| l.start)
+                                                 .filter(|&x| self.consider_f.is_none()
+                                                    || self.consider_f.unwrap()(x)).collect(),
         }
     }
 
@@ -120,21 +128,28 @@ impl<'a> DFS<'a> {
         boundary.into_iter().collect()
     }
 
+    //TODO return iterator?
+    //return nodes that didn't have any neighbors
+    pub fn dead_ends(&self) -> Vec<Vertex> {
+        self.exit_order().iter().filter(|&v| self.neighbors(*v).len() == 0).copied().collect()
+    }
+
 }
 
 //includes boundary vertices (longer than threshold) and visited dead-ends
 //currently will include v if it's a dead-end (but not if it's longer than threshold)
 //returns pair of sinks and all ('inner') visited vertices
 //visited vertices will overlap sinks by short dead-ends
-pub fn sinks_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> (Vec<Vertex>, HashSet<Vertex>) {
-    let mut dfs = DFS::new_forward(g);
+pub fn sinks_ahead(g: &Graph, v: Vertex, node_len_thr: usize,
+    subgraph_f: Option<&dyn Fn(Vertex)->bool>) -> (Vec<Vertex>, HashSet<Vertex>) {
+    let mut dfs = DFS::new(g, TraversalDirection::FORWARD, subgraph_f);
     dfs.set_max_node_len(node_len_thr);
     //inner_dfs(g, v, node_len_thr, &mut visited, &mut border);
     dfs.run_from(v);
     let mut sinks = dfs.boundary();
     assert!(sinks.iter().all(|&x| g.vertex_length(x) >= node_len_thr));
     //extend to dead-ends
-    sinks.extend(dfs.exit_order().iter().filter(|&x| g.outgoing_edge_cnt(*x) == 0).copied());
+    sinks.extend(dfs.dead_ends());
     (sinks, dfs.take_blocked())
 }
 
@@ -142,34 +157,17 @@ pub fn sinks_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> (Vec<Vertex>, H
 //currently will include v if it's a dead-end (but not if it's longer than threshold)
 //returns pair of sources and all ('inner') visited vertices
 //visited vertices will overlap sources by short dead-ends
-pub fn sources_behind(g: &Graph, v: Vertex, node_len_thr: usize) -> (Vec<Vertex>, HashSet<Vertex>) {
-    let mut dfs = DFS::new_reverse(g);
+pub fn sources_behind(g: &Graph, v: Vertex, node_len_thr: usize,
+    subgraph_f: Option<&dyn Fn(Vertex)->bool>) -> (Vec<Vertex>, HashSet<Vertex>) {
+    let mut dfs = DFS::new(g, TraversalDirection::REVERSE, subgraph_f);
     dfs.set_max_node_len(node_len_thr);
     //inner_dfs(g, v, node_len_thr, &mut visited, &mut border);
     dfs.run_from(v);
     let mut sources = dfs.boundary();
     assert!(sources.iter().all(|&x| g.vertex_length(x) >= node_len_thr));
     //extend to dead-ends
-    sources.extend(dfs.exit_order().iter().filter(|&x| g.incoming_edge_cnt(*x) == 0).copied());
+    sources.extend(dfs.dead_ends());
     (sources, dfs.take_blocked())
-}
-
-pub fn reachable_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
-    let (sinks, mut short_ahead) = sinks_ahead(g, v, node_len_thr);
-    short_ahead.extend(&sinks);
-    short_ahead
-}
-
-pub fn reachable_behind(g: &Graph, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
-    let (sources, mut short_behind) = sources_behind(g, v, node_len_thr);
-    short_behind.extend(&sources);
-    short_behind
-}
-
-pub fn reachable_between(g: &Graph, v: Vertex, w: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
-    reachable_ahead(g, v, node_len_thr)
-        .intersection(&reachable_behind(g, w, node_len_thr))
-        .copied().collect()
 }
 
 pub struct ShortNodeComponent {

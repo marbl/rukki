@@ -367,7 +367,8 @@ impl <'a> HomozygousAssigner<'a> {
 
     fn check_homozygous_fork_ahead(&self, v: Vertex) -> bool {
         //trick is that v no longer has to itself be long
-        let (long_ahead, mut visited_vertices) = dfs::sinks_ahead(self.g, v, self.trusted_len);
+        let (long_ahead, mut visited_vertices) = dfs::sinks_ahead(self.g, v,
+            self.trusted_len, None);
         visited_vertices.extend(&long_ahead);
         let mut blended_group = None;
 
