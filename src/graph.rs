@@ -635,9 +635,9 @@ impl Path {
         }
     }
 
-    //pub fn links(&self) -> &Vec<Link> {
-    //    &self.l_storage
-    //}
+    pub fn links(&self) -> &Vec<GeneralizedLink> {
+        &self.l_storage
+    }
 
     //TODO rename to rc?:write!
     pub fn reverse_complement(self) -> Path {
@@ -700,7 +700,7 @@ impl Path {
 
     pub fn can_merge_in(&self, path: &Path) -> bool {
         assert!(self.v_storage.last() == path.v_storage.first());
-        !path.v_storage.iter().skip(1).any(|v| self.in_path(v.node_id))
+        !path.l_storage.iter().any(|l| self.in_path(l.end().node_id))
     }
 
     pub fn merge_in(&mut self, path: Path) {
