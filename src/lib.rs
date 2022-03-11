@@ -89,6 +89,10 @@ pub struct TrioSettings {
     #[clap(long)]
     pub issue_ratio: Option<f64>,
 
+    /// Try to fill in small ambiguous bubbles
+    #[clap(long)]
+    pub try_fill_bubbles: bool,
+
 }
 
 fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
@@ -240,6 +244,10 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
 
     let mut path_searcher = trio_walk::HaploSearcher::new(&g,
         &assignments, solid_len_thr);
+
+    if settings.try_fill_bubbles {
+        path_searcher.try_fill_bubbles();
+    }
 
     let haplo_paths = path_searcher.find_all();
     let node_usage = path_searcher.take_used();

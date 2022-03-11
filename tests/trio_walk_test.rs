@@ -79,7 +79,7 @@ fn augment_by_search() {
 }
 
 #[test]
-fn path_closing() {
+fn bubble_filling() {
     init();
 
     let graph_fn = "tests/test_graphs/path_closing.gfa";
@@ -99,16 +99,18 @@ fn path_closing() {
     let mut haplo_searcher = trio_walk::HaploSearcher::new(&g,
         &augment_assign, init_node_len_thr);
 
+    haplo_searcher.try_fill_bubbles();
+
     let mut answer: Vec<(TrioGroup, String)> = haplo_searcher.find_all().into_iter()
                                            .map(|(p, _, group)| (group, p.print(&g))).collect();
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,
-            String::from("utig4-1575-,utig4-1574+,utig4-1397-,utig4-1395-,utig4-1347-,utig4-1343-,AMBIG,utig4-1568-,AMBIG,utig4-814+,utig4-819+,utig4-1799-,utig4-1796-,utig4-1798+")),
+            String::from("utig4-1575-,utig4-1574+,utig4-1397-,utig4-1395-,utig4-1347-,utig4-1343-,utig4-1344+,utig4-1568-,utig4-815-,utig4-814+,utig4-819+,utig4-1799-,utig4-1796-,utig4-1798+")),
         (TrioGroup::MATERNAL,
             String::from("utig4-3444+,utig4-4080-,utig4-771-,utig4-768-,utig4-770+")),
         (TrioGroup::PATERNAL,
-            String::from("utig4-1576-,utig4-1574+,utig4-1396-,utig4-1395-,utig4-1346-,utig4-1343-,AMBIG,utig4-1568-,AMBIG,utig4-814+,utig4-818+,utig4-1796-,utig4-1797+")),
+            String::from("utig4-1576-,utig4-1574+,utig4-1396-,utig4-1395-,utig4-1346-,utig4-1343-,utig4-1344+,utig4-1568-,utig4-815-,utig4-814+,utig4-818+,utig4-1796-,utig4-1797+")),
         (TrioGroup::PATERNAL,
             String::from("utig4-3412+,utig4-774-,utig4-772-,utig4-768-,utig4-769+"))]);
 }
