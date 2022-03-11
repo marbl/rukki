@@ -136,7 +136,7 @@ impl <'a> ExtensionHelper<'a> {
 
 }
 
-const FILLABLE_BUBBLE_LEN: i64 = 10000;
+const FILLABLE_BUBBLE_LEN: i64 = 50_000;
 const FILLABLE_BUBBLE_DIFF: i64 = 200;
 
 //TODO add template parameter
