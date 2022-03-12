@@ -1,6 +1,5 @@
 use crate::graph::*;
 use crate::trio::*;
-use crate::pseudo_hap::*;
 use crate::graph_algos::*;
 //FIXME move to common
 use scc::only_or_none;
@@ -397,19 +396,14 @@ impl <'a> HaploSearcher<'a> {
     //FIXME isn't it obsolete with generalized_patch?
     //FIXME rename
     fn patch_forward(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
-        if self.g.outgoing_edge_cnt(v) == 0 /* v is dead-end */
-            && self.g.incoming_edge_cnt(v) == 1 {
-            //FIXME maybe check that the 'joining' node is from other haplotype or is unassigned?
-            //todo maybe support case when dead-ends are themselves unassigned? (trivial procedure stops being 'symmetric'))
-            if let Some(gap_info) = detect_gap(self.g, self.g.incoming_edges(v)[0].start) {
-                let next_node = gap_info.end.node_id;
-                if self.assignments.group(next_node) == Some(group) {
-                    debug!("Identified jump across gap to {}", self.g.v_str(gap_info.end));
-                    return Some(Path::from_general_link(GeneralizedLink::GAP(gap_info)));
-                }
-            }
+        if let Some(gap_info) = self.generalized_gap(v, group, 0) {
+            let next_node = gap_info.end.node_id;
+            assert!(self.assignments.group(next_node) == Some(group));
+            debug!("Identified jump across gap to {}", self.g.v_str(gap_info.end));
+            Some(Path::from_general_link(GeneralizedLink::GAP(gap_info)))
+        } else {
+            None
         }
-        None
     }
 
     fn find_unbroken_alt_candidate(&self, v: Vertex, short_node_threshold: usize) -> Option<(Vertex, i64)> {
