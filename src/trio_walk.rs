@@ -569,7 +569,7 @@ impl <'a> HaploSearcher<'a> {
                 return None;
             }
             assert!(self.g.incoming_edge_cnt(v) == 1);
-            let l2 = only_or_none(self.g.outgoing_edges(v).into_iter())?;
+            let l2 = only_or_none(considered_extensions(self.g, v, hint_f).into_iter())?;
             if let Some(w) = opt_w {
                 if w != l2.end {
                     return None;
@@ -584,27 +584,26 @@ impl <'a> HaploSearcher<'a> {
 
     //FIXME think if require v assignment
     //TODO sometimes limiting the search here could help
-    fn choose_simple_bubble_side(&self, v: Vertex, group: TrioGroup, hint_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
+    fn choose_simple_bubble_side(&self, v: Vertex, group: TrioGroup, consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
         if self.ambig_filling_level < 2 {
             return None;
         }
 
-        let len_across = |v: Vertex| {
-            assert!(self.g.incoming_edge_cnt(v) == 1 && self.g.outgoing_edge_cnt(v) == 1);
+        let len_across = |u, v, w| {
             self.g.vertex_length(v) as i64
-                - self.g.incoming_edges(v)[0].overlap as i64
-                - self.g.outgoing_edges(v)[0].overlap as i64
+                - self.g.connector(u, v).unwrap().overlap as i64
+                - self.g.connector(v, w).unwrap().overlap as i64
         };
 
         let end_cov = |l: &Link| self.g.node(l.end.node_id).coverage;
-        let w = self.trivial_bubble_end(v, hint_f)?;
-        let filtered_outgoing: Vec<Link> = considered_extensions(self.g, v, hint_f).into_iter()
+        let w = self.trivial_bubble_end(v, consider_vertex_f)?;
+        let filtered_outgoing: Vec<Link> = considered_extensions(self.g, v, consider_vertex_f).into_iter()
                                         .filter(|l| self.unassigned_or_compatible(l.end.node_id, group)).collect();
         if filtered_outgoing.len() > 0
             && filtered_outgoing.iter().all(|&l| self.g.vertex_length(l.end) < self.solid_len)
             && w.node_id != v.node_id {
-            let max_len = filtered_outgoing.iter().map(|l| len_across(l.end)).max().unwrap();
-            let min_len = filtered_outgoing.iter().map(|l| len_across(l.end)).min().unwrap();
+            let max_len = filtered_outgoing.iter().map(|l| len_across(v, l.end, w)).max().unwrap();
+            let min_len = filtered_outgoing.iter().map(|l| len_across(v, l.end, w)).min().unwrap();
             if filtered_outgoing.len() > 1
                 && (max_len > FILLABLE_BUBBLE_LEN
                     || (max_len - min_len) > FILLABLE_BUBBLE_DIFF) {
@@ -725,7 +724,7 @@ impl <'a> HaploSearcher<'a> {
         true
     }
 
-    //returns Err if hit some issue (self-intersection, node reuse, etc)
+    //returns false if hit some issue (self-intersection, node reuse, etc)
     //TODO optimize
     fn check_available_append(&self, path: &Path, ext: &Path, group: TrioGroup) -> bool {
         path.can_merge_in(ext)
@@ -733,18 +732,22 @@ impl <'a> HaploSearcher<'a> {
                     .all(|l| self.check_available(l.end().node_id, group))
     }
 
-    //TODO return Path and then start filling paths via super-bubbles
     fn local_next(&self, v: Vertex, group: TrioGroup,
-                    //FIXME typedef?
                     hint_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
-        self.find_small_tangle_jump_ahead(v, group)
-            .or_else(|| self.extension_helper.group_extension(v, group, hint_f)
-                        .map(|l| Path::from_link(l)))
-            .or_else(|| self.choose_simple_bubble_side(v, group, hint_f))
-            //TODO if no hint -- no reason to start twice
-            .or_else(|| self.extension_helper.group_extension(v, group, None)
-                        .map(|l| Path::from_link(l)))
-            //TODO if no hint -- no reason to start twice
+        if let Some(p) = self.find_small_tangle_jump_ahead(v, group) {
+            return Some(p);
+        }
+
+        if hint_f.is_some() {
+            if let Some(p) = self.extension_helper.group_extension(v, group, hint_f)
+                            .map(|l| Path::from_link(l))
+                        .or_else(|| self.choose_simple_bubble_side(v, group, hint_f)) {
+                return Some(p);
+            }
+        }
+
+        self.extension_helper.group_extension(v, group, None)
+                    .map(|l| Path::from_link(l))
             .or_else(|| self.choose_simple_bubble_side(v, group, None))
             .or_else(|| self.find_bubble_fill_ahead(v, group))
             .or_else(|| self.find_bubble_jump_ahead(v, group))
