@@ -35,6 +35,16 @@ const MIN_GAP_SIZE: usize = 1000;
 const FILLABLE_BUBBLE_LEN: i64 = 50_000;
 const FILLABLE_BUBBLE_DIFF: i64 = 200;
 
+//FIXME use iterators
+fn considered_extensions(g: &Graph, v: Vertex,
+                consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Vec<Link> {
+    match consider_vertex_f {
+        None => g.outgoing_edges(v),
+        Some(avail) => g.outgoing_edges(v).iter().copied()
+                        .filter(|l| avail(l.end)).collect(),
+    }
+}
+
 pub struct ExtensionHelper<'a> {
     g: &'a Graph,
     assignments: &'a AssignmentStorage,
@@ -82,21 +92,11 @@ impl <'a> ExtensionHelper<'a> {
         }
     }
 
-    //FIXME use iterators
-    fn considered_extensions(&self, v: Vertex,
-                    consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Vec<Link> {
-        match consider_vertex_f {
-            None => self.g.outgoing_edges(v),
-            Some(avail) => self.g.outgoing_edges(v).iter().copied()
-                            .filter(|l| avail(l.end)).collect(),
-        }
-    }
-
     //maybe move to graph or some GraphAlgoHelper?
     fn group_extension(&self, v: Vertex, group: TrioGroup,
                     consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Link> {
         //debug!("Looking at (subset of) outgoing edges for {}", self.g.v_str(v));
-        let filtered_outgoing = self.considered_extensions(v, consider_vertex_f);
+        let filtered_outgoing = considered_extensions(self.g, v, consider_vertex_f);
 
         //If only extension then being unassigned is always ok
         //FIXME Probably obsolete with two-step strategy!
@@ -559,9 +559,32 @@ impl <'a> HaploSearcher<'a> {
         None
     }
 
+    fn trivial_bubble_end(&self, u: Vertex, hint_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Vertex> {
+        if self.g.outgoing_edge_cnt(u) < 2 {
+            return None;
+        }
+        let mut opt_w = None;
+        for v in considered_extensions(self.g, u, hint_f).iter().map(|l1| l1.end) {
+            if self.g.incoming_edge_cnt(v) > 1 {
+                return None;
+            }
+            assert!(self.g.incoming_edge_cnt(v) == 1);
+            let l2 = only_or_none(self.g.outgoing_edges(v).into_iter())?;
+            if let Some(w) = opt_w {
+                if w != l2.end {
+                    return None;
+                }
+            } else {
+                opt_w = Some(l2.end);
+            }
+        }
+        assert!(opt_w.is_some());
+        opt_w
+    }
+
     //FIXME think if require v assignment
     //TODO sometimes limiting the search here could help
-    fn choose_simple_bubble_side(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
+    fn choose_simple_bubble_side(&self, v: Vertex, group: TrioGroup, hint_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
         if self.ambig_filling_level < 2 {
             return None;
         }
@@ -574,8 +597,8 @@ impl <'a> HaploSearcher<'a> {
         };
 
         let end_cov = |l: &Link| self.g.node(l.end.node_id).coverage;
-        let w = superbubble::trivial_bubble_end(self.g, v)?;
-        let filtered_outgoing: Vec<Link> = self.g.outgoing_edges(v).into_iter()
+        let w = self.trivial_bubble_end(v, hint_f)?;
+        let filtered_outgoing: Vec<Link> = considered_extensions(self.g, v, hint_f).into_iter()
                                         .filter(|l| self.unassigned_or_compatible(l.end.node_id, group)).collect();
         if filtered_outgoing.len() > 0
             && filtered_outgoing.iter().all(|&l| self.g.vertex_length(l.end) < self.solid_len)
@@ -717,10 +740,12 @@ impl <'a> HaploSearcher<'a> {
         self.find_small_tangle_jump_ahead(v, group)
             .or_else(|| self.extension_helper.group_extension(v, group, hint_f)
                         .map(|l| Path::from_link(l)))
+            .or_else(|| self.choose_simple_bubble_side(v, group, hint_f))
             //TODO if no hint -- no reason to start twice
             .or_else(|| self.extension_helper.group_extension(v, group, None)
                         .map(|l| Path::from_link(l)))
-            .or_else(|| self.choose_simple_bubble_side(v, group))
+            //TODO if no hint -- no reason to start twice
+            .or_else(|| self.choose_simple_bubble_side(v, group, None))
             .or_else(|| self.find_bubble_fill_ahead(v, group))
             .or_else(|| self.find_bubble_jump_ahead(v, group))
     }
