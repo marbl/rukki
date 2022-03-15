@@ -584,7 +584,8 @@ impl <'a> HaploSearcher<'a> {
 
     //FIXME think if require v assignment
     //TODO sometimes limiting the search here could help
-    fn choose_simple_bubble_side(&self, v: Vertex, group: TrioGroup, consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
+    fn choose_simple_bubble_side(&self, v: Vertex, group: TrioGroup,
+        consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
         if self.ambig_filling_level < 2 {
             return None;
         }
@@ -621,7 +622,8 @@ impl <'a> HaploSearcher<'a> {
 
     //TODO improve to actually use group
     //FIXME verify logic of max_length threshold for superbubbles
-    fn find_bubble_fill_ahead(&self, v: Vertex, _group: TrioGroup) -> Option<Path> {
+    fn find_bubble_fill_ahead(&self, v: Vertex, _group: TrioGroup,
+        consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
         if self.ambig_filling_level < 2 {
             return None;
         }
@@ -633,7 +635,8 @@ impl <'a> HaploSearcher<'a> {
             ..SbSearchParams::unrestricted()
         };
         //TODO think of growing within the bubble if possible (ensyre symmetry)
-        let bubble = superbubble::find_superbubble(self.g, v, &sb_params)?;
+        let bubble = superbubble::find_superbubble_subgraph(self.g, v, &sb_params,
+            consider_vertex_f)?;
         if bubble.inner_vertices().any(|&v| self.g.vertex_length(v) >= self.solid_len) {
             return None;
         }
@@ -642,7 +645,8 @@ impl <'a> HaploSearcher<'a> {
         Some(p)
     }
 
-    fn find_bubble_jump_ahead(&self, v: Vertex, _group: TrioGroup) -> Option<Path> {
+    fn find_bubble_jump_ahead(&self, v: Vertex, _group: TrioGroup,
+        consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
         use superbubble::SbSearchParams;
         let sb_params = SbSearchParams {
             //TODO think of relaxing a bit
@@ -650,7 +654,8 @@ impl <'a> HaploSearcher<'a> {
             ..SbSearchParams::unrestricted()
         };
         //TODO think of growing within the bubble if possible (ensyre symmetry)
-        let bubble = superbubble::find_superbubble(self.g, v, &sb_params)?;
+        let bubble = superbubble::find_superbubble_subgraph(self.g, v, &sb_params,
+            consider_vertex_f)?;
         if bubble.inner_vertices().any(|&v| self.g.vertex_length(v) >= self.solid_len) {
             return None;
         }
@@ -733,24 +738,13 @@ impl <'a> HaploSearcher<'a> {
     }
 
     fn local_next(&self, v: Vertex, group: TrioGroup,
-                    hint_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
-        if let Some(p) = self.find_small_tangle_jump_ahead(v, group) {
-            return Some(p);
-        }
-
-        if hint_f.is_some() {
-            if let Some(p) = self.extension_helper.group_extension(v, group, hint_f)
-                            .map(|l| Path::from_link(l))
-                        .or_else(|| self.choose_simple_bubble_side(v, group, hint_f)) {
-                return Some(p);
-            }
-        }
-
-        self.extension_helper.group_extension(v, group, None)
-                    .map(|l| Path::from_link(l))
-            .or_else(|| self.choose_simple_bubble_side(v, group, None))
-            .or_else(|| self.find_bubble_fill_ahead(v, group))
-            .or_else(|| self.find_bubble_jump_ahead(v, group))
+                    constraint_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
+        self.find_small_tangle_jump_ahead(v, group)
+            .or_else(|| self.extension_helper.group_extension(v, group, constraint_vertex_f)
+                .map(|l| Path::from_link(l)))
+            .or_else(|| self.choose_simple_bubble_side(v, group, constraint_vertex_f))
+            .or_else(|| self.find_bubble_fill_ahead(v, group, constraint_vertex_f))
+            .or_else(|| self.find_bubble_jump_ahead(v, group, constraint_vertex_f))
     }
 
     ////returns false if ended in issue
@@ -772,7 +766,8 @@ impl <'a> HaploSearcher<'a> {
     fn grow_local(&self, path: &mut Path, group: TrioGroup,
                     target_v: Vertex, hint_f: &dyn Fn(Vertex)->bool) -> bool {
         debug!("Locally growing from {}", self.g.v_str(path.end()));
-        while let Some(ext) = self.local_next(path.end(), group, Some(hint_f)) {
+        while let Some(ext) = self.local_next(path.end(), group, Some(hint_f))
+                       .or_else(|| self.local_next(path.end(), group, None)) {
             assert!(ext.end() == target_v || !ext.in_path(target_v.node_id));
             if self.check_available_append(path, &ext, group) {
                 path.merge_in(ext);

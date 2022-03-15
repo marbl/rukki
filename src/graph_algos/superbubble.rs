@@ -23,11 +23,11 @@ pub struct Superbubble {
 
 impl Superbubble {
 
-    fn link_dist_range(&self, l: Link, g: &Graph) -> DistRange {
-        let &r = self.reached_vertices.get(&l.start).unwrap();
+    fn link_dist_range(&self, l: Link, g: &Graph) -> Option<DistRange> {
+        let &r = self.reached_vertices.get(&l.start)?;
         let enode_len = g.vertex_length(l.end);
         assert!(enode_len >= l.overlap);
-        shift_range(r, enode_len - l.overlap)
+        Some(shift_range(r, enode_len - l.overlap))
     }
 
     pub fn longest_path(&self, g: &Graph) -> Path {
@@ -37,15 +37,17 @@ impl Superbubble {
         'outer: while v != self.start_vertex {
             //let l = self.heaviest_backtrace.get(v).unwrap();
             for l in g.incoming_edges(v) {
-                if self.link_dist_range(l, g).1 == longest_dist {
-                    assert!(l.end == v);
-                    rc_p.append(l.rc());
-                    v = l.start;
-                    longest_dist = self.reached_vertices.get(&l.start).unwrap().1;
-                    continue 'outer;
+                if let Some((_, l_d)) = self.link_dist_range(l, g) {
+                    if l_d == longest_dist {
+                        assert!(l.end == v);
+                        rc_p.append(l.rc());
+                        v = l.start;
+                        longest_dist = self.reached_vertices.get(&l.start).unwrap().1;
+                        continue 'outer;
+                    }
                 }
             }
-            assert!(false);
+            panic!("Couldn't recover bubble path");
         }
         rc_p.reverse_complement()
     }
@@ -57,15 +59,17 @@ impl Superbubble {
         'outer: while v != self.start_vertex {
             //let l = self.heaviest_backtrace.get(v).unwrap();
             for l in g.incoming_edges(v) {
-                if self.link_dist_range(l, g).0 == shortest_dist {
-                    assert!(l.end == v);
-                    rc_p.append(l.rc());
-                    v = l.start;
-                    shortest_dist = self.reached_vertices.get(&l.start).unwrap().0;
-                    continue 'outer;
+                if let Some((l_d, _)) = self.link_dist_range(l, g) {
+                    if l_d == shortest_dist {
+                        assert!(l.end == v);
+                        rc_p.append(l.rc());
+                        v = l.start;
+                        shortest_dist = self.reached_vertices.get(&l.start).unwrap().0;
+                        continue 'outer;
+                    }
                 }
             }
-            assert!(false);
+            panic!("Couldn't recover bubble path");
         }
         rc_p.reverse_complement()
     }
@@ -120,18 +124,61 @@ impl SbSearchParams {
     }
 }
 
+pub fn find_superbubble(g: &Graph, v: Vertex, params: &SbSearchParams) -> Option<Superbubble> {
+    find_superbubble_subgraph(g, v, params, None)
+}
+
 //TODO handle case when first/last vertex have other outgoing/incoming edges
 //last vertex case is almost handled
-//returns true if no thresholds exceeded
-pub fn find_superbubble(g: &Graph, v: Vertex, params: &SbSearchParams) -> Option<Superbubble> {
+pub fn find_superbubble_subgraph(g: &Graph, v: Vertex, params: &SbSearchParams,
+    consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Superbubble> {
+    if let Some(f) = consider_vertex_f {
+        if !f(v) {
+            return None;
+        }
+    };
+
     let mut bubble = Superbubble {
         start_vertex: v,
         reached_vertices: HashMap::new(),
         end_vertex: None,
     };
-    if g.outgoing_edge_cnt(bubble.start_vertex) < 2
+
+    let outgoing_edge_cnt = |v| {
+        match consider_vertex_f {
+            None => g.outgoing_edge_cnt(v),
+            Some(avail) => g.outgoing_edges(v).iter()
+                            .filter(|l| avail(l.end)).count(),
+        }
+    };
+
+    let incoming_edge_cnt = |v| {
+        match consider_vertex_f {
+            None => g.incoming_edge_cnt(v),
+            Some(avail) => g.incoming_edges(v).iter()
+                            .filter(|l| avail(l.start)).count(),
+        }
+    };
+
+    let outgoing_edges = |v| {
+        match consider_vertex_f {
+            None => g.outgoing_edges(v),
+            Some(avail) => g.outgoing_edges(v).iter().copied()
+                            .filter(|l| avail(l.end)).collect(),
+        }
+    };
+
+    let _incoming_edges = |v| {
+        match consider_vertex_f {
+            None => g.incoming_edges(v),
+            Some(avail) => g.incoming_edges(v).iter().copied()
+                            .filter(|l| avail(l.start)).collect(),
+        }
+    };
+
+    if outgoing_edge_cnt(bubble.start_vertex) < 2
         //same check, but excluding loops
-        || g.outgoing_edges(bubble.start_vertex).iter().filter(|l| l.start != l.end).count() < 2 {
+        || outgoing_edges(bubble.start_vertex).iter().filter(|l| l.start != l.end).count() < 2 {
         return None;
     }
 
@@ -152,13 +199,13 @@ pub fn find_superbubble(g: &Graph, v: Vertex, params: &SbSearchParams) -> Option
         let v = can_be_processed.pop().unwrap();
         debug!("Adding vertex {} to the bubble", g.v_str(v));
 
-        if g.outgoing_edge_cnt(v) == 0 {
+        if outgoing_edge_cnt(v) == 0 {
             debug!("Hit dead-end");
             return None;
         }
 
         debug!("Looking at neighbors");
-        for l in g.outgoing_edges(v) {
+        for l in outgoing_edges(v) {
             let w = l.end;
             if w == bubble.start_vertex {
                 return None;
@@ -179,14 +226,14 @@ pub fn find_superbubble(g: &Graph, v: Vertex, params: &SbSearchParams) -> Option
                     return None;
                 }
                 not_ready_cnt += 1;
-                remaining_incoming.insert(w, g.incoming_edge_cnt(w));
-                bubble.reached_vertices.insert(w, bubble.link_dist_range(l, g));
+                remaining_incoming.insert(w, incoming_edge_cnt(w));
+                bubble.reached_vertices.insert(w, bubble.link_dist_range(l, g).unwrap());
             }
             let rem_inc = remaining_incoming.get_mut(&w).unwrap();
             *rem_inc -= 1;
             //self.reached_vertices.get(w) =
             bubble.reached_vertices.insert(w,
-                merge_range(*bubble.reached_vertices.get(&w).unwrap(), bubble.link_dist_range(l, g)));
+                merge_range(*bubble.reached_vertices.get(&w).unwrap(), bubble.link_dist_range(l, g).unwrap()));
 
             if *remaining_incoming.get(&w).unwrap() == 0 {
                 can_be_processed.push(w);
