@@ -32,8 +32,8 @@ pub fn reachable_between(g: &Graph, v: Vertex, w: Vertex,
 }
 
 const MIN_GAP_SIZE: usize = 1000;
-const FILLABLE_BUBBLE_LEN: i64 = 50_000;
-const FILLABLE_BUBBLE_DIFF: i64 = 200;
+const FILLABLE_BUBBLE_LEN: usize = 50_000;
+const FILLABLE_BUBBLE_DIFF: usize = 200;
 
 //FIXME use iterators
 fn considered_extensions(g: &Graph, v: Vertex,
@@ -515,7 +515,9 @@ impl <'a> HaploSearcher<'a> {
     fn check_link_vertex(&self, w: Vertex, group: TrioGroup) -> bool {
         let long_node_ahead = |v: Vertex| {
             assert!(self.g.outgoing_edge_cnt(v) == 1);
-            self.long_node(self.g.outgoing_edges(v)[0].end.node_id)
+            let node_id = self.g.outgoing_edges(v)[0].end.node_id;
+            self.long_node(node_id)
+                && self.assignments.group(node_id) == Some(group)
         };
 
         !self.long_node(w.node_id)
@@ -526,7 +528,7 @@ impl <'a> HaploSearcher<'a> {
             && self.g.outgoing_edge_cnt(w) == 1
             && (long_node_ahead(w)
                 || long_node_ahead(w.rc())
-                || self.check_assignment(w.node_id, group))
+                || self.assignments.group(w.node_id) == Some(group))
     }
 
     fn try_link(&self, u: Vertex, w: Vertex, group: TrioGroup) -> Option<Path> {
@@ -606,8 +608,8 @@ impl <'a> HaploSearcher<'a> {
             let max_len = filtered_outgoing.iter().map(|l| len_across(v, l.end, w)).max().unwrap();
             let min_len = filtered_outgoing.iter().map(|l| len_across(v, l.end, w)).min().unwrap();
             if filtered_outgoing.len() > 1
-                && (max_len > FILLABLE_BUBBLE_LEN
-                    || (max_len - min_len) > FILLABLE_BUBBLE_DIFF) {
+                && (max_len > FILLABLE_BUBBLE_LEN as i64
+                    || (max_len - min_len) > FILLABLE_BUBBLE_DIFF as i64) {
                 return None;
             }
             let ext = filtered_outgoing.into_iter()
@@ -620,29 +622,74 @@ impl <'a> HaploSearcher<'a> {
         }
     }
 
+    fn connecting_path(&self, v1: Vertex, v2: Vertex, v3: Vertex) -> Path {
+        let mut path = Path::from_link(self.g.connector(v1, v2).unwrap());
+        path.append(self.g.connector(v2, v3).unwrap());
+        path
+    }
+
     //TODO improve to actually use group
     //FIXME verify logic of max_length threshold for superbubbles
-    fn find_bubble_fill_ahead(&self, v: Vertex, _group: TrioGroup,
+    fn find_bubble_fill_ahead(&self, v: Vertex, group: TrioGroup,
         consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
-        if self.ambig_filling_level < 2 {
-            return None;
-        }
 
         use superbubble::SbSearchParams;
         let sb_params = SbSearchParams {
-            max_length: FILLABLE_BUBBLE_LEN as usize,
-            max_diff: FILLABLE_BUBBLE_DIFF as usize,
+            //max_length: self.solid_len,
             ..SbSearchParams::unrestricted()
         };
+
         //TODO think of growing within the bubble if possible (ensyre symmetry)
         let bubble = superbubble::find_superbubble_subgraph(self.g, v, &sb_params,
             consider_vertex_f)?;
         if bubble.inner_vertices().any(|&v| self.g.vertex_length(v) >= self.solid_len) {
             return None;
         }
-        let p = bubble.longest_path(self.g);
-        debug!("Candidate extension by super-bubble bubble fill {}", p.print(self.g));
-        Some(p)
+
+        let w = bubble.end_vertex();
+        assert!(w.node_id != v.node_id);
+
+        let mut direct_connectors: Vec<Vertex>
+            = considered_extensions(self.g, v, consider_vertex_f)
+                .into_iter()
+                .filter_map(|l1| self.g.connector(l1.end, w))
+                .map(|l2| l2.start)
+                .filter(|tc_v| self.unassigned_or_compatible(tc_v.node_id, group))
+                .collect();
+
+        let cov = |x: &Vertex| self.g.node(x.node_id).coverage;
+        direct_connectors.sort_by(|a, b| cov(b)
+                        .partial_cmp(&cov(a))
+                        .unwrap());
+
+        //check if any satisfies the filling criteria (once added gap won't be filled in)
+        if self.ambig_filling_level > 0 {
+            for &direct_conn in &direct_connectors {
+                if self.check_link_vertex(direct_conn, group) {
+                    let p = self.connecting_path(v, direct_conn, w);
+                    debug!("Candidate extension by super-bubble fill (link vertex) {}", p.print(self.g));
+                    return Some(p);
+                }
+            }
+        }
+
+        let length_range = bubble.length_range(self.g);
+
+        if self.ambig_filling_level > 1
+                && length_range.1 <= FILLABLE_BUBBLE_DIFF + length_range.0
+                && length_range.1 <= FILLABLE_BUBBLE_LEN
+                    + self.g.vertex_length(v) + self.g.vertex_length(w) {
+            if direct_connectors.len() > 0 {
+                let p = self.connecting_path(v, direct_connectors[0], w);
+                debug!("Candidate extension by super-bubble fill (direct connector) {}", p.print(self.g));
+                return Some(p)
+            } else {
+                let p = bubble.longest_path(self.g);
+                debug!("Candidate extension by super-bubble fill (longest path) {}", p.print(self.g));
+                return Some(p)
+            }
+        }
+        None
     }
 
     fn find_bubble_jump_ahead(&self, v: Vertex, _group: TrioGroup,
@@ -780,15 +827,6 @@ impl <'a> HaploSearcher<'a> {
             }
         }
         true
-    }
-
-    fn check_assignment(&self, node_id: usize, target_group: TrioGroup) -> bool {
-        if let Some(assign) = self.assignments.get(node_id) {
-            if assign.group == target_group {
-                return true;
-            }
-        }
-        false
     }
 
     ////maybe move to graph or some GraphAlgoHelper?
