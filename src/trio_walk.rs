@@ -662,17 +662,6 @@ impl <'a> HaploSearcher<'a> {
                         .partial_cmp(&cov(a))
                         .unwrap());
 
-        //check if any satisfies the filling criteria (once added gap won't be filled in)
-        if self.ambig_filling_level > 0 {
-            for &direct_conn in &direct_connectors {
-                if self.check_link_vertex(direct_conn, group) {
-                    let p = self.connecting_path(v, direct_conn, w);
-                    debug!("Candidate extension by super-bubble fill (link vertex) {}", p.print(self.g));
-                    return Some(p);
-                }
-            }
-        }
-
         let length_range = bubble.length_range(self.g);
 
         if self.ambig_filling_level > 1
@@ -689,6 +678,18 @@ impl <'a> HaploSearcher<'a> {
                 return Some(p)
             }
         }
+
+        //check if any satisfies the filling criteria (once added gap won't be filled in)
+        if self.ambig_filling_level > 0 {
+            for &direct_conn in &direct_connectors {
+                if self.check_link_vertex(direct_conn, group) {
+                    let p = self.connecting_path(v, direct_conn, w);
+                    debug!("Candidate extension by super-bubble fill (link vertex) {}", p.print(self.g));
+                    return Some(p);
+                }
+            }
+        }
+
         None
     }
 
