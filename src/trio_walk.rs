@@ -375,22 +375,8 @@ impl <'a> HaploSearcher<'a> {
     //TODO maybe consume when grow?
     fn unguided_next_or_gap(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
         self.local_next(v, group, None)
-            .or_else(|| self.patch_forward(v, group))
             .or_else(|| self.generalized_patch_forward(v, group))
-        //debug!("Was able to patch broken bubble and extend by {grow} nodes");
-        //debug!("Was able to patch more general broken haplotype and extend by {grow} nodes");
-        //grow += self.merge_in(path, self.find_jump_path_ahead(path.end(), group), group);
-        //if grow > 0 {
-        //    debug!("Was able to jump (and stitch) ahead by {grow} nodes");
-        //    tot_grow += grow;
-        //    continue;
-        //}
-        //grow += self.merge_in(path, self.find_gapped_jump_ahead(path, group), group);
-        //if grow > 0 {
-        //    debug!("Was able to jump (via ambiguous region) ahead by {grow} nodes");
-        //    tot_grow += grow;
-        //    continue;
-        //}
+            .or_else(|| self.patch_forward(v, group))
     }
 
     //FIXME isn't it obsolete with generalized_patch?
@@ -475,6 +461,7 @@ impl <'a> HaploSearcher<'a> {
         } else if component.sources.len() == 1 {
             //haplotype merge-in case
             assert!(component.sources.iter().next() == Some(&alt));
+            //FIXME be more specific in dead-end check
             if !component.has_deadends
                 && component.sinks.iter().all(|x| self.assignments.is_definite(x.node_id)) {
                 if let Some(&w) = only_or_none(component.sinks.iter()
