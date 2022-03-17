@@ -68,6 +68,10 @@ pub struct TrioSettings {
     #[clap(long, default_value_t = 1.5)]
     pub suspect_homozygous_cov_coeff: f64,
 
+    /// Longer nodes can not be classified as homozygous
+    #[clap(long, default_value_t = 1_000_000)]
+    pub homozygous_max_len: usize,
+
     //TODO maybe check that it is > trusted_len
     /// Longer nodes are unlikely to represent repeats, polymorphic variants, etc (used to seed and guide the path search)
     #[clap(long, default_value_t = 500_000)]
@@ -220,7 +224,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
 
     let solid_len_thr = settings.solid_len;
 
-    let suspect_homozygous_cov_thr = if settings.suspect_homozygous_cov_coeff <= 0. {
+    let suspect_homozygous_cov = if settings.suspect_homozygous_cov_coeff <= 0. {
         settings.suspect_homozygous_cov_coeff
     } else {
         let unique_est = weighted_mean_solid_cov(&g, solid_len_thr);
@@ -231,7 +235,8 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     };
 
     let assignments = trio::assign_homozygous(&g, assignments,
-        settings.trusted_len, suspect_homozygous_cov_thr);
+        settings.trusted_len, suspect_homozygous_cov,
+        settings.homozygous_max_len);
 
     let assignments = augment_by_path_search(&g,
         assignments,

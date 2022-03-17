@@ -244,23 +244,28 @@ pub struct HomozygousAssigner<'a> {
     g: &'a Graph,
     assignments: AssignmentStorage,
     trusted_len: usize,
-    suspect_homozygous_cov_thr: f64,
+    min_suspect_cov: f64,
+    max_assign_len: usize,
     considered: HashSet<usize>,
 }
 
 impl <'a> HomozygousAssigner<'a> {
 
     pub fn new(g: &'a Graph, assignments: AssignmentStorage,
-        trusted_len: usize, suspect_homozygous_cov_thr: f64)
+        trusted_len: usize, min_suspect_cov: f64, max_assign_len: usize)
     -> HomozygousAssigner<'a> {
         HomozygousAssigner {
             g, assignments, trusted_len,
-            suspect_homozygous_cov_thr,
+            min_suspect_cov,
+            max_assign_len,
             considered: HashSet::new(),
         }
     }
 
     fn can_assign(&self, node_id: usize) -> bool {
+        if self.g.node_length(node_id) > self.max_assign_len {
+            return false;
+        }
         match self.assignments.group(node_id) {
             None => true,
             //TODO think if we should be able to also reclassify ISSUE nodes
@@ -272,12 +277,12 @@ impl <'a> HomozygousAssigner<'a> {
                 if n.length >= self.trusted_len {
                     return false;
                 }
-                if self.suspect_homozygous_cov_thr < 0. {
+                if self.min_suspect_cov < 0. {
                     false
                 } else {
-                    assert!(self.suspect_homozygous_cov_thr >= 0.);
+                    assert!(self.min_suspect_cov >= 0.);
                     //also handles by 0. threshold case even if all coverages are 0.
-                    n.coverage > self.suspect_homozygous_cov_thr - 1e-5
+                    n.coverage > self.min_suspect_cov - 1e-5
                 }
             },
         }
@@ -393,11 +398,12 @@ impl <'a> HomozygousAssigner<'a> {
 
 pub fn assign_homozygous(g: &Graph,
     assignments: AssignmentStorage,
-    trusted_len_thr: usize,
-    suspect_homozygous_cov_thr: f64) -> AssignmentStorage {
+    trusted_len: usize,
+    min_suspect_cov: f64,
+    max_assign_len: usize) -> AssignmentStorage {
     info!("Marking homozygous nodes");
     let mut assigner = HomozygousAssigner::new(g, assignments,
-        trusted_len_thr, suspect_homozygous_cov_thr);
+        trusted_len, min_suspect_cov, max_assign_len);
     let marked = assigner.marking_round();
     info!("Marked {}", marked);
     assigner.assignments
@@ -422,7 +428,8 @@ mod tests {
         let g = Graph::read(&fs::read_to_string(graph_fn).unwrap());
         let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
 
-        let assigner = trio::HomozygousAssigner::new(&g, assignments, 100_000, -1.);
+        let assigner = trio::HomozygousAssigner::new(&g, assignments, 100_000,
+                                                        -1., usize::MAX);
         assert!(assigner.check_homozygous_fork_ahead(Vertex::forward(g.name2id("utig4-1237"))));
         assert!(assigner.check_homozygous_fork_ahead(Vertex::reverse(g.name2id("utig4-1237"))));
         assert!(!assigner.check_homozygous_fork_ahead(Vertex::forward(g.name2id("utig4-1554"))));
