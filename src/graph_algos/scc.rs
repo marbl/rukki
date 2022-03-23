@@ -1,5 +1,6 @@
 use crate::graph::*;
-use crate::graph_algos::dfs;
+use super::dfs;
+use super::only_or_none;
 use std::collections::{HashSet,HashMap};
 use log::debug;
 
@@ -167,15 +168,6 @@ pub fn estimate_size_no_mult(tangle: &LocalizedTangle, g: &Graph) -> usize {
     tangle.vertices.iter()
         .map(|&v| g.vertex_length(v) - shortest_incoming_overlap(v))
         .sum()
-}
-
-//FIXME move from here!
-pub fn only_or_none<T>(mut iter: impl Iterator<Item=T>) -> Option<T> {
-    let e = iter.next()?;
-    match iter.next() {
-        None => Some(e),
-        _ => None,
-    }
 }
 
 fn find_localized(g: &Graph, non_trivial_scc: &Vec<Vertex>) -> Option<LocalizedTangle> {

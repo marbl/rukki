@@ -1,8 +1,7 @@
 use crate::graph::*;
 use crate::trio::*;
 use crate::graph_algos::*;
-//FIXME move to common
-use scc::only_or_none;
+use crate::graph_algos::only_or_none;
 use log::{debug,warn};
 use std::collections::{HashSet,HashMap};
 
@@ -98,7 +97,7 @@ impl <'a> ExtensionHelper<'a> {
         //debug!("Looking at (subset of) outgoing edges for {}", self.g.v_str(v));
         let filtered_outgoing = considered_extensions(self.g, v, consider_vertex_f);
 
-        //If only extension then being unassigned is always ok
+        //If only extension exists it is always ok if it is unassigned
         //FIXME Probably obsolete with two-step strategy!
         if filtered_outgoing.len() == 1 {
             let l = filtered_outgoing[0];
@@ -572,9 +571,7 @@ impl <'a> HaploSearcher<'a> {
         opt_w
     }
 
-    //FIXME think if require v assignment
-    //TODO sometimes limiting the search here could help
-    fn choose_simple_bubble_side(&self, v: Vertex, group: TrioGroup,
+    fn choose_trivial_bubble_side(&self, v: Vertex, group: TrioGroup,
         consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
         if self.ambig_filling_level < 2 {
             return None;
@@ -616,8 +613,7 @@ impl <'a> HaploSearcher<'a> {
         path
     }
 
-    //TODO improve to actually use group
-    //FIXME verify logic of max_length threshold for superbubbles
+    //TODO improve to actually use group while choosing a path
     fn find_bubble_fill_ahead(&self, v: Vertex, group: TrioGroup,
         consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
 
@@ -778,25 +774,10 @@ impl <'a> HaploSearcher<'a> {
         self.find_small_tangle_jump_ahead(v, group)
             .or_else(|| self.extension_helper.group_extension(v, group, constraint_vertex_f)
                 .map(|l| Path::from_link(l)))
-            .or_else(|| self.choose_simple_bubble_side(v, group, constraint_vertex_f))
+            .or_else(|| self.choose_trivial_bubble_side(v, group, constraint_vertex_f))
             .or_else(|| self.find_bubble_fill_ahead(v, group, constraint_vertex_f))
             .or_else(|| self.find_bubble_jump_ahead(v, group, constraint_vertex_f))
     }
-
-    ////returns false if ended in issue
-    //fn grow(&self, path: &mut Path, group: TrioGroup,
-    //                //FIXME typedef?
-    //                next_link_f: impl Fn(Vertex)->Option<GeneralizedLink>) -> bool {
-    //    let mut tot_grow = 0;
-    //    while let Some(l) = next_link_f(path.end()) {
-    //        if self.merge_in_if_available(path, l, group) {
-    //            tot_grow += 1;
-    //        } else {
-    //            return false;
-    //        }
-    //    }
-    //    true
-    //}
 
     //returns false if ended in issue
     fn grow_local(&self, path: &mut Path, group: TrioGroup,
@@ -848,7 +829,7 @@ mod tests {
         let graph_fn = "tests/test_graphs/scc_tangle.gfa";
         let assignments_fn = "tests/test_graphs/scc_tangle.ann.csv";
         let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
-        let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
+        let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
         let haplo_searcher = trio_walk::HaploSearcher::new(&g, &assignments, 500_000);
         let path = haplo_searcher.haplo_path(graph::Vertex::forward(g.name2id("utig4-2545")), trio::TrioGroup::PATERNAL);
@@ -869,7 +850,7 @@ mod tests {
         let graph_fn = "tests/test_graphs/test_gap.gfa";
         let assignments_fn = "tests/test_graphs/test_gap.ann.csv";
         let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
-        let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
+        let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
         let haplo_searcher = trio_walk::HaploSearcher::new(&g, &assignments, 500_000);
         for node in ["utig4-1322", "utig4-1320", "utig4-947"] {

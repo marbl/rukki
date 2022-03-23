@@ -226,7 +226,7 @@ fn parse_group(group_str: &str) -> TrioGroup {
     }
 }
 
-pub fn parse_read_assignments(g: &Graph, assignments_fn: &str)
+pub fn parse_node_assignments(g: &Graph, assignments_fn: &str)
 -> std::io::Result<AssignmentStorage> {
     let mut assignments = AssignmentStorage::new();
     for line in std::fs::read_to_string(assignments_fn)?.lines() {
@@ -426,7 +426,7 @@ mod tests {
         let graph_fn = "tests/test_graphs/test1.gfa";
         let assignments_fn = "tests/test_graphs/test1.ann.csv";
         let g = Graph::read(&fs::read_to_string(graph_fn).unwrap());
-        let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
+        let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
         let assigner = trio::HomozygousAssigner::new(&g, assignments, 100_000,
                                                         -1., usize::MAX);

@@ -32,7 +32,7 @@ fn haplo_paths() {
     let graph_fn = "tests/test_graphs/test1.gfa";
     let assignments_fn = "tests/test_graphs/test1.ann.csv";
     let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
-    let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
+    let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
     let mut haplo_searcher = trio_walk::HaploSearcher::new(&g, &assignments, 500_000);
     let mut answer: Vec<(TrioGroup, String)> = haplo_searcher.find_all().into_iter()
@@ -53,7 +53,7 @@ fn augment_by_search() {
     let graph_fn = "tests/test_graphs/sparse_markers.gfa";
     let assignments_fn = "tests/test_graphs/sparse_markers.ann.csv";
     let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
-    let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
+    let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
     let init_node_len_thr = 500_000;
     assert_eq!(assignments.assigned().count(), 14);
@@ -85,7 +85,7 @@ fn bubble_filling() {
     let graph_fn = "tests/test_graphs/path_closing.gfa";
     let assignments_fn = "tests/test_graphs/path_closing.ann.csv";
     let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
-    let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
+    let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
     let init_node_len_thr = 500_000;
     assert_eq!(assignments.assigned().count(), 26);
@@ -122,7 +122,7 @@ fn haplo_paths_2() {
     let graph_fn = "tests/test_graphs/test2.gfa";
     let assignments_fn = "tests/test_graphs/test2.ann.csv";
     let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
-    let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
+    let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
     let init_node_len_thr = 500_000;
     assert_eq!(assignments.assigned().count(), 42);
@@ -154,7 +154,7 @@ fn haplo_paths_3() {
     let graph_fn = "tests/test_graphs/test3.gfa";
     let assignments_fn = "tests/test_graphs/test3.ann.csv";
     let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
-    let assignments = trio::parse_read_assignments(&g, assignments_fn).unwrap();
+    let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
     let init_node_len_thr = 500_000;
     assert_eq!(assignments.assigned().count(), 76);
