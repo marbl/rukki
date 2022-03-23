@@ -170,8 +170,10 @@ pub fn assign_parental_groups(g: &Graph, trio_infos: &[TrioInfo],
     let mut assignments = AssignmentStorage::new();
 
     info!("Running parental group assignment.");
-    debug!("Parental group assignment settings: Minimal marker count -- {assign_cnt}; Minimal sparsity -- 1 in {assign_sparsity}; Minimal ratio -- {assign_ratio} to 1");
-    debug!("ISSUE labeling settings: Minimal marker count -- {issue_cnt}; Minimal sparsity -- 1 in {issue_sparsity}; Maximal ratio -- {issue_ratio} to 1");
+    debug!("Parental group assignment settings: Minimal marker count -- {}; Minimal sparsity -- 1 in {}; Minimal ratio -- {} to 1",
+            assign_cnt, assign_sparsity, assign_ratio);
+    debug!("ISSUE labeling settings: Minimal marker count -- {}; Minimal sparsity -- 1 in {}; Maximal ratio -- {} to 1",
+            issue_cnt, issue_sparsity, issue_ratio);
     assert!(issue_ratio <= assign_ratio);
 
     let assign_node_f = |x: usize, y: usize, node_len: usize| {
@@ -222,7 +224,7 @@ fn parse_group(group_str: &str) -> TrioGroup {
         "PATERNAL" => TrioGroup::PATERNAL,
         "HOMOZYGOUS" => TrioGroup::HOMOZYGOUS,
         "ISSUE" => TrioGroup::ISSUE,
-        _ => panic!("Invalid group string {group_str}"),
+        _ => panic!("Invalid group string {}", group_str),
     }
 }
 

@@ -218,7 +218,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     );
 
     if let Some(output) = &settings.init_assign {
-        info!("Writing initial node annotation to {output}");
+        info!("Writing initial node annotation to {}", output);
         output_coloring(&g, &assignments, output)?;
     }
 
@@ -243,7 +243,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         solid_len_thr);
 
     if let Some(output) = &settings.refined_assign {
-        info!("Writing refined node annotation to {output}");
+        info!("Writing refined node annotation to {}", output);
         output_coloring(&g, &assignments, output)?;
     }
 
@@ -261,12 +261,12 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         &node_usage, false);
 
     if let Some(output) = &settings.final_assign {
-        info!("Writing final node annotation to {output}");
+        info!("Writing final node annotation to {}", output);
         output_coloring(&g, &assignments, output)?;
     }
 
     if let Some(output) = &settings.paths {
-        info!("Outputting haplo-paths to {output}");
+        info!("Outputting haplo-paths to {}", output);
         let mut output = File::create(output)?;
 
         writeln!(output, "name\tpath\tassignment\tinit_node")?;
