@@ -549,11 +549,12 @@ impl <'a> HaploSearcher<'a> {
     }
 
     fn trivial_bubble_end(&self, u: Vertex, hint_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Vertex> {
-        if self.g.outgoing_edge_cnt(u) < 2 {
+        let outgoing = considered_extensions(self.g, u, hint_f);
+        if outgoing.len() < 2 {
             return None;
         }
         let mut opt_w = None;
-        for v in considered_extensions(self.g, u, hint_f).iter().map(|l1| l1.end) {
+        for v in outgoing.iter().map(|l1| l1.end) {
             if self.g.incoming_edge_cnt(v) > 1 {
                 return None;
             }
