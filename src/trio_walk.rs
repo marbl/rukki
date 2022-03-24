@@ -94,13 +94,11 @@ impl <'a> ExtensionHelper<'a> {
     //maybe move to graph or some GraphAlgoHelper?
     fn group_extension(&self, v: Vertex, group: TrioGroup,
                     consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Link> {
-        //debug!("Looking at (subset of) outgoing edges for {}", self.g.v_str(v));
-        let filtered_outgoing = considered_extensions(self.g, v, consider_vertex_f);
 
         //If only extension exists it is always ok if it is unassigned
         //FIXME Probably obsolete with two-step strategy!
-        if filtered_outgoing.len() == 1 {
-            let l = filtered_outgoing[0];
+        if self.g.outgoing_edge_cnt(v) == 1 {
+            let l = self.g.outgoing_edges(v)[0];
             if self.assignments.group(l.end.node_id).map_or(true,
                 |g| TrioGroup::compatible(g, group)) {
                 debug!("Candidate adjacent extension {} (was unique considered)", self.g.v_str(l.end));
@@ -108,6 +106,8 @@ impl <'a> ExtensionHelper<'a> {
             }
         }
 
+        //debug!("Looking at (subset of) outgoing edges for {}", self.g.v_str(v));
+        let filtered_outgoing = considered_extensions(self.g, v, consider_vertex_f);
         let ext = self.only_compatible_of_bearable_link(&filtered_outgoing, group);
         if let Some(l) = ext {
             debug!("Candidate adjacent extension {}", self.g.v_str(l.end));
