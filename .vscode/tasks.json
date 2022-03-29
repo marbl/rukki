@@ -15,7 +15,7 @@
 				"kind": "build",
 				"isDefault": true
 			},
-			"label": "Rust: cargo build --tests - graph_analysis"
+			"label": "Rust: cargo build --tests - rukki"
 		}
 	]
 }

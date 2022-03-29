@@ -1,4 +1,4 @@
-use graph_analysis::*;
+use rukki::*;
 
 #[test]
 fn one_node() {

@@ -7,16 +7,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'graph_analysis'",
+            "name": "Debug unit tests in library 'rukki'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=graph_analysis"
+                    "--package=rukki"
                 ],
                 "filter": {
-                    "name": "graph_analysis",
+                    "name": "rukki",
                     "kind": "lib"
                 }
             },
@@ -26,15 +26,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'graph_analysis'",
+            "name": "Debug executable 'rukki'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=graph_analysis",
-                    "--package=graph_analysis"
+                    "--bin=rukki",
+                    "--package=rukki"
                 ],
                 "filter": {
-                    "name": "graph_analysis",
+                    "name": "rukki",
                     "kind": "bin"
                 }
             },
@@ -44,16 +44,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'graph_analysis'",
+            "name": "Debug unit tests in executable 'rukki'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=graph_analysis",
-                    "--package=graph_analysis"
+                    "--bin=rukki",
+                    "--package=rukki"
                 ],
                 "filter": {
-                    "name": "graph_analysis",
+                    "name": "rukki",
                     "kind": "bin"
                 }
             },
@@ -69,7 +69,7 @@
                     "test",
                     "--no-run",
                     "--test=graph_test",
-                    "--package=graph_analysis"
+                    "--package=rukki"
                 ],
                 "filter": {
                     "name": "graph_test",

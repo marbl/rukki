@@ -1,7 +1,7 @@
 extern crate log;
 
-use graph_analysis::*;
-use graph_analysis::trio::*;
+use rukki::*;
+use rukki::trio::*;
 use std::fs;
 
 //fn from_assignment_iterator<'a>(g: &'a Graph, node_assign_it: impl Iterator<Item=(usize, TrioGroup)>)

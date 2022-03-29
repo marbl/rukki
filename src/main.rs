@@ -26,7 +26,7 @@ struct Args {
 #[derive(Subcommand)]
 enum Commands {
     /// Trio-marker based analysis
-    Trio(graph_analysis::TrioSettings),
+    Trio(rukki::TrioSettings),
     // /// Primary-alt style analysis
     // #[clap(setting(AppSettings::ArgRequiredElseHelp))]
     // PriAlt(PriAltSettings),
@@ -68,7 +68,7 @@ fn main() {
         Commands::Trio(settings) => {
             info!("Running trio marker analysis");
 
-            match graph_analysis::run_trio_analysis(&settings) {
+            match rukki::run_trio_analysis(&settings) {
                 Ok(()) => info!("Success"),
                 Err(e) => info!("Some error happened {:?}", e)
             }
@@ -76,7 +76,7 @@ fn main() {
 
         //Commands::PriAlt(settings) => {
         //    info!("Extracting primary/alt paths");
-        //    match graph_analysis::run_primary_alt_analysis(&settings.graph,
+        //    match rukki::run_primary_alt_analysis(&settings.graph,
         //                                &settings.assign, &settings.paths,
         //                                settings.gaf_paths) {
         //        Ok(()) => info!("Success"),
