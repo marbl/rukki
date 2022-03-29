@@ -733,8 +733,8 @@ impl Path {
         for (i, &v) in self.v_storage.iter().enumerate() {
             if i > 0 {
                 ans += match self.l_storage[i-1] {
-                    GeneralizedLink::AMBIG(_) => if gaf { ">AMBIG" } else { ",AMBIG" },
-                    GeneralizedLink::GAP(_) => if gaf { ">GAP" } else { ",GAP" },
+                    //GeneralizedLink::AMBIG(_) => if gaf { ">AMBIG" } else { ",AMBIG" },
+                    GeneralizedLink::AMBIG(_) | GeneralizedLink::GAP(_) => if gaf { ">GAP" } else { ",GAP" },
                     GeneralizedLink::LINK(_) => "",
                 }
             }

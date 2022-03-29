@@ -840,7 +840,7 @@ mod tests {
             panic!();
         }
 
-        assert_eq!(path.print(&g), String::from("utig4-2545+,AMBIG,utig4-648-"));
+        assert_eq!(path.print(&g), String::from("utig4-2545+,GAP,utig4-648-"));
     }
 
     #[test]
