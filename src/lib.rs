@@ -269,25 +269,23 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         info!("Outputting haplo-paths to {}", output);
         let mut output = File::create(output)?;
 
-        writeln!(output, "name\tpath\tassignment\tinit_node")?;
+        writeln!(output, "name\tpath\tassignment")?;
         for (path, node_id, group) in haplo_paths {
             assert!(path.vertices().contains(&Vertex::forward(node_id)));
             //info!("Identified {:?} path: {}", group, path.print(&g));
-            writeln!(output, "path_from_{}\t{}\t{:?}\t{}",
+            writeln!(output, "path_from_{}\t{}\t{:?}",
                 g.node(node_id).name,
                 path.print_format(&g, settings.gaf_format),
-                group,
-                g.node(node_id).name)?;
+                group)?;
         }
 
         let mut write_node = |n: &Node, group: Option<TrioGroup>| {
             let group_str = group.map_or(String::from("NA"), |x| format!("{:?}", x));
-            writeln!(output, "unused_{}_len_{}\t{}\t{}\t{}",
+            writeln!(output, "unused_{}_len_{}\t{}\t{}",
                 n.name,
                 n.length,
                 Direction::format_node(&n.name, Direction::FORWARD, settings.gaf_format),
-                group_str,
-                n.name)
+                group_str)
         };
 
         for (node_id, n) in g.all_nodes().enumerate() {

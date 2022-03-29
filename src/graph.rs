@@ -312,15 +312,17 @@ impl Graph {
                 let split: Vec<&str> = line.split('\t').collect();
                 //println!("Node line {:?}", split);
                 let name = String::from(split[1]);
+                let tags = &split[3..split.len()];
                 let length = if split[2] != "*" {
                                  split[2].trim().len()
                              } else {
-                                 Self::parse_tag(&split[3..split.len()], "LN:i:")
+                                 Self::parse_tag(tags, "LN:i:")
                                      .expect("Neither sequence nor LN tag provided")
                              };
                 assert!(length > 0);
-                let coverage = match Self::parse_tag::<usize>(&split[3..split.len()], "RC:i:") {
-                    None => Self::parse_tag(&split[3..split.len()], "ll:f:")
+                let coverage = match Self::parse_tag::<usize>(tags, "RC:i:")
+                                        .or(Self::parse_tag::<usize>(tags, "FC:i:")) {
+                    None => Self::parse_tag(tags, "ll:f:")
                                         .unwrap_or(0.),
                     Some(raw_cnt) => raw_cnt as f64 / length as f64,
                 };
