@@ -30,7 +30,8 @@ pub fn reachable_between(g: &Graph, v: Vertex, w: Vertex,
         .copied().collect()
 }
 
-const MIN_GAP_SIZE: usize = 1000;
+pub const MIN_GAP_SIZE: i64 = 1000;
+pub const DEFAULT_GAP_SIZE: i64 = 5000;
 const FILLABLE_BUBBLE_LEN: usize = 50_000;
 const FILLABLE_BUBBLE_DIFF: usize = 200;
 
@@ -315,7 +316,7 @@ impl <'a> HaploSearcher<'a> {
             start: p1.end(),
             end: p2.start(),
             //FIXME use something reasonable
-            gap_size: MIN_GAP_SIZE as i64,
+            gap_size: DEFAULT_GAP_SIZE,
         }));
         assert!(p1.can_merge_in(&p2));
         p1.merge_in(p2);
@@ -455,7 +456,7 @@ impl <'a> HaploSearcher<'a> {
                 start: v,
                 end: w,
                 gap_size: std::cmp::max(curr_gap_est
-                        - self.g.vertex_length(w) as i64, MIN_GAP_SIZE as i64),
+                        - self.g.vertex_length(w) as i64, MIN_GAP_SIZE),
             });
         } else if component.sources.len() == 1 {
             //haplotype merge-in case
@@ -470,7 +471,7 @@ impl <'a> HaploSearcher<'a> {
                         start: v,
                         end: w,
                         gap_size: std::cmp::max(curr_gap_est
-                                , MIN_GAP_SIZE as i64),
+                                , MIN_GAP_SIZE),
                     });
                 }
             }
@@ -693,8 +694,8 @@ impl <'a> HaploSearcher<'a> {
         }
         let w = bubble.end_vertex();
         let gap_est = if bubble.length_range(self.g).0
-                        > self.g.vertex_length(v) + self.g.vertex_length(w) + MIN_GAP_SIZE {
-            bubble.length_range(self.g).0 - self.g.vertex_length(v) - self.g.vertex_length(w)
+                        > self.g.vertex_length(v) + self.g.vertex_length(w) + MIN_GAP_SIZE as usize {
+            (bubble.length_range(self.g).0 - self.g.vertex_length(v) - self.g.vertex_length(w)) as i64
         } else {
             MIN_GAP_SIZE
         };
@@ -702,7 +703,7 @@ impl <'a> HaploSearcher<'a> {
         Some(Path::from_general_link(GeneralizedLink::AMBIG(GapInfo {
             start: v,
             end: w,
-            gap_size: gap_est as i64,
+            gap_size: gap_est,
         })))
     }
 
@@ -713,8 +714,8 @@ impl <'a> HaploSearcher<'a> {
             start: small_tangle.entrance.start,
             end: small_tangle.exit.end,
             //TODO cache estimated size inside tangle
-            gap_size: std::cmp::max(scc::estimate_size_no_mult(small_tangle, self.g),
-                                    MIN_GAP_SIZE) as i64,
+            gap_size: std::cmp::max(scc::estimate_size_no_mult(small_tangle, self.g) as i64,
+                                    MIN_GAP_SIZE),
         })))
     }
 
@@ -839,8 +840,6 @@ mod tests {
         } else {
             panic!();
         }
-
-        assert_eq!(path.print(&g), String::from("utig4-2545+,GAP,utig4-648-"));
     }
 
     #[test]
@@ -859,12 +858,7 @@ mod tests {
             let path = haplo_searcher.haplo_path(graph::Vertex::forward(g.name2id(node)), trio::TrioGroup::MATERNAL);
 
             assert!(path.len() == 4);
-            assert_eq!(path.print(&g), String::from("utig4-947+,utig4-1318-,utig4-1320+,GAP,utig4-1322+"));
-            if let graph::GeneralizedLink::GAP(gap) = path.general_link_at(2) {
-                assert_eq!(gap.gap_size, 36_423i64);
-            } else {
-                panic!();
-            }
+            assert_eq!(path.print(&g), String::from("utig4-947+,utig4-1318-,utig4-1320+,[N36423N],utig4-1322+"));
         }
     }
 }

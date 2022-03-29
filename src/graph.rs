@@ -2,6 +2,8 @@ use std::str;
 use std::collections::HashMap;
 use log::warn;
 
+use crate::trio_walk;
+
 //TODO which ones are redundant?
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum Direction {
@@ -732,11 +734,16 @@ impl Path {
         let mut ans = String::new();
         for (i, &v) in self.v_storage.iter().enumerate() {
             if i > 0 {
-                ans += match self.l_storage[i-1] {
+                match self.l_storage[i-1] {
                     //GeneralizedLink::AMBIG(_) => if gaf { ">AMBIG" } else { ",AMBIG" },
-                    GeneralizedLink::AMBIG(_) | GeneralizedLink::GAP(_) => if gaf { ">GAP" } else { ",GAP" },
-                    GeneralizedLink::LINK(_) => "",
-                }
+                    GeneralizedLink::AMBIG(gap_info) | GeneralizedLink::GAP(gap_info) => {
+                        //TODO use estimated gap size
+                        ans += delim;
+                        assert!(gap_info.gap_size >= trio_walk::MIN_GAP_SIZE);
+                        ans += &format!("[N{}N]", gap_info.gap_size);
+                    },
+                    GeneralizedLink::LINK(_) => {}
+                };
             }
             if i > 0 { ans += delim; }
             ans += &g.v_str_format(v, gaf);
