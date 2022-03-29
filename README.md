@@ -36,7 +36,10 @@ All columns after the third in TSV are ignored.
 Lines have format `path_name\tpath\tassignment`.
 By default paths are formatted as (`<node>[+-](,<node>[+-])*`).
 Also supports GAF path format, i.e. `([<>]<node>)+`, via the `--gaf-format` option.
-The path can also include `,GAP,` (`>GAP` in case of GAF format) markers.
+The path can also include gaps in the `[NXXXN]` format, where `XXX` is the integer giving an estimate gap size.
+Estimators are currently work in progress and not available for all cases.
+Default gap size (for cases where estimator is not yet available) is 5kb.
+Minimal reported value is currently fixed at 1kb (if an estimated value is lower than 1kb, 1kb will be reported instead).
 Gaps represent either an absense of the appropriate connections or a localized ambiguity within the graph.
 Assignment categories are `MATERNAL`, `PATERNAL` or `NA` (for _unassigned_). 
 `NA` can only be associated with paths consisting of a single node.
