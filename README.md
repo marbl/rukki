@@ -1,5 +1,5 @@
 # Rukki
-Rukki (“spinning wheel” in Finnish) is a companion tool of Verkko assembler for extracting longer ‘scaffold’ paths from assembly graphs.
+Rukki ([“spinning wheel”](https://en.wikipedia.org/wiki/Spinning_wheel) in Finnish) is a companion tool of Verkko assembler for extracting longer ‘scaffold’ paths from assembly graphs.
 
 It's primary purpose is to utilize parental (trio) information attributed to the Verkko assembly graph nodes for extraction of longer haplotypes reconstructions in diploid organisms.
 
