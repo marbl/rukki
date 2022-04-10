@@ -265,6 +265,14 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         output_coloring(&g, &assignments, output)?;
     }
 
+    let short_group_str = |o_g: Option<TrioGroup>| {
+        match o_g {
+            Some(TrioGroup::MATERNAL) => "mat",
+            Some(TrioGroup::PATERNAL) => "pat",
+            _ => "na",
+        }
+    };
+
     if let Some(output) = &settings.paths {
         info!("Outputting haplo-paths to {}", output);
         let mut output = File::create(output)?;
@@ -273,19 +281,19 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         for (path, node_id, group) in haplo_paths {
             assert!(path.vertices().contains(&Vertex::forward(node_id)));
             //info!("Identified {:?} path: {}", group, path.print(&g));
-            writeln!(output, "path_from_{}\t{}\t{:?}",
+            writeln!(output, "{}_from_{}\t{}\t{:?}",
+                short_group_str(Some(group)),
                 g.node(node_id).name,
                 path.print_format(&g, settings.gaf_format),
                 group)?;
         }
 
         let mut write_node = |n: &Node, group: Option<TrioGroup>| {
-            let group_str = group.map_or(String::from("NA"), |x| format!("{:?}", x));
-            writeln!(output, "unused_{}_len_{}\t{}\t{}",
+            writeln!(output, "{}_unused_{}\t{}\t{}",
+                short_group_str(group),
                 n.name,
-                n.length,
                 Direction::format_node(&n.name, Direction::FORWARD, settings.gaf_format),
-                group_str)
+                group.map_or(String::from("NA"), |x| format!("{:?}", x)))
         };
 
         for (node_id, n) in g.all_nodes().enumerate() {
