@@ -3,6 +3,7 @@ use std::fs::File;
 use std::error::Error;
 use std::io::Write;
 use log::{info,warn,debug};
+use trio_walk::HaploSearchSettings;
 use std::collections::HashSet;
 
 //tests don't compile without the pub
@@ -136,23 +137,23 @@ fn output_coloring(g: &Graph,
 
 pub fn augment_by_path_search(g: &Graph,
     assignments: trio::AssignmentStorage,
-    solid_len_thr: usize) -> trio::AssignmentStorage {
+    settings: HaploSearchSettings) -> trio::AssignmentStorage {
     info!("Augmenting node annotation by path search. Round 1.");
     let assignments = augment_by_path_search_round(&g,
         assignments,
-        solid_len_thr);
+        settings);
     info!("Augmenting node annotation by path search. Round 2.");
     augment_by_path_search_round(&g,
         assignments,
-        solid_len_thr)
+        settings)
 }
 
 fn augment_by_path_search_round(g: &Graph,
     assignments: trio::AssignmentStorage,
-    solid_len_thr: usize) -> trio::AssignmentStorage {
+    settings: HaploSearchSettings) -> trio::AssignmentStorage {
 
-    let mut path_searcher = trio_walk::HaploSearcher::new_assigning(&g,
-        &assignments, solid_len_thr);
+    let mut path_searcher = trio_walk::HaploSearcher::new(&g,
+        &assignments, settings.assigning_stage_adjusted());
 
     path_searcher.find_all();
     let node_usage = path_searcher.take_used();
@@ -222,12 +223,10 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         output_coloring(&g, &assignments, output)?;
     }
 
-    let solid_len_thr = settings.solid_len;
-
     let suspect_homozygous_cov = if settings.suspect_homozygous_cov_coeff <= 0. {
         settings.suspect_homozygous_cov_coeff
     } else {
-        let unique_est = weighted_mean_solid_cov(&g, solid_len_thr);
+        let unique_est = weighted_mean_solid_cov(&g, settings.solid_len);
         if unique_est == 0. {
             warn!("Looks like the graph didn't have coverage information, which we were hoping to use. Consider providing it or changing --suspect-homozygous-cov-coeff");
         }
@@ -238,21 +237,25 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         settings.trusted_len, suspect_homozygous_cov,
         settings.homozygous_max_len);
 
+    let mut search_settings = HaploSearchSettings {
+        solid_len: settings.solid_len,
+        trusted_len: settings.trusted_len,
+        ..HaploSearchSettings::default()
+    };
+
+    if settings.try_fill_bubbles {
+        search_settings.ambig_filling_level = 2;
+    }
+
     let assignments = augment_by_path_search(&g,
         assignments,
-        solid_len_thr);
+        search_settings);
 
     if let Some(output) = &settings.refined_assign {
         info!("Writing refined node annotation to {}", output);
         output_coloring(&g, &assignments, output)?;
     }
-
-    let mut path_searcher = trio_walk::HaploSearcher::new(&g,
-        &assignments, solid_len_thr);
-
-    if settings.try_fill_bubbles {
-        path_searcher.try_fill_bubbles();
-    }
+    let mut path_searcher = search_settings.build_searcher(&g, &assignments);
 
     let haplo_paths = path_searcher.find_all();
     let node_usage = path_searcher.take_used();

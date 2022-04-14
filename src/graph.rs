@@ -2,9 +2,6 @@ use std::str;
 use std::collections::HashMap;
 use log::warn;
 
-use crate::trio_walk;
-
-//TODO which ones are redundant?
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum Direction {
     FORWARD,
@@ -89,7 +86,7 @@ impl Vertex {
     }
 }
 
-//FIXME support link coverage!
+//TODO support link coverage!
 //TODO separate 'links' and 'edges'
 //links will have overlap size, CIGAR, etc
 //edges will represent a Vertex pair
@@ -739,7 +736,6 @@ impl Path {
                     GeneralizedLink::AMBIG(gap_info) | GeneralizedLink::GAP(gap_info) => {
                         //TODO use estimated gap size
                         ans += delim;
-                        assert!(gap_info.gap_size >= trio_walk::MIN_GAP_SIZE);
                         ans += &format!("[N{}N]", gap_info.gap_size);
                     },
                     GeneralizedLink::LINK(_) => {}

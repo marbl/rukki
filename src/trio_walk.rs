@@ -30,11 +30,6 @@ pub fn reachable_between(g: &Graph, v: Vertex, w: Vertex,
         .copied().collect()
 }
 
-pub const MIN_GAP_SIZE: i64 = 1000;
-pub const DEFAULT_GAP_SIZE: i64 = 5000;
-const FILLABLE_BUBBLE_LEN: usize = 50_000;
-const FILLABLE_BUBBLE_DIFF: usize = 200;
-
 //FIXME use iterators
 fn considered_extensions(g: &Graph, v: Vertex,
                 consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Vec<Link> {
@@ -48,8 +43,7 @@ fn considered_extensions(g: &Graph, v: Vertex,
 pub struct ExtensionHelper<'a> {
     g: &'a Graph,
     assignments: &'a AssignmentStorage,
-    //FIXME rename to 'consider unassigned' or 'allow unassigned'?
-    unassigned_compatible: bool,
+    allow_unassigned: bool,
 }
 
 impl <'a> ExtensionHelper<'a> {
@@ -57,14 +51,14 @@ impl <'a> ExtensionHelper<'a> {
     fn compatible_assignment(&self, node_id: usize, target_group: TrioGroup) -> bool {
         match self.assignments.group(node_id) {
             Some(group) => TrioGroup::compatible(group, target_group),
-            None => self.unassigned_compatible,
+            None => self.allow_unassigned,
         }
     }
 
     fn bearable_assignment(&self, node_id: usize) -> bool {
         match self.assignments.group(node_id) {
             Some(TrioGroup::ISSUE) => false,
-            None => self.unassigned_compatible,
+            None => self.allow_unassigned,
             _ => true,
         }
     }
@@ -137,17 +131,69 @@ impl <'a> ExtensionHelper<'a> {
 
 }
 
-//TODO add template parameter
+#[derive(Copy, Clone, Debug)]
+pub struct HaploSearchSettings {
+    //configuring node length thresholds
+    pub solid_len: usize,
+    pub trusted_len: usize,
+
+    //configuring behavior
+    //NB: path intersections by homozygous labeled 'solid' nodes are always allowed
+    pub allow_solid_intersections: bool,
+    pub allow_unassigned: bool,
+
+    //configuring ambiguous region filling
+    //FIXME more reasonable configuration
+    //0 -- disabled, 1 -- patch paths, 2 -- fill in small bubbles
+    pub ambig_filling_level: usize,
+    //FIXME configure
+    pub fillable_bubble_len: usize,
+    pub fillable_bubble_diff: usize,
+
+    //configuring scaffolding insertion
+    pub skippable_tangle_size: usize,
+    pub min_gap_size: i64,
+    pub default_gap_size: i64,
+}
+
+impl Default for HaploSearchSettings {
+    fn default() -> Self {
+        Self {
+            solid_len: 500_000,
+            trusted_len: 200_000,
+            allow_solid_intersections: false,
+            allow_unassigned: false,
+            ambig_filling_level: 1,
+            fillable_bubble_len: 50_000,
+            fillable_bubble_diff: 200,
+            skippable_tangle_size: 1_000_000,
+            min_gap_size: 1000,
+            default_gap_size: 5000,
+        }
+    }
+}
+
+impl HaploSearchSettings {
+    pub fn assigning_stage_adjusted(&self) -> HaploSearchSettings {
+        HaploSearchSettings {
+            allow_solid_intersections: true,
+            ambig_filling_level: 0,
+            allow_unassigned: true,
+            ..*self
+        }
+    }
+
+    pub fn build_searcher<'a>(&self, g: &'a Graph,
+        assignments: &'a AssignmentStorage) -> HaploSearcher<'a> {
+            HaploSearcher::new(g, assignments, *self)
+    }
+}
+
 pub struct HaploSearcher<'a> {
     g: &'a Graph,
     assignments: &'a AssignmentStorage,
     extension_helper: ExtensionHelper<'a>,
-    solid_len: usize,
-    //path intersections by homozygous nodes are always allowed
-    allow_intersections: bool,
-    //FIXME more reasonable configuration
-    //0 -- disabled, 1 -- patch paths, 2 -- fill in small bubbles
-    ambig_filling_level: usize,
+    settings: HaploSearchSettings,
     used: AssignmentStorage,
     in_sccs: HashSet<usize>,
     small_tangle_index: HashMap<Vertex, scc::LocalizedTangle>,
@@ -155,52 +201,32 @@ pub struct HaploSearcher<'a> {
 
 type HaploPath = (Path, usize, TrioGroup);
 
-//FIXME review usage of length threshold!
 impl <'a> HaploSearcher<'a> {
-    pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage,
-        solid_len: usize) -> HaploSearcher<'a> {
+    pub fn new(g: &'a Graph, assignments: &'a AssignmentStorage, settings: HaploSearchSettings) -> HaploSearcher<'a> {
         let sccs = scc::strongly_connected(g);
         let mut small_tangle_index = HashMap::new();
 
-        //FIXME parameterize component size separately!
         for small_tangle in scc::find_small_localized(g,
                                                       &sccs,
-                                                      solid_len * 3) {
+                                                      settings.skippable_tangle_size) {
             small_tangle_index.insert(small_tangle.entrance.start, small_tangle);
         }
 
         HaploSearcher {
             g,
             assignments,
-            solid_len,
-            allow_intersections: false,
-            ambig_filling_level: 1,
+            settings,
             used: AssignmentStorage::new(),
             in_sccs: scc::nodes_in_sccs(g, &sccs),
             extension_helper: ExtensionHelper {
                 g,
                 assignments,
-                unassigned_compatible: false,
+                allow_unassigned: settings.allow_unassigned,
             },
             small_tangle_index,
         }
     }
 
-    pub fn new_assigning(g: &'a Graph,
-        assignments: &'a AssignmentStorage,
-        solid_len: usize) -> HaploSearcher<'a> {
-        let mut searcher = Self::new(g, assignments, solid_len);
-        searcher.allow_intersections = true;
-        searcher.ambig_filling_level = 0;
-        searcher.extension_helper.unassigned_compatible = true;
-        searcher
-    }
-
-    pub fn try_fill_bubbles(&mut self) {
-        self.ambig_filling_level = 2;
-    }
-
-    //FIXME return from find_all
     pub fn used(&self) -> &AssignmentStorage {
         &self.used
     }
@@ -220,7 +246,7 @@ impl <'a> HaploSearcher<'a> {
                 continue;
             }
             //launch from long, definitely assigned nodes
-            if node.length >= self.solid_len && self.assignments.is_definite(node_id) {
+            if node.length >= self.settings.solid_len && self.assignments.is_definite(node_id) {
                 let group = self.assignments.get(node_id).unwrap().group;
                 let path = self.haplo_path(Vertex::forward(node_id), group);
                 self.used.update_all(path.vertices().iter().map(|v| v.node_id), group);
@@ -242,9 +268,9 @@ impl <'a> HaploSearcher<'a> {
     }
 
     fn aimed_grow_ext(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
-        assert!(self.g.vertex_length(v) >= self.solid_len);
+        assert!(self.g.vertex_length(v) >= self.settings.solid_len);
 
-        let (u, w) = self.extension_helper.find_compatible_source_sink(v, group, self.solid_len)?;
+        let (u, w) = self.extension_helper.find_compatible_source_sink(v, group, self.settings.solid_len)?;
         assert!(u == v);
         assert!(u.node_id != w.node_id);
 
@@ -257,13 +283,13 @@ impl <'a> HaploSearcher<'a> {
 
         let mut reachable_vertices =
             reachable_between(self.g, v, w,
-                self.solid_len,
+                self.settings.solid_len,
                 Some(&|x: Vertex| self.unassigned_or_compatible(x.node_id, group)));
 
         if reachable_vertices.len() == 0 {
             reachable_vertices =
                 reachable_between(self.g, v, w,
-                    self.solid_len, None);
+                    self.settings.solid_len, None);
         }
 
         let mut p1 = Path::new(v);
@@ -295,9 +321,8 @@ impl <'a> HaploSearcher<'a> {
             debug!("Trimming path forward to {}", self.g.v_str(trim_to));
             assert!(p1.trim_to(&trim_to));
             p1.trim(1);
-            //FIXME switch to debug_assert
-            assert!(p1.vertices().iter().filter(|x| p2.in_path(x.node_id)).next().is_none());
-        } else if self.ambig_filling_level > 0 {
+            debug_assert!(p1.vertices().iter().filter(|x| p2.in_path(x.node_id)).next().is_none());
+        } else if self.settings.ambig_filling_level > 0 {
             debug!("Will try to patch the gap between forward/backward paths");
             //if paths don't overlap -- try linking
             if let Some(link_p) = self.try_link(p1.end(), p2.start(), group) {
@@ -316,7 +341,7 @@ impl <'a> HaploSearcher<'a> {
             start: p1.end(),
             end: p2.start(),
             //FIXME use something reasonable
-            gap_size: DEFAULT_GAP_SIZE,
+            gap_size: self.settings.default_gap_size,
         }));
         assert!(p1.can_merge_in(&p2));
         p1.merge_in(p2);
@@ -360,7 +385,7 @@ impl <'a> HaploSearcher<'a> {
             if self.check_available_append(path, &ext, group) {
                 path.merge_in(ext);
                 let v = path.end();
-                if self.g.vertex_length(v) >= self.solid_len {
+                if self.g.vertex_length(v) >= self.settings.solid_len {
                     debug!("Reached long node {}", self.g.v_str(v));
                     return true;
                 }
@@ -372,24 +397,11 @@ impl <'a> HaploSearcher<'a> {
         false
     }
 
-    //TODO maybe consume when grow?
     fn unguided_next_or_gap(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
         self.local_next(v, group, None)
-            .or_else(|| self.generalized_patch_forward(v, group))
-            .or_else(|| self.patch_forward(v, group))
-    }
-
-    //FIXME isn't it obsolete with generalized_patch?
-    //FIXME rename
-    fn patch_forward(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
-        if let Some(gap_info) = self.generalized_gap(v, group, 0) {
-            let next_node = gap_info.end.node_id;
-            assert!(self.assignments.group(next_node) == Some(group));
-            debug!("Identified jump across gap to {}", self.g.v_str(gap_info.end));
-            Some(Path::from_general_link(GeneralizedLink::GAP(gap_info)))
-        } else {
-            None
-        }
+            .or_else(|| self.gap_patch(v, group, self.settings.trusted_len))
+            //FIXME this one might lead to interesting non-trivial issues
+            .or_else(|| self.gap_patch(v, group, 0))
     }
 
     fn find_unbroken_alt_candidate(&self, v: Vertex, short_node_threshold: usize) -> Option<(Vertex, i64)> {
@@ -417,28 +429,26 @@ impl <'a> HaploSearcher<'a> {
         }
     }
 
-    //FIXME add debug prints
-    //FIXME rename
     //TODO very asymmetric condition :(
-    fn generalized_gap(&self, v: Vertex, group: TrioGroup, short_node_threshold: usize) -> Option<GapInfo> {
-        //FIXME might be much easier to augment graph with extra 'gap' links after all!
-        if self.g.vertex_length(v) < short_node_threshold {
+    //TODO might be worthwhile to augment graph with extra 'gap' links in future
+    fn generalized_gap_ahead(&self, v: Vertex, group: TrioGroup, short_node_len: usize) -> Option<GapInfo> {
+        if self.g.vertex_length(v) < short_node_len {
             return None;
         }
         debug!("Trying to find generalized gap from {}", self.g.v_str(v));
-        let (alt, curr_gap_est) = self.find_unbroken_alt_candidate(v, short_node_threshold)?;
+        let (alt, curr_gap_est) = self.find_unbroken_alt_candidate(v, short_node_len)?;
         debug!("Was able to find alt node {}", self.g.v_str(alt));
 
         //FIXME also make it work when alt is short!
         if self.unassigned_or_compatible(alt.node_id, group)
-            || self.g.vertex_length(alt) < short_node_threshold {
+            || self.g.vertex_length(alt) < short_node_len {
             debug!("Bad alt");
             return None;
         }
 
         debug!("Searching for short-node component ahead of {}", self.g.v_str(alt));
         let component = dfs::ShortNodeComponent::ahead_from_long(self.g,
-                                        alt, short_node_threshold);
+                                        alt, short_node_len);
 
         //think of maybe relaxing
         if !component.simple_boundary()
@@ -456,12 +466,12 @@ impl <'a> HaploSearcher<'a> {
                 start: v,
                 end: w,
                 gap_size: std::cmp::max(curr_gap_est
-                        - self.g.vertex_length(w) as i64, MIN_GAP_SIZE),
+                        - self.g.vertex_length(w) as i64, self.settings.min_gap_size),
             });
         } else if component.sources.len() == 1 {
             //haplotype merge-in case
             assert!(component.sources.iter().next() == Some(&alt));
-            //FIXME be more specific in dead-end check
+            //FIXME more specific orientation in dead-end check
             if !component.has_deadends
                 && component.sinks.iter().all(|x| self.assignments.is_definite(x.node_id)) {
                 if let Some(&w) = only_or_none(component.sinks.iter()
@@ -471,7 +481,7 @@ impl <'a> HaploSearcher<'a> {
                         start: v,
                         end: w,
                         gap_size: std::cmp::max(curr_gap_est
-                                , MIN_GAP_SIZE),
+                                , self.settings.min_gap_size),
                     });
                 }
             }
@@ -481,22 +491,16 @@ impl <'a> HaploSearcher<'a> {
         None
     }
 
-    //FIXME inline
-    //FIXME rename
-    fn generalized_patch_forward(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
-        //FIXME configure
-        if let Some(gap_info) = self.generalized_gap(v, group, 200_000) {
-            let next_node = gap_info.end.node_id;
-            assert!(self.assignments.group(next_node) == Some(group));
-            debug!("Identified jump across 'generalized' gap to {}", self.g.v_str(gap_info.end));
-            Some(Path::from_general_link(GeneralizedLink::GAP(gap_info)))
-        } else {
-            None
-        }
+    fn gap_patch(&self, v: Vertex, group: TrioGroup, short_node_len: usize) -> Option<Path> {
+        let gap_info = self.generalized_gap_ahead(v, group, short_node_len)?;
+        let next_node = gap_info.end.node_id;
+        assert!(self.assignments.group(next_node) == Some(group));
+        debug!("Identified jump across 'generalized' gap to {}", self.g.v_str(gap_info.end));
+        Some(Path::from_general_link(GeneralizedLink::GAP(gap_info)))
     }
 
     fn long_node(&self, node_id: usize) -> bool {
-        self.g.node(node_id).length >= self.solid_len
+        self.g.node(node_id).length >= self.settings.solid_len
     }
 
     fn check_link_vertex(&self, w: Vertex, group: TrioGroup) -> bool {
@@ -534,7 +538,8 @@ impl <'a> HaploSearcher<'a> {
 
         for l in outgoing_edges {
             let v = l.end;
-            //TODO think if checks are reasonable //FIXME think if we should check coverage too
+            //TODO think if checks are reasonable
+            //FIXME think if we should check coverage too
             if self.check_link_vertex(v, group) {
                 if let Some(l2) = self.g.connector(v, w) {
                     debug!("Was able to link {} and {} via {}",
@@ -574,7 +579,7 @@ impl <'a> HaploSearcher<'a> {
 
     fn choose_trivial_bubble_side(&self, v: Vertex, group: TrioGroup,
         consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
-        if self.ambig_filling_level < 2 {
+        if self.settings.ambig_filling_level < 2 {
             return None;
         }
 
@@ -589,13 +594,13 @@ impl <'a> HaploSearcher<'a> {
         let filtered_outgoing: Vec<Link> = considered_extensions(self.g, v, consider_vertex_f).into_iter()
                                         .filter(|l| self.unassigned_or_compatible(l.end.node_id, group)).collect();
         if filtered_outgoing.len() > 0
-            && filtered_outgoing.iter().all(|&l| self.g.vertex_length(l.end) < self.solid_len)
+            && filtered_outgoing.iter().all(|&l| self.g.vertex_length(l.end) < self.settings.solid_len)
             && w.node_id != v.node_id {
             let max_len = filtered_outgoing.iter().map(|l| len_across(v, l.end, w)).max().unwrap();
             let min_len = filtered_outgoing.iter().map(|l| len_across(v, l.end, w)).min().unwrap();
             if filtered_outgoing.len() > 1
-                && (max_len > FILLABLE_BUBBLE_LEN as i64
-                    || (max_len - min_len) > FILLABLE_BUBBLE_DIFF as i64) {
+                && (max_len > self.settings.fillable_bubble_len as i64
+                    || (max_len - min_len) > self.settings.fillable_bubble_diff as i64) {
                 return None;
             }
             let ext = filtered_outgoing.into_iter()
@@ -627,7 +632,7 @@ impl <'a> HaploSearcher<'a> {
         //TODO think of growing within the bubble if possible (ensyre symmetry)
         let bubble = superbubble::find_superbubble_subgraph(self.g, v, &sb_params,
             consider_vertex_f)?;
-        if bubble.inner_vertices().any(|&v| self.g.vertex_length(v) >= self.solid_len) {
+        if bubble.inner_vertices().any(|&v| self.g.vertex_length(v) >= self.settings.solid_len) {
             return None;
         }
 
@@ -649,9 +654,9 @@ impl <'a> HaploSearcher<'a> {
 
         let length_range = bubble.length_range(self.g);
 
-        if self.ambig_filling_level > 1
-                && length_range.1 <= FILLABLE_BUBBLE_DIFF + length_range.0
-                && length_range.1 <= FILLABLE_BUBBLE_LEN
+        if self.settings.ambig_filling_level > 1
+                && length_range.1 <= self.settings.fillable_bubble_diff + length_range.0
+                && length_range.1 <= self.settings.fillable_bubble_len
                     + self.g.vertex_length(v) + self.g.vertex_length(w) {
             if direct_connectors.len() > 0 {
                 let p = self.connecting_path(v, direct_connectors[0], w);
@@ -665,7 +670,7 @@ impl <'a> HaploSearcher<'a> {
         }
 
         //check if any satisfies the filling criteria (once added gap won't be filled in)
-        if self.ambig_filling_level > 0 {
+        if self.settings.ambig_filling_level > 0 {
             for &direct_conn in &direct_connectors {
                 if self.check_link_vertex(direct_conn, group) {
                     let p = self.connecting_path(v, direct_conn, w);
@@ -683,21 +688,21 @@ impl <'a> HaploSearcher<'a> {
         use superbubble::SbSearchParams;
         let sb_params = SbSearchParams {
             //TODO think of relaxing a bit
-            max_length: self.solid_len,
+            max_length: self.settings.solid_len,
             ..SbSearchParams::unrestricted()
         };
         //TODO think of growing within the bubble if possible (ensyre symmetry)
         let bubble = superbubble::find_superbubble_subgraph(self.g, v, &sb_params,
             consider_vertex_f)?;
-        if bubble.inner_vertices().any(|&v| self.g.vertex_length(v) >= self.solid_len) {
+        if bubble.inner_vertices().any(|&v| self.g.vertex_length(v) >= self.settings.solid_len) {
             return None;
         }
         let w = bubble.end_vertex();
         let gap_est = if bubble.length_range(self.g).0
-                        > self.g.vertex_length(v) + self.g.vertex_length(w) + MIN_GAP_SIZE as usize {
+                        > self.g.vertex_length(v) + self.g.vertex_length(w) + self.settings.min_gap_size as usize {
             (bubble.length_range(self.g).0 - self.g.vertex_length(v) - self.g.vertex_length(w)) as i64
         } else {
-            MIN_GAP_SIZE
+            self.settings.min_gap_size
         };
         debug!("Candidate across-bubble jump to {}", self.g.v_str(w));
         Some(Path::from_general_link(GeneralizedLink::AMBIG(GapInfo {
@@ -715,7 +720,7 @@ impl <'a> HaploSearcher<'a> {
             end: small_tangle.exit.end,
             //TODO cache estimated size inside tangle
             gap_size: std::cmp::max(scc::estimate_size_no_mult(small_tangle, self.g) as i64,
-                                    MIN_GAP_SIZE),
+                                    self.settings.min_gap_size),
         })))
     }
 
@@ -740,13 +745,12 @@ impl <'a> HaploSearcher<'a> {
             return false;
         }
 
-        if !self.allow_intersections {
+        if !self.settings.allow_solid_intersections {
             if let Some(used_group) = self.used.group(node_id) {
                 if TrioGroup::incompatible(used_group, target_group) {
                     //node already used in different haplotype
                     if self.long_node(node_id)
                         && self.assignments.group(node_id) != Some(TrioGroup::HOMOZYGOUS) {
-                        //FIXME increase this threshold
                         debug!("Can't reuse long node {} (not initially marked as homozygous) in different haplotype",
                             self.g.name(node_id));
                         return false;
@@ -800,15 +804,6 @@ impl <'a> HaploSearcher<'a> {
         true
     }
 
-    ////maybe move to graph or some GraphAlgoHelper?
-    //fn unambiguous_extension(&self, v: Vertex) -> Option<Link> {
-    //    //TODO simplify?
-    //    match self.g.outgoing_edge_cnt(v) {
-    //        1 => Some(self.g.outgoing_edges(v)[0]),
-    //        _ => None,
-    //    }
-    //}
-
 }
 
 #[cfg(test)]
@@ -832,7 +827,7 @@ mod tests {
         let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
         let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
-        let haplo_searcher = trio_walk::HaploSearcher::new(&g, &assignments, 500_000);
+        let haplo_searcher = trio_walk::HaploSearchSettings::default().build_searcher(&g, &assignments);
         let path = haplo_searcher.haplo_path(graph::Vertex::forward(g.name2id("utig4-2545")), trio::TrioGroup::PATERNAL);
         assert!(path.len() == 2);
         if let graph::GeneralizedLink::AMBIG(ambig) = path.general_link_at(0) {
@@ -851,7 +846,7 @@ mod tests {
         let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
         let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
-        let haplo_searcher = trio_walk::HaploSearcher::new(&g, &assignments, 500_000);
+        let haplo_searcher = trio_walk::HaploSearchSettings::default().build_searcher(&g, &assignments);
         for node in ["utig4-1322", "utig4-1320", "utig4-947"] {
             info!("Starting from {}", node);
             println!("Print Starting from {}", node);
