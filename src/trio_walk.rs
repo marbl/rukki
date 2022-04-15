@@ -146,7 +146,6 @@ pub struct HaploSearchSettings {
     //FIXME more reasonable configuration
     //0 -- disabled, 1 -- patch paths, 2 -- fill in small bubbles
     pub ambig_filling_level: usize,
-    //FIXME configure
     pub fillable_bubble_len: usize,
     pub fillable_bubble_diff: usize,
 

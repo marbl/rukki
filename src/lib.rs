@@ -98,6 +98,22 @@ pub struct TrioSettings {
     #[clap(long)]
     pub try_fill_bubbles: bool,
 
+    /// Bubbles including a longer alternative sequence will not be filled
+    #[clap(long, default_value_t = 50_000)]
+    fillable_bubble_len: usize,
+
+    /// Bubbles with bigger difference between alternatives' lengths will not be filled
+    #[clap(long, default_value_t = 200)]
+    fillable_bubble_diff: usize,
+
+    /// Minimal introducible gap size (number of Ns reported). If the gap size estimate is smaller it will be artificially increased to this value.
+    #[clap(long, default_value_t = 1000)]
+    min_gap_size: usize,
+
+    /// Default gap size, which will be output in cases where reasonable estimate is not possible or (more likely) hasn't been implemented yet.
+    #[clap(long, default_value_t = 5000)]
+    default_gap_size: usize,
+
 }
 
 fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
@@ -240,6 +256,10 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let mut search_settings = HaploSearchSettings {
         solid_len: settings.solid_len,
         trusted_len: settings.trusted_len,
+        fillable_bubble_len: settings.fillable_bubble_len,
+        fillable_bubble_diff: settings.fillable_bubble_diff,
+        min_gap_size: settings.min_gap_size as i64,
+        default_gap_size: settings.default_gap_size as i64,
         ..HaploSearchSettings::default()
     };
 
