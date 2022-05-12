@@ -110,11 +110,26 @@ impl <'a> ExtensionHelper<'a> {
         ext
     }
 
-    fn find_compatible_source_sink(&self, v: Vertex, group:TrioGroup, long_node_threshold: usize)
-    -> Option<(Vertex, Vertex)> {
-        let component = dfs::ShortNodeComponent::search_from(self.g, v, long_node_threshold);
+    fn find_compatible_sink(&self, v: Vertex, group: TrioGroup, solid_len: usize)
+    -> Option<Vertex> {
+        assert!(self.g.vertex_length(v) >= solid_len);
+        let component = dfs::ShortNodeComponent::search_from(self.g, v, solid_len);
+        assert!(component.sources.contains(&v));
         debug!("Component -- {}", component.print(self.g));
-        debug!("Looking for unique compatible source/sink pair");
+        debug!("Looking for compatible sink and checking uniqueness");
+
+        //special hairpin case
+        if component.sources.len() == 2
+            && component.sources.iter()
+                .all(|x| self.compatible_assignment(x.node_id, group))
+            && component.sinks.iter()
+                .map(|&x| x.rc())
+                .collect::<HashSet<Vertex>>() == component.sources {
+            //let it = component.sinks.iter().copied().filter(|&x| x != v.rc());
+            //let a = only_or_none(it);
+            debug!("Special hairpin case");
+            return only_or_none(component.sinks.iter().copied().filter(|&x| x != v.rc()));
+        }
 
         debug!("Identifying source");
         let s = self.only_compatible_of_bearable(component.sources.iter().copied(),
@@ -124,8 +139,13 @@ impl <'a> ExtensionHelper<'a> {
         let t = self.only_compatible_of_bearable(component.sinks.iter().copied(),
                                 group)?;
 
-        debug!("Search successful: ({},{})", self.g.v_str(s), self.g.v_str(t));
-        return Some((s, t));
+        assert!(s == v);
+        if s.node_id == t.node_id {
+            debug!("Next 'target' node {} was the same as current one", self.g.v_str(t));
+            return None;
+        }
+
+        return Some(t);
     }
 
 }
@@ -268,13 +288,7 @@ impl <'a> HaploSearcher<'a> {
     fn aimed_grow_ext(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
         assert!(self.g.vertex_length(v) >= self.settings.solid_len);
 
-        let (u, w) = self.extension_helper.find_compatible_source_sink(v, group, self.settings.solid_len)?;
-        assert!(u == v);
-        //assert!(u.node_id != w.node_id);
-        if u.node_id == w.node_id {
-            debug!("Next 'target' node {} was the same as current one", self.g.v_str(w));
-            return None;
-        }
+        let w = self.extension_helper.find_compatible_sink(v, group, self.settings.solid_len)?;
 
         if !self.check_available(w.node_id, group) {
             debug!("Next 'target' node {} was unavailable", self.g.v_str(w));
