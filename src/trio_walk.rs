@@ -112,21 +112,20 @@ impl <'a> ExtensionHelper<'a> {
 
     fn find_compatible_source_sink(&self, v: Vertex, group:TrioGroup, long_node_threshold: usize)
     -> Option<(Vertex, Vertex)> {
-
         let component = dfs::ShortNodeComponent::search_from(self.g, v, long_node_threshold);
+        debug!("Component -- {}", component.print(self.g));
+        debug!("Looking for unique compatible source/sink pair");
 
-        //check that sources/sinks are clearly separated and that all have assignments
-        if !component.simple_boundary() {
-            return None;
-        }
+        debug!("Identifying source");
+        let s = self.only_compatible_of_bearable(component.sources.iter().copied(),
+                                group)?;
 
-        let compatible_source = self.only_compatible_of_bearable(component.sources.iter().copied(),
-                                        group)?;
+        debug!("Identifying sink");
+        let t = self.only_compatible_of_bearable(component.sinks.iter().copied(),
+                                group)?;
 
-        let compatible_sink = self.only_compatible_of_bearable(component.sinks.iter().copied(),
-                                        group)?;
-
-        return Some((compatible_source, compatible_sink));
+        debug!("Search successful: ({},{})", self.g.v_str(s), self.g.v_str(t));
+        return Some((s, t));
     }
 
 }
@@ -271,10 +270,14 @@ impl <'a> HaploSearcher<'a> {
 
         let (u, w) = self.extension_helper.find_compatible_source_sink(v, group, self.settings.solid_len)?;
         assert!(u == v);
-        assert!(u.node_id != w.node_id);
+        //assert!(u.node_id != w.node_id);
+        if u.node_id == w.node_id {
+            debug!("Next 'target' node {} was the same as current one", self.g.v_str(w));
+            return None;
+        }
 
         if !self.check_available(w.node_id, group) {
-            debug!("Next 'target' vertex {} was unavailable", self.g.v_str(w));
+            debug!("Next 'target' node {} was unavailable", self.g.v_str(w));
             return None;
         }
 

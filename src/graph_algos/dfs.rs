@@ -302,4 +302,10 @@ impl ShortNodeComponent {
     pub fn all_nodes(&self) -> impl Iterator<Item=&Vertex> {
         self.inner.iter().chain(self.sources.iter()).chain(self.sinks.iter())
     }
+
+    pub fn print(&self, g: &Graph) -> String {
+        format!("Sources: {}; sinks: {}",
+          self.sources.iter().map(|&v| g.v_str(v)).collect::<Vec<String>>().join(", "),
+          self.sinks.iter().map(|&v| g.v_str(v)).collect::<Vec<String>>().join(", "))
+    }
 }
