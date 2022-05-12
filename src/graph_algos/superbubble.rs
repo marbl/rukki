@@ -130,16 +130,16 @@ pub fn find_superbubble(g: &Graph, v: Vertex, params: &SbSearchParams) -> Option
 
 //TODO handle case when first/last vertex have other outgoing/incoming edges
 //last vertex case is almost handled
-pub fn find_superbubble_subgraph(g: &Graph, v: Vertex, params: &SbSearchParams,
+pub fn find_superbubble_subgraph(g: &Graph, s: Vertex, params: &SbSearchParams,
     consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Superbubble> {
     if let Some(f) = consider_vertex_f {
-        if !f(v) {
+        if !f(s) {
             return None;
         }
     };
 
     let mut bubble = Superbubble {
-        start_vertex: v,
+        start_vertex: s,
         reached_vertices: HashMap::new(),
         end_vertex: None,
     };
@@ -246,12 +246,12 @@ pub fn find_superbubble_subgraph(g: &Graph, v: Vertex, params: &SbSearchParams,
             //Also needs more work to get final vertex!!!
             //|| (can_be_processed.len() == 0 && not_ready_cnt == 1)
             //process last vertex?
-            debug!("End node found! Vertex {}", g.v_str(v));
-            let v = can_be_processed.pop().unwrap();
+            let t = can_be_processed.pop().unwrap();
+            debug!("End node found! Vertex {}", g.v_str(t));
 
-            let &(min_len, max_len) = bubble.reached_vertices.get(&v).unwrap();
+            let &(min_len, max_len) = bubble.reached_vertices.get(&t).unwrap();
 
-            let v_len = g.vertex_length(v);
+            let v_len = g.vertex_length(t);
 
             //FIXME it seems like only start_pos is ever checked
             if min_len > v_len && (min_len - v_len) > params.max_length {
@@ -264,7 +264,7 @@ pub fn find_superbubble_subgraph(g: &Graph, v: Vertex, params: &SbSearchParams,
                     max_len - min_len, params.max_diff);
                 return None;
             }
-            bubble.end_vertex = Some(v);
+            bubble.end_vertex = Some(t);
             return Some(bubble);
         }
     }
