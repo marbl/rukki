@@ -163,8 +163,10 @@ pub struct HaploSearchSettings {
 
     //configuring ambiguous region filling
     //FIXME more reasonable configuration
+    //FIXME separate setting for bubbles in haplotype regions
     //0 -- disabled, 1 -- patch paths, 2 -- fill in small bubbles
     pub ambig_filling_level: usize,
+    pub max_unique_cov: f64,
     pub fillable_bubble_len: usize,
     pub fillable_bubble_diff: usize,
 
@@ -182,6 +184,7 @@ impl Default for HaploSearchSettings {
             allow_solid_intersections: false,
             allow_unassigned: false,
             ambig_filling_level: 1,
+            max_unique_cov: f64::MAX,
             fillable_bubble_len: 50_000,
             fillable_bubble_diff: 200,
             skippable_tangle_size: 1_000_000,
@@ -340,7 +343,7 @@ impl <'a> HaploSearcher<'a> {
             debug_assert!(p1.vertices().iter().filter(|x| p2.in_path(x.node_id)).next().is_none());
         } else if self.settings.ambig_filling_level > 0 {
             debug!("Will try to patch the gap between forward/backward paths");
-            //if paths don't overlap -- try linking
+            //if paths don't overlap -- try linking (works only near solid edges)
             if let Some(link_p) = self.try_link(p1.end(), p2.start(), group) {
                 //TODO simplify? Here we know that p1 and p2 don't have common nodes
                 if p1.can_merge_in(&link_p) && link_p.can_merge_in(&p2) {
@@ -534,8 +537,8 @@ impl <'a> HaploSearcher<'a> {
             && self.g.incoming_edge_cnt(w) == 1
             && self.g.outgoing_edge_cnt(w) == 1
             && (long_node_ahead(w)
-                || long_node_ahead(w.rc())
-                || self.assignments.group(w.node_id) == Some(group))
+                || long_node_ahead(w.rc()))
+            //    || self.assignments.group(w.node_id) == Some(group))
     }
 
     fn try_link(&self, u: Vertex, w: Vertex, group: TrioGroup) -> Option<Path> {
@@ -607,6 +610,10 @@ impl <'a> HaploSearcher<'a> {
 
         let end_cov = |l: &Link| self.g.node(l.end.node_id).coverage;
         let w = self.trivial_bubble_end(v, consider_vertex_f)?;
+        if !self.bubble_filling_cov_check(v) || !self.bubble_filling_cov_check(w) {
+            return None;
+        }
+
         let filtered_outgoing: Vec<Link> = considered_extensions(self.g, v, consider_vertex_f).into_iter()
                                         .filter(|l| self.unassigned_or_compatible(l.end.node_id, group)).collect();
         if filtered_outgoing.len() > 0
@@ -673,7 +680,8 @@ impl <'a> HaploSearcher<'a> {
         if self.settings.ambig_filling_level > 1
                 && length_range.1 <= self.settings.fillable_bubble_diff + length_range.0
                 && length_range.1 <= self.settings.fillable_bubble_len
-                    + self.g.vertex_length(v) + self.g.vertex_length(w) {
+                    + self.g.vertex_length(v) + self.g.vertex_length(w)
+                && self.bubble_filling_cov_check(v) && self.bubble_filling_cov_check(w) {
             if direct_connectors.len() > 0 {
                 let p = self.connecting_path(v, direct_connectors[0], w);
                 debug!("Candidate extension by super-bubble fill (direct connector) {}", p.print(self.g));
@@ -686,7 +694,8 @@ impl <'a> HaploSearcher<'a> {
         }
 
         //check if any satisfies the filling criteria (once added gap won't be filled in)
-        if self.settings.ambig_filling_level > 0 {
+        //enabled only in case of the 'aimed' search (consider_vertex_f check)
+        if self.settings.ambig_filling_level > 0 && consider_vertex_f.is_some() {
             for &direct_conn in &direct_connectors {
                 if self.check_link_vertex(direct_conn, group) {
                     let p = self.connecting_path(v, direct_conn, w);
@@ -790,6 +799,13 @@ impl <'a> HaploSearcher<'a> {
                     .all(|l| self.check_available(l.end().node_id, group))
     }
 
+    fn bubble_filling_cov_check(&self, v: Vertex) -> bool {
+        assert!(self.settings.ambig_filling_level > 1 && self.settings.max_unique_cov >= 0.);
+        (self.settings.max_unique_cov > 0. && (self.g.node(v.node_id).coverage - 1e-5) < self.settings.max_unique_cov)
+            || self.long_node(v.node_id)
+            || self.assignments.group(v.node_id) == Some(TrioGroup::HOMOZYGOUS)
+    }
+
     fn local_next(&self, v: Vertex, group: TrioGroup,
                     constraint_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
         self.find_small_tangle_jump_ahead(v, group)
@@ -805,6 +821,7 @@ impl <'a> HaploSearcher<'a> {
                     target_v: Vertex, hint_f: &dyn Fn(Vertex)->bool) -> bool {
         debug!("Locally growing from {}", self.g.v_str(path.end()));
         while let Some(ext) = self.local_next(path.end(), group, Some(hint_f))
+                        //FIXME review logic
                        .or_else(|| self.local_next(path.end(), group, None)) {
             assert!(ext.end() == target_v || !ext.in_path(target_v.node_id));
             if self.check_available_append(path, &ext, group) {

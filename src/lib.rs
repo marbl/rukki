@@ -98,6 +98,11 @@ pub struct TrioSettings {
     #[clap(long)]
     pub try_fill_bubbles: bool,
 
+    /// Do not fill bubble if source or sink is non-solid, non-homozygous and has coverage above <coeff> * <weighted mean coverage of 'solid' nodes>
+    /// (0. fails coverage check, negative makes it to always pass)
+    #[clap(long, default_value_t = 1.5)]
+    pub max_unique_cov_coeff: f64,
+
     /// Bubbles including a longer alternative sequence will not be filled
     #[clap(long, default_value_t = 50_000)]
     fillable_bubble_len: usize,
@@ -239,14 +244,14 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         output_coloring(&g, &assignments, output)?;
     }
 
+    let solid_cov_est = weighted_mean_solid_cov(&g, settings.solid_len);
     let suspect_homozygous_cov = if settings.suspect_homozygous_cov_coeff <= 0. {
         settings.suspect_homozygous_cov_coeff
     } else {
-        let unique_est = weighted_mean_solid_cov(&g, settings.solid_len);
-        if unique_est == 0. {
+        if solid_cov_est == 0. {
             warn!("Looks like the graph didn't have coverage information, which we were hoping to use. Consider providing it or changing --suspect-homozygous-cov-coeff");
         }
-        settings.suspect_homozygous_cov_coeff * unique_est
+        settings.suspect_homozygous_cov_coeff * solid_cov_est
     };
 
     let assignments = trio::assign_homozygous(&g, assignments,
@@ -265,6 +270,21 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
 
     if settings.try_fill_bubbles {
         search_settings.ambig_filling_level = 2;
+        info!("Will try filling small bubbles");
+        //assert!(settings.max_unique_cov_coeff >= 0.);
+        if settings.max_unique_cov_coeff < 0. {
+            //leaving default
+            search_settings.max_unique_cov = f64::MAX;
+            info!("Negative '--max-unique-cov-coeff' provided. All nodes will be considered unique for purposes of bubble filling");
+        }
+        if settings.max_unique_cov_coeff > 0. && solid_cov_est == 0. {
+            warn!("Looks like the graph didn't have coverage information, which we were hoping to use. Consider providing it or changing --max-unique-cov-coeff");
+        }
+        search_settings.max_unique_cov = settings.max_unique_cov_coeff * solid_cov_est;
+        info!("Maximal 'unique' coverage for bubble filling set to {}", search_settings.max_unique_cov);
+        if search_settings.max_unique_cov == 0. {
+            info!("Will only fill bubbles between solid or homozygous nodes");
+        }
     }
 
     let assignments = augment_by_path_search(&g,
