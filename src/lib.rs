@@ -111,6 +111,14 @@ pub struct TrioSettings {
     #[clap(long, default_value_t = 200)]
     fillable_bubble_diff: usize,
 
+    /// Heterozygous bubbles including a longer alternative sequence will not be filled (by default equal to fillable_bubble_len)
+    #[clap(long)]
+    het_fill_bubble_len: Option<usize>,
+
+    /// Heterozygous bubbles with bigger difference between alternatives' lengths will not be filled (by default equal to fillable_bubble_diff)
+    #[clap(long)]
+    het_fill_bubble_diff: Option<usize>,
+
     /// Minimal introducible gap size (number of Ns reported). If the gap size estimate is smaller it will be artificially increased to this value.
     #[clap(long, default_value_t = 1000)]
     min_gap_size: usize,
@@ -263,6 +271,8 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         trusted_len: settings.trusted_len,
         fillable_bubble_len: settings.fillable_bubble_len,
         fillable_bubble_diff: settings.fillable_bubble_diff,
+        het_fill_bubble_len: settings.het_fill_bubble_len.unwrap_or(settings.fillable_bubble_len),
+        het_fill_bubble_diff: settings.het_fill_bubble_diff.unwrap_or(settings.fillable_bubble_diff),
         min_gap_size: settings.min_gap_size as i64,
         default_gap_size: settings.default_gap_size as i64,
         ..HaploSearchSettings::default()

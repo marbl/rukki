@@ -163,12 +163,13 @@ pub struct HaploSearchSettings {
 
     //configuring ambiguous region filling
     //FIXME more reasonable configuration
-    //FIXME separate setting for bubbles in haplotype regions
     //0 -- disabled, 1 -- patch paths, 2 -- fill in small bubbles
     pub ambig_filling_level: usize,
     pub max_unique_cov: f64,
     pub fillable_bubble_len: usize,
     pub fillable_bubble_diff: usize,
+    pub het_fill_bubble_len: usize,
+    pub het_fill_bubble_diff: usize,
 
     //configuring scaffolding insertion
     pub skippable_tangle_size: usize,
@@ -187,6 +188,8 @@ impl Default for HaploSearchSettings {
             max_unique_cov: f64::MAX,
             fillable_bubble_len: 50_000,
             fillable_bubble_diff: 200,
+            het_fill_bubble_len: 50_000,
+            het_fill_bubble_diff: 200,
             skippable_tangle_size: 1_000_000,
             min_gap_size: 1000,
             default_gap_size: 5000,
@@ -572,6 +575,15 @@ impl <'a> HaploSearcher<'a> {
         None
     }
 
+    fn bubble_fill_thresholds(&self, v: Vertex, w: Vertex) -> (usize, usize) {
+        if self.assignments.group(v.node_id) == Some(TrioGroup::HOMOZYGOUS)
+            && self.assignments.group(w.node_id) == Some(TrioGroup::HOMOZYGOUS) {
+            (self.settings.het_fill_bubble_len, self.settings.het_fill_bubble_diff)
+        } else {
+            (self.settings.fillable_bubble_len, self.settings.fillable_bubble_diff)
+        }
+    }
+
     fn trivial_bubble_end(&self, u: Vertex, hint_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Vertex> {
         let outgoing = considered_extensions(self.g, u, hint_f);
         if outgoing.len() < 2 {
@@ -621,9 +633,11 @@ impl <'a> HaploSearcher<'a> {
             && w.node_id != v.node_id {
             let max_len = filtered_outgoing.iter().map(|l| len_across(v, l.end, w)).max().unwrap();
             let min_len = filtered_outgoing.iter().map(|l| len_across(v, l.end, w)).min().unwrap();
+            let (fillable_bubble_len, fillable_bubble_diff) = self.bubble_fill_thresholds(v, w);
+
             if filtered_outgoing.len() > 1
-                && (max_len > self.settings.fillable_bubble_len as i64
-                    || (max_len - min_len) > self.settings.fillable_bubble_diff as i64) {
+                && (max_len > fillable_bubble_len as i64
+                    || (max_len - min_len) > fillable_bubble_diff as i64) {
                 return None;
             }
             let ext = filtered_outgoing.into_iter()
@@ -677,9 +691,11 @@ impl <'a> HaploSearcher<'a> {
 
         let length_range = bubble.length_range(self.g);
 
+        let (fillable_bubble_len, fillable_bubble_diff) = self.bubble_fill_thresholds(v, w);
+
         if self.settings.ambig_filling_level > 1
-                && length_range.1 <= self.settings.fillable_bubble_diff + length_range.0
-                && length_range.1 <= self.settings.fillable_bubble_len
+                && length_range.1 <= fillable_bubble_diff + length_range.0
+                && length_range.1 <= fillable_bubble_len
                     + self.g.vertex_length(v) + self.g.vertex_length(w)
                 && self.bubble_filling_cov_check(v) && self.bubble_filling_cov_check(w) {
             if direct_connectors.len() > 0 {
