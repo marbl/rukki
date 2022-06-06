@@ -185,7 +185,7 @@ impl<'a> Iterator for AllLinkIter<'a> {
                 }
             }
         }
-        return None;
+        None
     }
 }
 
@@ -220,21 +220,25 @@ impl<'a> Iterator for VertexIter<'a> {
                 return Some(Vertex::reverse(node_id));
             }
         }
-        return None;
+        None
+    }
+}
+
+impl Default for Graph {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl Graph {
 
     pub fn new() -> Graph {
-        let g = Graph {
+        Graph {
             nodes: Vec::new(),
             incoming_links: Vec::new(),
             outgoing_links: Vec::new(),
             name2ids:  HashMap::new(),
-        };
-
-        g
+        }
     }
 
     pub fn node_cnt(&self) -> usize {
@@ -264,7 +268,7 @@ impl Graph {
             Direction::REVERSE => self.incoming_links[link.start.node_id].push(link.rc()),
         };
 
-        if &link == &link.rc() { return };
+        if link == link.rc() { return };
 
         match link.end.direction {
             Direction::FORWARD => self.incoming_links[link.end.node_id].push(link),
@@ -299,7 +303,7 @@ impl Graph {
     fn parse_overlap(cigar: &str) -> usize {
         assert!(cigar.ends_with('M'), "Invalid overlap {}", cigar);
         let ovl = &cigar[..(cigar.len()-1)];
-        ovl.trim().parse().expect(&format!("Invalid overlap {}", cigar))
+        ovl.trim().parse().expect("Invalid overlap")
     }
 
     //TODO switch to something iterable
@@ -320,7 +324,7 @@ impl Graph {
                              };
                 assert!(length > 0);
                 let coverage = match Self::parse_tag::<usize>(tags, "RC:i:")
-                                        .or(Self::parse_tag::<usize>(tags, "FC:i:")) {
+                                        .or_else(|| Self::parse_tag::<usize>(tags, "FC:i:")) {
                     None => Self::parse_tag(tags, "ll:f:")
                                         .unwrap_or(0.),
                     Some(raw_cnt) => raw_cnt as f64 / length as f64,
@@ -400,8 +404,8 @@ impl Graph {
     //    Vertex {node_id, direction}
     //}
 
-    fn rc(links: &Vec<Link>) -> Vec<Link> {
-        links.into_iter().map(|x| x.rc()).collect()
+    fn rc(links: &[Link]) -> Vec<Link> {
+        links.iter().map(|x| x.rc()).collect()
     }
 
     pub fn node(&self, node_id: usize) -> &Node {
@@ -475,7 +479,7 @@ impl Graph {
 
     //TODO iterate over references
     pub fn canonic_vertices(&self) -> impl Iterator<Item=Vertex> + '_ {
-        (1..self.node_cnt()).map(|i| Vertex::forward(i))
+        (1..self.node_cnt()).map(Vertex::forward)
     }
 
     pub fn link_cnt(&self) -> usize {
@@ -625,6 +629,10 @@ impl Path {
         self.v_storage.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.v_storage.is_empty()
+    }
+
     pub fn general_link_at(&self, idx: usize) -> GeneralizedLink {
         self.l_storage[idx]
     }
@@ -761,7 +769,7 @@ impl Path {
         }
         match other.len() {
             1 => self.v_storage[start_pos] == other.start(),
-            _ => &self.l_storage[start_pos..(start_pos + other.len() - 1)] == &other.l_storage,
+            _ => self.l_storage[start_pos..(start_pos + other.len() - 1)] == other.l_storage,
         }
     }
 

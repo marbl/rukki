@@ -131,7 +131,7 @@ impl<'a> DFS<'a> {
     //TODO return iterator?
     //return nodes that didn't have any neighbors
     pub fn dead_ends(&self) -> Vec<Vertex> {
-        self.exit_order().iter().filter(|&v| self.neighbors(*v).len() == 0).copied().collect()
+        self.exit_order().iter().filter(|&v| self.neighbors(*v).is_empty()).copied().collect()
     }
 
 }
@@ -244,7 +244,7 @@ impl ShortNodeComponent {
             }
             used.insert(v.node_id);
         }
-        return true;
+        true
     }
 
     pub fn ahead_from_long(g: &Graph, v: Vertex, length_threshold: usize) -> ShortNodeComponent {

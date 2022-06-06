@@ -306,7 +306,7 @@ pub fn find_chain_ahead(g: &Graph, init_v: Vertex, params: &SbSearchParams) -> B
     let mut v = init_v;
 
     loop {
-        match find_superbubble(g, v, &params) {
+        match find_superbubble(g, v, params) {
             None => break,
             Some(bubble) => {
                 v = bubble.end_vertex();
@@ -349,7 +349,7 @@ pub fn find_maximal_chains(g: &Graph, params: &SbSearchParams) -> Vec<BubbleChai
 }
 
 //will need adjustment if ever 'start' can be same as 'end' in superbubble
-pub fn length_range(chain: &BubbleChain, g: &Graph) -> DistRange {
+pub fn length_range(chain: &[Superbubble], g: &Graph) -> DistRange {
     let mut tot_min = 0;
     let mut tot_max = 0;
     for bubble in chain {
@@ -369,7 +369,7 @@ pub fn length_range(chain: &BubbleChain, g: &Graph) -> DistRange {
 }
 
 //TODO make chain its own structure not to allow empty chains
-pub fn longest_path(chain: &BubbleChain, g: &Graph) -> Option<Path> {
+pub fn longest_path(chain: &[Superbubble], g: &Graph) -> Option<Path> {
     if chain.is_empty() {
         return None;
     }
@@ -380,17 +380,15 @@ pub fn longest_path(chain: &BubbleChain, g: &Graph) -> Option<Path> {
             continue;
         }
         let mut p = bubble.longest_path(g);
-        if i == (chain.len() - 1) {
-            if bubble.end_vertex() == start_vertex {
-                p.trim(1);
-            }
+        if i == (chain.len() - 1) && bubble.end_vertex() == start_vertex {
+            p.trim(1);
         }
         total.extend(p);
     }
     Some(total)
 }
 
-pub fn linear_frac(chain: &BubbleChain, g: &Graph) -> f32 {
+pub fn linear_frac(chain: &[Superbubble], g: &Graph) -> f32 {
     assert!(!chain.is_empty());
     let start_vertex = chain[0].start_vertex();
     let mut total_linear = g.vertex_length(start_vertex);
@@ -410,7 +408,7 @@ pub fn linear_frac(chain: &BubbleChain, g: &Graph) -> f32 {
 }
 
 //FIXME implement flattened vertex iterator even if it has duplicates
-pub fn check_chain<F>(chain: &BubbleChain, mut f: F) -> bool
+pub fn check_chain<F>(chain: &[Superbubble], mut f: F) -> bool
 where
 F: FnMut(&Vertex) -> bool {
     chain.iter().flat_map(|b| b.vertices()).all(&mut f)

@@ -27,10 +27,7 @@ impl TrioGroup {
     }
 
     pub fn is_definite(&self) -> bool {
-        match *self {
-            TrioGroup::MATERNAL | TrioGroup::PATERNAL => true,
-            _ => false,
-        }
+        matches!(*self, TrioGroup::MATERNAL | TrioGroup::PATERNAL)
     }
 
     pub fn blend(g1: TrioGroup, g2: TrioGroup) -> TrioGroup {
@@ -38,7 +35,7 @@ impl TrioGroup {
         if g1 == g2 {
             g1
         } else {
-            return TrioGroup::HOMOZYGOUS;
+            TrioGroup::HOMOZYGOUS
         }
     }
 
@@ -98,8 +95,14 @@ pub struct AssignmentStorage {
     storage: HashMap<usize, Assignment>,
 }
 
+impl Default for AssignmentStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 //TODO remove by_name methods
-impl <'a> AssignmentStorage {
+impl AssignmentStorage {
     pub fn new() -> AssignmentStorage {
         AssignmentStorage {
             storage: HashMap::new(),
@@ -154,11 +157,7 @@ impl <'a> AssignmentStorage {
     }
 
     pub fn group(&self, node_id: usize) -> Option<TrioGroup> {
-        if let Some(assign) = self.storage.get(&node_id) {
-            Some(assign.group)
-        } else {
-            None
-        }
+        self.storage.get(&node_id).map(|assign| assign.group)
     }
 
 }

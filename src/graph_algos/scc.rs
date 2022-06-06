@@ -25,7 +25,7 @@ pub fn strongly_connected(graph: &Graph) -> Vec<Vec<Vertex>> {
             reverse_dfs.set_blocked(used);
             reverse_dfs.run_from(v);
             let visited = reverse_dfs.exit_order();
-            assert!(visited.len() > 0);
+            assert!(!visited.is_empty());
             if visited.len() > 1 || is_loop(visited[0]) {
                 debug!("Identified non-trivial component of size {}: {}",
                         visited.len(),
@@ -40,12 +40,12 @@ pub fn strongly_connected(graph: &Graph) -> Vec<Vec<Vertex>> {
     non_trivial_sccs
 }
 
-pub fn nodes_in_sccs(_g: &Graph, sccs: &Vec<Vec<Vertex>>) -> HashSet<usize> {
+pub fn nodes_in_sccs(_g: &Graph, sccs: &[Vec<Vertex>]) -> HashSet<usize> {
     HashSet::from_iter(sccs.iter()
         .flat_map(|comp| comp.iter().map(|v| v.node_id)))
 }
 
-fn check_consistency(graph: &Graph, non_trivial_sccs: &Vec<Vec<Vertex>>) -> bool {
+fn check_consistency(graph: &Graph, non_trivial_sccs: &[Vec<Vertex>]) -> bool {
     let mut vertices_to_scc = HashMap::new();
     for (scc_id, vertices) in non_trivial_sccs.iter().enumerate() {
         for v in vertices {
@@ -79,8 +79,8 @@ fn check_consistency(graph: &Graph, non_trivial_sccs: &Vec<Vec<Vertex>>) -> bool
 }
 
 //Building condensation Graph
-pub fn condensation(graph: &Graph, non_trivial_sccs: &Vec<Vec<Vertex>>, ignore_loops: bool) -> (Graph, HashMap<Vertex, Vertex>) {
-    assert!(check_consistency(graph, &non_trivial_sccs));
+pub fn condensation(graph: &Graph, non_trivial_sccs: &[Vec<Vertex>], ignore_loops: bool) -> (Graph, HashMap<Vertex, Vertex>) {
+    assert!(check_consistency(graph, non_trivial_sccs));
     let mut condensation = Graph::new();
     let mut vertices_to_scc = HashMap::new();
     for (scc_id, vertices) in non_trivial_sccs.iter().enumerate() {
@@ -124,7 +124,7 @@ pub fn condensation(graph: &Graph, non_trivial_sccs: &Vec<Vec<Vertex>>, ignore_l
             let name = format!("scc_{}_vcnt_{}_init_{}", scc_id, scc_vertices.len(), node.name);
             //let cnd_node;
             let cnd_id = condensation.add_node(Node{name, length, coverage: 0.,});
-            update_old_2_new(&scc_vertices, cnd_id);
+            update_old_2_new(scc_vertices, cnd_id);
         } else {
             considered_node_ids.insert(v.node_id);
             let cnd_id = condensation.add_node(node.clone());
@@ -170,7 +170,7 @@ pub fn estimate_size_no_mult(tangle: &LocalizedTangle, g: &Graph) -> usize {
         .sum()
 }
 
-fn find_localized(g: &Graph, non_trivial_scc: &Vec<Vertex>) -> Option<LocalizedTangle> {
+fn find_localized(g: &Graph, non_trivial_scc: &[Vertex]) -> Option<LocalizedTangle> {
     let component_vertices: HashSet<Vertex>
         = HashSet::from_iter(non_trivial_scc.iter().copied());
 
@@ -196,13 +196,13 @@ fn find_localized(g: &Graph, non_trivial_scc: &Vec<Vertex>) -> Option<LocalizedT
         Some(LocalizedTangle {
             entrance,
             exit,
-            vertices : non_trivial_scc.clone(),
+            vertices : non_trivial_scc.to_owned(),
         })
     }
 }
 
 pub fn find_small_localized(g: &Graph,
-    non_trivial_sccs: &Vec<Vec<Vertex>>,
+    non_trivial_sccs: &[Vec<Vertex>],
     size_limit: usize)
 -> Vec<LocalizedTangle> {
     non_trivial_sccs.iter()

@@ -168,11 +168,11 @@ pub fn augment_by_path_search(g: &Graph,
     assignments: trio::AssignmentStorage,
     settings: HaploSearchSettings) -> trio::AssignmentStorage {
     info!("Augmenting node annotation by path search. Round 1.");
-    let assignments = augment_by_path_search_round(&g,
+    let assignments = augment_by_path_search_round(g,
         assignments,
         settings);
     info!("Augmenting node annotation by path search. Round 2.");
-    augment_by_path_search_round(&g,
+    augment_by_path_search_round(g,
         assignments,
         settings)
 }
@@ -181,7 +181,7 @@ fn augment_by_path_search_round(g: &Graph,
     assignments: trio::AssignmentStorage,
     settings: HaploSearchSettings) -> trio::AssignmentStorage {
 
-    let mut path_searcher = trio_walk::HaploSearcher::new(&g,
+    let mut path_searcher = trio_walk::HaploSearcher::new(g,
         &assignments, settings.assigning_stage_adjusted());
 
     path_searcher.find_all();

@@ -68,7 +68,7 @@ fn main() {
         Commands::Trio(settings) => {
             info!("Running trio marker analysis");
 
-            match rukki::run_trio_analysis(&settings) {
+            match rukki::run_trio_analysis(settings) {
                 Ok(()) => info!("Success"),
                 Err(e) => info!("Some error happened {:?}", e)
             }

@@ -70,7 +70,7 @@ impl LinearBlock {
     }
 
     fn from_bubble_chain(g: &Graph, bubble_chain: superbubble::BubbleChain) -> LinearBlock {
-        assert!(bubble_chain.len() > 0);
+        assert!(!bubble_chain.is_empty());
         let mut block = Self::vertex_block(bubble_chain[0].start_vertex());
         for b in bubble_chain.into_iter() {
             let b_lb = Self::from_bubble(g, b);
@@ -89,7 +89,7 @@ impl LinearBlock {
 
     fn search_ahead(g: &Graph, v: Vertex, params: &superbubble::SbSearchParams) -> LinearBlock {
         let chain = superbubble::find_chain_ahead(g, v, params);
-        if chain.len() > 0 {
+        if !chain.is_empty() {
             Self::from_bubble_chain(g, chain)
         } else {
             Self::vertex_block(v)
@@ -131,8 +131,8 @@ fn bridged_by_vertex(g: &Graph, v: Vertex) -> Option<Path> {
 fn other_outgoing(g: &Graph, v: Vertex, l: Link) -> Option<Link> {
     if g.outgoing_edge_cnt(v) == 2 {
         let alt = g.outgoing_edges(v).iter().copied()
-                    .filter(|&x| x != l)
-                    .next().unwrap();
+                    .find(|&x| x != l)
+                    .unwrap();
         assert!(alt.end != l.end);
         return Some(alt);
     }
@@ -142,8 +142,8 @@ fn other_outgoing(g: &Graph, v: Vertex, l: Link) -> Option<Link> {
 fn other_incoming(g: &Graph, v: Vertex, l: Link) -> Option<Link> {
     if g.incoming_edge_cnt(v) == 2 {
         let alt = g.incoming_edges(v).iter().copied()
-                    .filter(|&x| x != l)
-                    .next().unwrap();
+                    .find(|&x| x != l)
+                    .unwrap();
         assert!(alt.start != l.start);
         return Some(alt);
     }
@@ -184,8 +184,8 @@ fn unambiguous_outgoing(g: &Graph, v: Vertex) -> Option<Link> {
 fn forward_extension(g: &Graph, v: Vertex, unique_block_len: usize) -> Option<LinearBlock> {
     //TODO refactor
     extension_via_bridge(g, v, unique_block_len)
-        .or(extension_in_deadend(g, v, unique_block_len))
-        .or(extension_out_deadend(g, v, unique_block_len))
+        .or_else(|| extension_in_deadend(g, v, unique_block_len))
+        .or_else(|| extension_out_deadend(g, v, unique_block_len))
 }
 
 //  x a (for 'alt')

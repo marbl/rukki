@@ -145,7 +145,7 @@ impl <'a> ExtensionHelper<'a> {
             return None;
         }
 
-        return Some(t);
+        Some(t)
     }
 
 }
@@ -308,7 +308,7 @@ impl <'a> HaploSearcher<'a> {
                 self.settings.solid_len,
                 Some(&|x: Vertex| self.unassigned_or_compatible(x.node_id, group)));
 
-        if reachable_vertices.len() == 0 {
+        if reachable_vertices.is_empty() {
             reachable_vertices =
                 reachable_between(self.g, v, w,
                     self.settings.solid_len, None);
@@ -343,7 +343,7 @@ impl <'a> HaploSearcher<'a> {
             debug!("Trimming path forward to {}", self.g.v_str(trim_to));
             assert!(p1.trim_to(&trim_to));
             p1.trim(1);
-            debug_assert!(p1.vertices().iter().filter(|x| p2.in_path(x.node_id)).next().is_none());
+            debug_assert!(!p1.vertices().iter().any(|x| p2.in_path(x.node_id)));
         } else if self.settings.ambig_filling_level > 0 {
             debug!("Will try to patch the gap between forward/backward paths");
             //if paths don't overlap -- try linking (works only near solid edges)
@@ -628,7 +628,7 @@ impl <'a> HaploSearcher<'a> {
 
         let filtered_outgoing: Vec<Link> = considered_extensions(self.g, v, consider_vertex_f).into_iter()
                                         .filter(|l| self.unassigned_or_compatible(l.end.node_id, group)).collect();
-        if filtered_outgoing.len() > 0
+        if !filtered_outgoing.is_empty()
             && filtered_outgoing.iter().all(|&l| self.g.vertex_length(l.end) < self.settings.solid_len)
             && w.node_id != v.node_id {
             let max_len = filtered_outgoing.iter().map(|l| len_across(v, l.end, w)).max().unwrap();
@@ -698,7 +698,7 @@ impl <'a> HaploSearcher<'a> {
                 && length_range.1 <= fillable_bubble_len
                     + self.g.vertex_length(v) + self.g.vertex_length(w)
                 && self.bubble_filling_cov_check(v) && self.bubble_filling_cov_check(w) {
-            if direct_connectors.len() > 0 {
+            if !direct_connectors.is_empty() {
                 let p = self.connecting_path(v, direct_connectors[0], w);
                 debug!("Candidate extension by super-bubble fill (direct connector) {}", p.print(self.g));
                 return Some(p)
@@ -826,7 +826,7 @@ impl <'a> HaploSearcher<'a> {
                     constraint_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Path> {
         self.find_small_tangle_jump_ahead(v, group)
             .or_else(|| self.extension_helper.group_extension(v, group, constraint_vertex_f)
-                .map(|l| Path::from_link(l)))
+                .map(Path::from_link))
             .or_else(|| self.choose_trivial_bubble_side(v, group, constraint_vertex_f))
             .or_else(|| self.find_bubble_fill_ahead(v, group, constraint_vertex_f))
             .or_else(|| self.find_bubble_jump_ahead(v, group, constraint_vertex_f))
