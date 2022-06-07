@@ -111,6 +111,7 @@ impl LinearBlock {
 }
 
 //todo maybe support blocks here? (use block search and is_block method)
+#[allow(clippy::many_single_char_names)]
 fn bridged_by_vertex(g: &Graph, v: Vertex) -> Option<Path> {
     if g.incoming_edge_cnt(v) == 1 && g.outgoing_edge_cnt(v) == 1 {
         let u = g.incoming_edges(v)[0].start;
@@ -191,6 +192,7 @@ fn forward_extension(g: &Graph, v: Vertex, unique_block_len: usize) -> Option<Li
 //  x a (for 'alt')
 //     \
 //- v - w -
+#[allow(clippy::many_single_char_names)]
 fn extension_in_deadend(g: &Graph, v: Vertex, unique_block_len: usize)
 -> Option<LinearBlock> {
     let l = unambiguous_outgoing(g, v)?;
@@ -241,6 +243,7 @@ fn extension_out_deadend(g: &Graph, v: Vertex, unique_block_len: usize)
 //    s   t
 //   /     \
 //- u - v - w -
+#[allow(clippy::many_single_char_names)]
 fn extension_via_bridge(g: &Graph, u: Vertex, unique_block_len: usize) -> Option<LinearBlock> {
     if let Some(bridge_p) = bridge_ahead(g, u) {
         assert!(bridge_p.len() == 3);
@@ -444,6 +447,7 @@ pub fn pseudo_hap_decompose(g: &Graph, unique_block_len: usize) -> Vec<LinearBlo
 //    s   t
 //   /     \
 //- u - v - w -
+#[allow(clippy::many_single_char_names)]
 pub fn detect_gap(g: &Graph, u: Vertex) -> Option<GapInfo> {
     if let Some(bridge_p) = bridge_ahead(g, u) {
         assert!(bridge_p.len() == 3);

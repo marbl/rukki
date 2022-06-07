@@ -16,7 +16,7 @@ pub mod pseudo_hap;
 
 pub use graph::*;
 
-use crate::trio::TrioGroup;
+use crate::trio::{TrioGroup, GroupAssignmentSettings};
 
 //TODO use PathBuf
 #[derive(clap::Args)]
@@ -239,12 +239,15 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let trio_infos = trio::read_trio(&fs::read_to_string(&settings.markers)?);
 
     info!("Assigning initial parental groups to the nodes");
-    let assignments = trio::assign_parental_groups(&g, &trio_infos,
-        settings.marker_cnt, settings.marker_sparsity, settings.marker_ratio,
-        settings.issue_len,
-        settings.issue_cnt.unwrap_or(settings.marker_cnt),
-    settings.issue_sparsity.unwrap_or(settings.marker_sparsity),
-        settings.issue_ratio.unwrap_or(settings.marker_ratio),
+    let assignments = trio::assign_parental_groups(&g, &trio_infos, &GroupAssignmentSettings {
+            assign_cnt: settings.marker_cnt,
+            assign_sparsity: settings.marker_sparsity,
+            assign_ratio: settings.marker_ratio,
+            issue_len: settings.issue_len,
+            issue_cnt: settings.issue_cnt.unwrap_or(settings.marker_cnt),
+            issue_sparsity: settings.issue_sparsity.unwrap_or(settings.marker_sparsity),
+            issue_ratio: settings.issue_ratio.unwrap_or(settings.marker_ratio),
+        }
     );
 
     if let Some(output) = &settings.init_assign {

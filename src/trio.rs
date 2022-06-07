@@ -162,31 +162,60 @@ impl AssignmentStorage {
 
 }
 
+pub struct GroupAssignmentSettings {
+    /// Minimal number of parent-specific markers required for assigning parental group to a node
+    pub assign_cnt: usize,
+    /// Require at least (node_length / <value>) markers within the node for parental group assignment
+    pub assign_sparsity: usize,
+    /// Sets minimal marker excess for assigning a parental group to <value>:1
+    pub assign_ratio: f64,
+    /// Minimal node length for assigning ISSUE label
+    pub issue_len: usize,
+    /// Minimal number of markers for assigning ISSUE label, will typically be set to a value >= assign_cnt
+    pub issue_cnt: usize,
+    /// Require at least (node_length / <value>) markers for assigning ISSUE label, typically set to a value >= assign_sparsity
+    pub issue_sparsity: usize,
+    /// Require primary marker excess BELOW <value>:1 for assigning ISSUE label. Must be <= marker_ratio
+    pub issue_ratio: f64,
+}
+
+impl Default for GroupAssignmentSettings {
+    fn default() -> Self {
+        Self {
+            assign_cnt: 10,
+            assign_sparsity: 10_000,
+            assign_ratio: 5.,
+            issue_len: 50_000,
+            issue_cnt: 10,
+            issue_sparsity: 10_000,
+            issue_ratio: 5.,
+        }
+    }
+}
+
 pub fn assign_parental_groups(g: &Graph, trio_infos: &[TrioInfo],
-        assign_cnt: usize, assign_sparsity: usize, assign_ratio: f64,
-        issue_len: usize,
-        issue_cnt: usize, issue_sparsity: usize, issue_ratio: f64) -> AssignmentStorage {
+        settings: &GroupAssignmentSettings) -> AssignmentStorage {
     let mut assignments = AssignmentStorage::new();
 
     info!("Running parental group assignment.");
     debug!("Parental group assignment settings: Minimal marker count -- {}; Minimal sparsity -- 1 in {}; Minimal ratio -- {} to 1",
-            assign_cnt, assign_sparsity, assign_ratio);
+            settings.assign_cnt, settings.assign_sparsity, settings.assign_ratio);
     debug!("ISSUE labeling settings: Minimal marker count -- {}; Minimal sparsity -- 1 in {}; Maximal ratio -- {} to 1",
-            issue_cnt, issue_sparsity, issue_ratio);
-    assert!(issue_ratio <= assign_ratio);
+            settings.issue_cnt, settings.issue_sparsity, settings.issue_ratio);
+    assert!(settings.issue_ratio <= settings.assign_ratio);
 
     let assign_node_f = |x: usize, y: usize, node_len: usize| {
         assert!(x >= y);
         let tot = x + y;
-        tot >= assign_cnt && node_len <= tot * assign_sparsity
-            && (x as f64) > assign_ratio * (y as f64) - 1e-6
+        tot >= settings.assign_cnt && node_len <= tot * settings.assign_sparsity
+            && (x as f64) > settings.assign_ratio * (y as f64) - 1e-6
     };
 
     let issue_node_f = |x: usize, y: usize, node_len: usize| {
         assert!(x >= y);
         let tot = x + y;
-        node_len >= issue_len && tot >= issue_cnt && node_len <= tot * issue_sparsity
-            && (x as f64) < issue_ratio * (y as f64) - 1e-6
+        node_len >= settings.issue_len && tot >= settings.issue_cnt && node_len <= tot * settings.issue_sparsity
+            && (x as f64) < settings.issue_ratio * (y as f64) - 1e-6
     };
 
     for trio_info in trio_infos {
