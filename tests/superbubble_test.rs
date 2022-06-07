@@ -1,5 +1,5 @@
-use rukki::*;
 use rukki::graph_algos::superbubble;
+use rukki::*;
 
 #[test]
 fn multi_link_bubble() {
@@ -10,8 +10,12 @@ L a + b + 50M
 L a + b + 75M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let bubble = superbubble::find_superbubble(&g,
-        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    let bubble = superbubble::find_superbubble(
+        &g,
+        Vertex::forward(0),
+        &superbubble::SbSearchParams::unrestricted(),
+    )
+    .unwrap();
     assert_eq!(bubble.length_range(&g), (125, 150));
     assert!(g.name(bubble.end_vertex().node_id) == "b");
 }
@@ -28,8 +32,12 @@ L a + b + 75M
 L a + c + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let _bubble = superbubble::find_superbubble(&g,
-        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    let _bubble = superbubble::find_superbubble(
+        &g,
+        Vertex::forward(0),
+        &superbubble::SbSearchParams::unrestricted(),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -44,8 +52,12 @@ L a + b + 50M
 L c + b + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let _bubble = superbubble::find_superbubble(&g,
-        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    let _bubble = superbubble::find_superbubble(
+        &g,
+        Vertex::forward(0),
+        &superbubble::SbSearchParams::unrestricted(),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -61,13 +73,20 @@ L b + d + 50M
 L c + d + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let bubble = superbubble::find_superbubble(&g,
-        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    let bubble = superbubble::find_superbubble(
+        &g,
+        Vertex::forward(0),
+        &superbubble::SbSearchParams::unrestricted(),
+    )
+    .unwrap();
     assert!(g.name(bubble.end_vertex().node_id) == "d");
     assert_eq!(bubble.vertices().count(), 4);
-    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
+    let mut bubble_vertices = bubble
+        .vertices()
+        .map(|&v| g.v_str(v))
+        .collect::<Vec<String>>();
     bubble_vertices.sort();
-    assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+"]);
+    assert_eq!(bubble_vertices, vec!["a+", "b+", "c+", "d+"]);
     assert_eq!(bubble.length_range(&g), (200, 200));
 }
 
@@ -85,13 +104,20 @@ L b + a + 50M
 L c + a + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let bubble = superbubble::find_superbubble(&g,
-        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    let bubble = superbubble::find_superbubble(
+        &g,
+        Vertex::forward(0),
+        &superbubble::SbSearchParams::unrestricted(),
+    )
+    .unwrap();
     assert!(g.name(bubble.end_vertex().node_id) == "a");
     assert_eq!(bubble.vertices().count(), 4);
-    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
+    let mut bubble_vertices = bubble
+        .vertices()
+        .map(|&v| g.v_str(v))
+        .collect::<Vec<String>>();
     bubble_vertices.sort();
-    assert_eq!(bubble_vertices, vec!["a+","b+","c+"]);
+    assert_eq!(bubble_vertices, vec!["a+", "b+", "c+"]);
     assert_eq!(bubble.length_range(&g), (100, 100));
 }
 
@@ -109,13 +135,20 @@ L c + d + 50M
 L a + d + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let bubble = superbubble::find_superbubble(&g,
-        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    let bubble = superbubble::find_superbubble(
+        &g,
+        Vertex::forward(0),
+        &superbubble::SbSearchParams::unrestricted(),
+    )
+    .unwrap();
     assert!(g.name(bubble.end_vertex().node_id) == "d");
     assert_eq!(bubble.vertices().count(), 4);
-    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
+    let mut bubble_vertices = bubble
+        .vertices()
+        .map(|&v| g.v_str(v))
+        .collect::<Vec<String>>();
     bubble_vertices.sort();
-    assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+"]);
+    assert_eq!(bubble_vertices, vec!["a+", "b+", "c+", "d+"]);
     assert_eq!(bubble.length_range(&g), (150, 200));
 }
 
@@ -133,13 +166,20 @@ L b + d + 50M
 L c + d + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let bubble = superbubble::find_superbubble(&g,
-        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    let bubble = superbubble::find_superbubble(
+        &g,
+        Vertex::forward(0),
+        &superbubble::SbSearchParams::unrestricted(),
+    )
+    .unwrap();
     assert!(g.name(bubble.end_vertex().node_id) == "d");
     assert_eq!(bubble.vertices().count(), 4);
-    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
+    let mut bubble_vertices = bubble
+        .vertices()
+        .map(|&v| g.v_str(v))
+        .collect::<Vec<String>>();
     bubble_vertices.sort();
-    assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+"]);
+    assert_eq!(bubble_vertices, vec!["a+", "b+", "c+", "d+"]);
     assert_eq!(bubble.length_range(&g), (200, 250));
 }
 
@@ -157,13 +197,20 @@ L b + d + 50M
 L c + d + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let bubble = superbubble::find_superbubble(&g,
-        Vertex::reverse(3), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    let bubble = superbubble::find_superbubble(
+        &g,
+        Vertex::reverse(3),
+        &superbubble::SbSearchParams::unrestricted(),
+    )
+    .unwrap();
     assert!(g.name(bubble.end_vertex().node_id) == "a");
     assert_eq!(bubble.vertices().count(), 4);
-    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
+    let mut bubble_vertices = bubble
+        .vertices()
+        .map(|&v| g.v_str(v))
+        .collect::<Vec<String>>();
     bubble_vertices.sort();
-    assert_eq!(bubble_vertices, vec!["a-","b-","c-","d-"]);
+    assert_eq!(bubble_vertices, vec!["a-", "b-", "c-", "d-"]);
     assert_eq!(bubble.length_range(&g), (200, 250));
 }
 
@@ -186,13 +233,20 @@ L d + f + 50M
 L e + f + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let bubble = superbubble::find_superbubble(&g,
-        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted()).unwrap();
+    let bubble = superbubble::find_superbubble(
+        &g,
+        Vertex::forward(0),
+        &superbubble::SbSearchParams::unrestricted(),
+    )
+    .unwrap();
     assert!(g.name(bubble.end_vertex().node_id) == "f");
     assert_eq!(bubble.vertices().count(), 6);
-    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect::<Vec<String>>();
+    let mut bubble_vertices = bubble
+        .vertices()
+        .map(|&v| g.v_str(v))
+        .collect::<Vec<String>>();
     bubble_vertices.sort();
-    assert_eq!(bubble_vertices, vec!["a+","b+","c+","d+","e+","f+"]);
+    assert_eq!(bubble_vertices, vec!["a+", "b+", "c+", "d+", "e+", "f+"]);
     assert_eq!(bubble.length_range(&g), (200, 250));
 }
 
@@ -216,8 +270,11 @@ L e + g + 50M
 L f + g + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
-    let chain = superbubble::find_maximal_chain(&g,
-        Vertex::forward(g.name2id("d")), &superbubble::SbSearchParams::unrestricted());
+    let chain = superbubble::find_maximal_chain(
+        &g,
+        Vertex::forward(g.name2id("d")),
+        &superbubble::SbSearchParams::unrestricted(),
+    );
     assert_eq!(chain.len(), 2);
     assert_eq!(chain[0].start_vertex(), Vertex::forward(g.name2id("a")));
     assert_eq!(chain[0].end_vertex(), Vertex::forward(g.name2id("d")));
@@ -225,7 +282,6 @@ L f + g + 50M
     assert_eq!(chain[1].end_vertex(), Vertex::forward(g.name2id("g")));
     assert_eq!(superbubble::length_range(&chain, &g), (300, 300));
 }
-
 
 #[test]
 fn simple_chain_loop() {
@@ -247,16 +303,22 @@ L f + a + 50M
 ";
     let g = Graph::read(&s.replace(" ", "\t"));
     //testing search ahead
-    let chain = superbubble::find_chain_ahead(&g,
-        Vertex::forward(0), &superbubble::SbSearchParams::unrestricted());
+    let chain = superbubble::find_chain_ahead(
+        &g,
+        Vertex::forward(0),
+        &superbubble::SbSearchParams::unrestricted(),
+    );
     assert_eq!(chain.len(), 2);
     assert!(g.name(chain[0].end_vertex().node_id) == "d");
     assert!(g.name(chain[1].end_vertex().node_id) == "a");
     assert_eq!(superbubble::length_range(&chain, &g), (200, 200));
 
     //testing maximal chain search
-    let chain = superbubble::find_maximal_chain(&g,
-        Vertex::forward(g.name2id("d")), &superbubble::SbSearchParams::unrestricted());
+    let chain = superbubble::find_maximal_chain(
+        &g,
+        Vertex::forward(g.name2id("d")),
+        &superbubble::SbSearchParams::unrestricted(),
+    );
     assert_eq!(chain.len(), 2);
     assert_eq!(chain[0].start_vertex(), Vertex::forward(g.name2id("d")));
     assert_eq!(chain[0].end_vertex(), Vertex::forward(g.name2id("a")));

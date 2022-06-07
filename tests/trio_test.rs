@@ -1,7 +1,7 @@
 extern crate log;
 
-use rukki::*;
 use rukki::trio::*;
+use rukki::*;
 use std::fs;
 
 fn init() {
@@ -16,11 +16,14 @@ fn homozygous_assignment() {
     let assignments_fn = "tests/test_graphs/test1.no_homozygous.csv";
     let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
     let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
-    let assignments = trio::assign_homozygous(&g, assignments, 200_000,
-        -1., usize::MAX);
-    let mut homozygous_names : Vec<&str> = (0..g.node_cnt())
-                                .filter(|&node_id| assignments.group(node_id) == Some(TrioGroup::HOMOZYGOUS))
-                                .map(|node_id| g.name(node_id)).collect();
+    let assignments = trio::assign_homozygous(&g, assignments, 200_000, -1., usize::MAX);
+    let mut homozygous_names: Vec<&str> = (0..g.node_cnt())
+        .filter(|&node_id| assignments.group(node_id) == Some(TrioGroup::HOMOZYGOUS))
+        .map(|node_id| g.name(node_id))
+        .collect();
     homozygous_names.sort();
-    assert_eq!(&homozygous_names, &["utig4-1237", "utig4-1552", "utig4-1826", "utig4-2589"]);
+    assert_eq!(
+        &homozygous_names,
+        &["utig4-1237", "utig4-1552", "utig4-1826", "utig4-2589"]
+    );
 }

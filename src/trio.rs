@@ -1,10 +1,10 @@
-use log::debug;
-use std::collections::{HashMap,HashSet};
-use log::info;
 use crate::graph::*;
 use crate::graph_algos::dfs;
 use crate::graph_algos::superbubble;
-use std::cmp::{min, max};
+use log::debug;
+use log::info;
+use std::cmp::{max, min};
+use std::collections::{HashMap, HashSet};
 
 //TODO add UNASSIGNED to display useful info for all nodes
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
@@ -17,9 +17,10 @@ pub enum TrioGroup {
 
 impl TrioGroup {
     pub fn incompatible(g1: TrioGroup, g2: TrioGroup) -> bool {
-        g1 == TrioGroup::ISSUE || g2 == TrioGroup::ISSUE ||
-            (g1 == TrioGroup::MATERNAL && g2 == TrioGroup::PATERNAL) ||
-            (g1 == TrioGroup::PATERNAL && g2 == TrioGroup::MATERNAL)
+        g1 == TrioGroup::ISSUE
+            || g2 == TrioGroup::ISSUE
+            || (g1 == TrioGroup::MATERNAL && g2 == TrioGroup::PATERNAL)
+            || (g1 == TrioGroup::PATERNAL && g2 == TrioGroup::MATERNAL)
     }
 
     pub fn compatible(g1: TrioGroup, g2: TrioGroup) -> bool {
@@ -45,15 +46,13 @@ impl TrioGroup {
             Some(g1) => match og2 {
                 None => og1,
                 Some(g2) => Some(Self::blend(g1, g2)),
-            }
+            },
         }
     }
-
 }
 
 #[derive(Clone, Debug)]
-pub struct Assignment
-{
+pub struct Assignment {
     pub group: TrioGroup,
     pub info: String,
 }
@@ -83,7 +82,11 @@ pub fn read_trio(trio_str: &str) -> Vec<TrioInfo> {
             let node_name = String::from(split[0]);
             let mat: usize = split[1].parse().expect("Invalid maternal count");
             let pat: usize = split[2].parse().expect("Invalid paternal count");
-            infos.push(TrioInfo{node_name, mat, pat})
+            infos.push(TrioInfo {
+                node_name,
+                mat,
+                pat,
+            })
         }
     }
     infos
@@ -109,7 +112,7 @@ impl AssignmentStorage {
         }
     }
 
-    pub fn assigned(&self) -> impl Iterator<Item=usize> + '_ {
+    pub fn assigned(&self) -> impl Iterator<Item = usize> + '_ {
         self.storage.keys().copied()
     }
 
@@ -123,7 +126,7 @@ impl AssignmentStorage {
     }
 
     pub fn assign(&mut self, node_id: usize, group: TrioGroup, info: String) -> Option<Assignment> {
-        self.storage.insert(node_id, Assignment{group, info})
+        self.storage.insert(node_id, Assignment { group, info })
     }
 
     pub fn update_group(&mut self, node_id: usize, group: TrioGroup) {
@@ -138,7 +141,7 @@ impl AssignmentStorage {
         };
     }
 
-    pub fn update_all(&mut self, iter: impl Iterator<Item=usize>, group: TrioGroup) {
+    pub fn update_all(&mut self, iter: impl Iterator<Item = usize>, group: TrioGroup) {
         for node_id in iter {
             self.update_group(node_id, group);
         }
@@ -159,7 +162,6 @@ impl AssignmentStorage {
     pub fn group(&self, node_id: usize) -> Option<TrioGroup> {
         self.storage.get(&node_id).map(|assign| assign.group)
     }
-
 }
 
 pub struct GroupAssignmentSettings {
@@ -193,8 +195,11 @@ impl Default for GroupAssignmentSettings {
     }
 }
 
-pub fn assign_parental_groups(g: &Graph, trio_infos: &[TrioInfo],
-        settings: &GroupAssignmentSettings) -> AssignmentStorage {
+pub fn assign_parental_groups(
+    g: &Graph,
+    trio_infos: &[TrioInfo],
+    settings: &GroupAssignmentSettings,
+) -> AssignmentStorage {
     let mut assignments = AssignmentStorage::new();
 
     info!("Running parental group assignment.");
@@ -207,31 +212,42 @@ pub fn assign_parental_groups(g: &Graph, trio_infos: &[TrioInfo],
     let assign_node_f = |x: usize, y: usize, node_len: usize| {
         assert!(x >= y);
         let tot = x + y;
-        tot >= settings.assign_cnt && node_len <= tot * settings.assign_sparsity
+        tot >= settings.assign_cnt
+            && node_len <= tot * settings.assign_sparsity
             && (x as f64) > settings.assign_ratio * (y as f64) - 1e-6
     };
 
     let issue_node_f = |x: usize, y: usize, node_len: usize| {
         assert!(x >= y);
         let tot = x + y;
-        node_len >= settings.issue_len && tot >= settings.issue_cnt && node_len <= tot * settings.issue_sparsity
+        node_len >= settings.issue_len
+            && tot >= settings.issue_cnt
+            && node_len <= tot * settings.issue_sparsity
             && (x as f64) < settings.issue_ratio * (y as f64) - 1e-6
     };
 
     for trio_info in trio_infos {
         let node_id = g.name2id(&trio_info.node_name);
         let node_len = g.node_length(node_id);
-        debug!("Looking at node {} (len={}), mat:pat={}",
-            trio_info.node_name, node_len, trio_info.counts_str());
+        debug!(
+            "Looking at node {} (len={}), mat:pat={}",
+            trio_info.node_name,
+            node_len,
+            trio_info.counts_str()
+        );
 
-        if issue_node_f(max(trio_info.mat, trio_info.pat),
+        if issue_node_f(
+            max(trio_info.mat, trio_info.pat),
             min(trio_info.mat, trio_info.pat),
-            node_len) {
+            node_len,
+        ) {
             debug!("Assigning ISSUE label");
             assignments.assign(node_id, TrioGroup::ISSUE, trio_info.counts_str());
-        } else if assign_node_f(max(trio_info.mat, trio_info.pat),
+        } else if assign_node_f(
+            max(trio_info.mat, trio_info.pat),
             min(trio_info.mat, trio_info.pat),
-            node_len) {
+            node_len,
+        ) {
             if trio_info.mat >= trio_info.pat {
                 debug!("Looks MATERNAL");
                 assignments.assign(node_id, TrioGroup::MATERNAL, trio_info.counts_str());
@@ -256,8 +272,10 @@ fn parse_group(group_str: &str) -> TrioGroup {
     }
 }
 
-pub fn parse_node_assignments(g: &Graph, assignments_fn: &str)
--> std::io::Result<AssignmentStorage> {
+pub fn parse_node_assignments(
+    g: &Graph,
+    assignments_fn: &str,
+) -> std::io::Result<AssignmentStorage> {
     let mut assignments = AssignmentStorage::new();
     for line in std::fs::read_to_string(assignments_fn)?.lines() {
         let split: Vec<&str> = line.trim().split('\t').collect();
@@ -279,13 +297,18 @@ pub struct HomozygousAssigner<'a> {
     considered: HashSet<usize>,
 }
 
-impl <'a> HomozygousAssigner<'a> {
-
-    pub fn new(g: &'a Graph, assignments: AssignmentStorage,
-        trusted_len: usize, min_suspect_cov: f64, max_assign_len: usize)
-    -> HomozygousAssigner<'a> {
+impl<'a> HomozygousAssigner<'a> {
+    pub fn new(
+        g: &'a Graph,
+        assignments: AssignmentStorage,
+        trusted_len: usize,
+        min_suspect_cov: f64,
+        max_assign_len: usize,
+    ) -> HomozygousAssigner<'a> {
         HomozygousAssigner {
-            g, assignments, trusted_len,
+            g,
+            assignments,
+            trusted_len,
             min_suspect_cov,
             max_assign_len,
             considered: HashSet::new(),
@@ -314,19 +337,19 @@ impl <'a> HomozygousAssigner<'a> {
                     //also handles by 0. threshold case even if all coverages are 0.
                     n.coverage > self.min_suspect_cov - 1e-5
                 }
-            },
+            }
         }
     }
 
     fn exclude_complicated(&mut self, max_component_size: usize) {
         let mut accounted_long_starts = HashSet::new();
         for v in self.g.all_vertices() {
-            if self.g.vertex_length(v) < self.trusted_len
-                || accounted_long_starts.contains(&v) {
+            if self.g.vertex_length(v) < self.trusted_len || accounted_long_starts.contains(&v) {
                 continue;
             }
 
-            let short_node_component = dfs::ShortNodeComponent::ahead_from_long(self.g, v, self.trusted_len);
+            let short_node_component =
+                dfs::ShortNodeComponent::ahead_from_long(self.g, v, self.trusted_len);
             if short_node_component.inner.len() > max_component_size {
                 for w in short_node_component.inner {
                     self.considered.insert(w.node_id);
@@ -354,7 +377,8 @@ impl <'a> HomozygousAssigner<'a> {
             debug!("Considering vertex {}", self.g.v_str(v));
             if !self.considered.contains(&v.node_id)
                 && self.can_assign(v.node_id)
-                && self.check_homozygous_neighborhood(v) {
+                && self.check_homozygous_neighborhood(v)
+            {
                 marked += self.mark_vertex_and_chains(v);
             }
         }
@@ -374,10 +398,13 @@ impl <'a> HomozygousAssigner<'a> {
     fn make_homozygous(&mut self, v: Vertex) -> usize {
         self.considered.insert(v.node_id);
         if self.can_assign(v.node_id)
-            && self.assignments.group(v.node_id) != Some(TrioGroup::HOMOZYGOUS) {
-            self.assignments.assign(v.node_id,
+            && self.assignments.group(v.node_id) != Some(TrioGroup::HOMOZYGOUS)
+        {
+            self.assignments.assign(
+                v.node_id,
                 TrioGroup::HOMOZYGOUS,
-                String::from("HomozygousAssigner"));
+                String::from("HomozygousAssigner"),
+            );
             1
         } else {
             0
@@ -396,14 +423,13 @@ impl <'a> HomozygousAssigner<'a> {
 
     //TODO checking only one is probably enough, since iterating over all vertices
     fn check_homozygous_neighborhood(&self, v: Vertex) -> bool {
-        self.check_homozygous_fork_ahead(v)
-            || self.check_homozygous_fork_ahead(v.rc())
+        self.check_homozygous_fork_ahead(v) || self.check_homozygous_fork_ahead(v.rc())
     }
 
     fn check_homozygous_fork_ahead(&self, v: Vertex) -> bool {
         //trick is that v no longer has to itself be long
-        let (long_ahead, mut visited_vertices) = dfs::sinks_ahead(self.g, v,
-            self.trusted_len, None);
+        let (long_ahead, mut visited_vertices) =
+            dfs::sinks_ahead(self.g, v, self.trusted_len, None);
         visited_vertices.extend(&long_ahead);
         let mut blended_group = None;
 
@@ -421,19 +447,26 @@ impl <'a> HomozygousAssigner<'a> {
 
         //check that all incoming edges go from visited vertices
         visited_vertices.iter().all(|&x| {
-            x == v || self.g.incoming_edges(x).iter().all(
-                    |&l| visited_vertices.contains(&l.start))})
+            x == v
+                || self
+                    .g
+                    .incoming_edges(x)
+                    .iter()
+                    .all(|&l| visited_vertices.contains(&l.start))
+        })
     }
 }
 
-pub fn assign_homozygous(g: &Graph,
+pub fn assign_homozygous(
+    g: &Graph,
     assignments: AssignmentStorage,
     trusted_len: usize,
     min_suspect_cov: f64,
-    max_assign_len: usize) -> AssignmentStorage {
+    max_assign_len: usize,
+) -> AssignmentStorage {
     info!("Marking homozygous nodes");
-    let mut assigner = HomozygousAssigner::new(g, assignments,
-        trusted_len, min_suspect_cov, max_assign_len);
+    let mut assigner =
+        HomozygousAssigner::new(g, assignments, trusted_len, min_suspect_cov, max_assign_len);
     let marked = assigner.marking_round();
     info!("Marked {}", marked);
     assigner.assignments
@@ -458,12 +491,10 @@ mod tests {
         let g = Graph::read(&fs::read_to_string(graph_fn).unwrap());
         let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
-        let assigner = trio::HomozygousAssigner::new(&g, assignments, 100_000,
-                                                        -1., usize::MAX);
+        let assigner = trio::HomozygousAssigner::new(&g, assignments, 100_000, -1., usize::MAX);
         assert!(assigner.check_homozygous_fork_ahead(Vertex::forward(g.name2id("utig4-1237"))));
         assert!(assigner.check_homozygous_fork_ahead(Vertex::reverse(g.name2id("utig4-1237"))));
         assert!(!assigner.check_homozygous_fork_ahead(Vertex::forward(g.name2id("utig4-1554"))));
         assert!(!assigner.check_homozygous_fork_ahead(Vertex::reverse(g.name2id("utig4-1554"))));
     }
-
 }

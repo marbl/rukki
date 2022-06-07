@@ -1,7 +1,7 @@
 extern crate log;
 
-use rukki::*;
 use rukki::trio::*;
+use rukki::*;
 use std::fs;
 
 //fn from_assignment_iterator<'a>(g: &'a Graph, node_assign_it: impl Iterator<Item=(usize, TrioGroup)>)
@@ -34,9 +34,13 @@ fn haplo_paths() {
     let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
     let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
-    let mut haplo_searcher = trio_walk::HaploSearchSettings::default().build_searcher(&g, &assignments);
-    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher.find_all().into_iter()
-                                           .map(|(p, _, group)| (group, p.print(&g))).collect();
+    let mut haplo_searcher =
+        trio_walk::HaploSearchSettings::default().build_searcher(&g, &assignments);
+    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher
+        .find_all()
+        .into_iter()
+        .map(|(p, _, group)| (group, p.print(&g)))
+        .collect();
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,
@@ -44,7 +48,6 @@ fn haplo_paths() {
         (TrioGroup::PATERNAL,
             String::from("utig4-1830-,utig4-1826-,utig4-1827+,utig4-1831+,utig4-1243-,utig4-1241-,utig4-1237-,utig4-1238+,utig4-1552+,utig4-1553+,utig4-4096-,utig4-4097+,utig4-2592-,utig4-2589-,utig4-2591+"))])
 }
-
 
 #[test]
 fn augment_by_search() {
@@ -61,14 +64,26 @@ fn augment_by_search() {
     let augment_assign = augment_by_path_search(&g, assignments, settings);
 
     assert_eq!(augment_assign.assigned().count(), 17);
-    assert_eq!(augment_assign.group(g.name2id("utig4-1421")), Some(TrioGroup::PATERNAL));
-    assert_eq!(augment_assign.group(g.name2id("utig4-793")), Some(TrioGroup::PATERNAL));
-    assert_eq!(augment_assign.group(g.name2id("utig4-1436")), Some(TrioGroup::PATERNAL));
+    assert_eq!(
+        augment_assign.group(g.name2id("utig4-1421")),
+        Some(TrioGroup::PATERNAL)
+    );
+    assert_eq!(
+        augment_assign.group(g.name2id("utig4-793")),
+        Some(TrioGroup::PATERNAL)
+    );
+    assert_eq!(
+        augment_assign.group(g.name2id("utig4-1436")),
+        Some(TrioGroup::PATERNAL)
+    );
 
     let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
 
-    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher.find_all().into_iter()
-                                           .map(|(p, _, group)| (group, p.print(&g))).collect();
+    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher
+        .find_all()
+        .into_iter()
+        .map(|(p, _, group)| (group, p.print(&g)))
+        .collect();
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,
@@ -86,19 +101,31 @@ fn bubble_filling() {
     let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
     let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
-    let settings = trio_walk::HaploSearchSettings {ambig_filling_level: 2, ..trio_walk::HaploSearchSettings::default()};
+    let settings = trio_walk::HaploSearchSettings {
+        ambig_filling_level: 2,
+        ..trio_walk::HaploSearchSettings::default()
+    };
     assert_eq!(assignments.assigned().count(), 26);
 
     let augment_assign = augment_by_path_search(&g, assignments, settings);
 
     assert_eq!(augment_assign.assigned().count(), 28);
-    assert_eq!(augment_assign.group(g.name2id("utig4-1397")), Some(TrioGroup::MATERNAL));
-    assert_eq!(augment_assign.group(g.name2id("utig4-1347")), Some(TrioGroup::MATERNAL));
+    assert_eq!(
+        augment_assign.group(g.name2id("utig4-1397")),
+        Some(TrioGroup::MATERNAL)
+    );
+    assert_eq!(
+        augment_assign.group(g.name2id("utig4-1347")),
+        Some(TrioGroup::MATERNAL)
+    );
 
     let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
 
-    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher.find_all().into_iter()
-                                           .map(|(p, _, group)| (group, p.print(&g))).collect();
+    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher
+        .find_all()
+        .into_iter()
+        .map(|(p, _, group)| (group, p.print(&g)))
+        .collect();
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,
@@ -125,15 +152,27 @@ fn haplo_paths_2() {
 
     let augment_assign = augment_by_path_search(&g, assignments, settings);
 
-    assert_eq!(augment_assign.group(g.name2id("utig4-414")), Some(TrioGroup::MATERNAL));
-    assert_eq!(augment_assign.group(g.name2id("utig4-308")), Some(TrioGroup::MATERNAL));
-    assert_eq!(augment_assign.group(g.name2id("utig4-415")), Some(TrioGroup::PATERNAL));
+    assert_eq!(
+        augment_assign.group(g.name2id("utig4-414")),
+        Some(TrioGroup::MATERNAL)
+    );
+    assert_eq!(
+        augment_assign.group(g.name2id("utig4-308")),
+        Some(TrioGroup::MATERNAL)
+    );
+    assert_eq!(
+        augment_assign.group(g.name2id("utig4-415")),
+        Some(TrioGroup::PATERNAL)
+    );
     assert_eq!(augment_assign.assigned().count(), 45);
 
     let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
 
-    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher.find_all().into_iter()
-                                           .map(|(p, _, group)| (group, p.print(&g))).collect();
+    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher
+        .find_all()
+        .into_iter()
+        .map(|(p, _, group)| (group, p.print(&g)))
+        .collect();
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,
@@ -156,15 +195,24 @@ fn haplo_paths_3() {
 
     let augment_assign = augment_by_path_search(&g, assignments, settings);
 
-    assert_eq!(augment_assign.group(g.name2id("utig4-1404")), Some(TrioGroup::PATERNAL));
-    assert_eq!(augment_assign.group(g.name2id("utig4-1403")), Some(TrioGroup::MATERNAL));
+    assert_eq!(
+        augment_assign.group(g.name2id("utig4-1404")),
+        Some(TrioGroup::PATERNAL)
+    );
+    assert_eq!(
+        augment_assign.group(g.name2id("utig4-1403")),
+        Some(TrioGroup::MATERNAL)
+    );
 
     assert_eq!(augment_assign.assigned().count(), 82);
 
     let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
 
-    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher.find_all().into_iter()
-                                           .map(|(p, _, group)| (group, p.print(&g))).collect();
+    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher
+        .find_all()
+        .into_iter()
+        .map(|(p, _, group)| (group, p.print(&g)))
+        .collect();
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,

@@ -8,7 +8,6 @@ pub struct LinearBlock {
 }
 
 impl LinearBlock {
-
     //pub fn print(&self, g: &Graph) -> String {
     //    format!("<Block: path={}; known_alts=[{}]>", self.instance_path().print(g),
     //        self.known_alt_nodes.iter().map(|&node_id| g.name(node_id)).collect::<Vec<&str>>().join(","))
@@ -22,8 +21,9 @@ impl LinearBlock {
         &self.known_alt_nodes
     }
 
-    pub fn all_nodes(&self) -> impl Iterator<Item=usize> + '_ {
-        self.instance_path.vertices()
+    pub fn all_nodes(&self) -> impl Iterator<Item = usize> + '_ {
+        self.instance_path
+            .vertices()
             .iter()
             .map(|v| v.node_id)
             .chain(self.known_alt_nodes.iter().copied())
@@ -31,14 +31,16 @@ impl LinearBlock {
 
     fn can_merge_in(&self, other: &LinearBlock) -> bool {
         self.instance_path.can_merge_in(&other.instance_path)
-            && other.all_nodes()
-             .all(|n| !self.known_alt_nodes.contains(&n))
+            && other
+                .all_nodes()
+                .all(|n| !self.known_alt_nodes.contains(&n))
     }
 
     fn merge_in(&mut self, other: LinearBlock) {
         debug_assert!(self.can_merge_in(&other));
         self.instance_path.merge_in(other.instance_path);
-        self.known_alt_nodes.extend(other.known_alt_nodes.into_iter());
+        self.known_alt_nodes
+            .extend(other.known_alt_nodes.into_iter());
     }
 
     fn try_merge_in(mut self, other: LinearBlock) -> Option<LinearBlock> {
@@ -50,7 +52,7 @@ impl LinearBlock {
         }
     }
 
-    fn from_path(path: Path, iter: impl Iterator<Item=Vertex>) -> LinearBlock {
+    fn from_path(path: Path, iter: impl Iterator<Item = Vertex>) -> LinearBlock {
         LinearBlock {
             instance_path: path,
             known_alt_nodes: iter.map(|v| v.node_id).collect(),
@@ -116,9 +118,7 @@ fn bridged_by_vertex(g: &Graph, v: Vertex) -> Option<Path> {
     if g.incoming_edge_cnt(v) == 1 && g.outgoing_edge_cnt(v) == 1 {
         let u = g.incoming_edges(v)[0].start;
         let w = g.outgoing_edges(v)[0].end;
-        if u.node_id == v.node_id
-        || w.node_id == v.node_id
-        || w.node_id == u.node_id {
+        if u.node_id == v.node_id || w.node_id == v.node_id || w.node_id == u.node_id {
             return None;
         }
         let mut p = Path::from_link(g.incoming_edges(v)[0]);
@@ -131,9 +131,12 @@ fn bridged_by_vertex(g: &Graph, v: Vertex) -> Option<Path> {
 
 fn other_outgoing(g: &Graph, v: Vertex, l: Link) -> Option<Link> {
     if g.outgoing_edge_cnt(v) == 2 {
-        let alt = g.outgoing_edges(v).iter().copied()
-                    .find(|&x| x != l)
-                    .unwrap();
+        let alt = g
+            .outgoing_edges(v)
+            .iter()
+            .copied()
+            .find(|&x| x != l)
+            .unwrap();
         assert!(alt.end != l.end);
         return Some(alt);
     }
@@ -142,9 +145,12 @@ fn other_outgoing(g: &Graph, v: Vertex, l: Link) -> Option<Link> {
 
 fn other_incoming(g: &Graph, v: Vertex, l: Link) -> Option<Link> {
     if g.incoming_edge_cnt(v) == 2 {
-        let alt = g.incoming_edges(v).iter().copied()
-                    .find(|&x| x != l)
-                    .unwrap();
+        let alt = g
+            .incoming_edges(v)
+            .iter()
+            .copied()
+            .find(|&x| x != l)
+            .unwrap();
         assert!(alt.start != l.start);
         return Some(alt);
     }
@@ -154,7 +160,9 @@ fn other_incoming(g: &Graph, v: Vertex, l: Link) -> Option<Link> {
 //Bridge is a path of length 3 with middle vertex having single incoming and single outgoing link
 //Returning both middle vertex and entire path
 fn bridge_ahead(g: &Graph, v: Vertex) -> Option<Path> {
-    let bridges: Vec<Path> = g.outgoing_edges(v).iter()
+    let bridges: Vec<Path> = g
+        .outgoing_edges(v)
+        .iter()
         .filter_map(|l| bridged_by_vertex(g, l.end))
         .collect();
     if bridges.len() == 1 {
@@ -165,8 +173,7 @@ fn bridge_ahead(g: &Graph, v: Vertex) -> Option<Path> {
 }
 
 //TODO move into PrimaryDecomposer and parameterize with superbubble search params
-fn unique_block_ahead(g: &Graph, v: Vertex, unique_block_len: usize)
-    -> Option<LinearBlock> {
+fn unique_block_ahead(g: &Graph, v: Vertex, unique_block_len: usize) -> Option<LinearBlock> {
     let block = LinearBlock::search_ahead(g, v, &superbubble::SbSearchParams::unrestricted());
     if block.instance_path.total_length(g) >= unique_block_len {
         Some(block)
@@ -193,8 +200,7 @@ fn forward_extension(g: &Graph, v: Vertex, unique_block_len: usize) -> Option<Li
 //     \
 //- v - w -
 #[allow(clippy::many_single_char_names)]
-fn extension_in_deadend(g: &Graph, v: Vertex, unique_block_len: usize)
--> Option<LinearBlock> {
+fn extension_in_deadend(g: &Graph, v: Vertex, unique_block_len: usize) -> Option<LinearBlock> {
     let l = unambiguous_outgoing(g, v)?;
     let w = l.end;
     let a = other_incoming(g, w, l)?.start;
@@ -212,12 +218,14 @@ fn extension_in_deadend(g: &Graph, v: Vertex, unique_block_len: usize)
 //   /       or     /
 //- v - w -      - v - o x
 //l -- 'horizontal' link
-fn extension_out_deadend(g: &Graph, v: Vertex, unique_block_len: usize)
--> Option<LinearBlock> {
+fn extension_out_deadend(g: &Graph, v: Vertex, unique_block_len: usize) -> Option<LinearBlock> {
     if g.outgoing_edge_cnt(v) == 2 {
         //TODO generalize?
-        let mut deadend_links : Vec<Link> = g.outgoing_edges(v).into_iter()
-                                        .filter(|&l| is_deadend(g, l.end)).collect();
+        let mut deadend_links: Vec<Link> = g
+            .outgoing_edges(v)
+            .into_iter()
+            .filter(|&l| is_deadend(g, l.end))
+            .collect();
         deadend_links.sort_by_key(|&l| g.vertex_length(l.end));
         match deadend_links.len() {
             2 => {
@@ -252,9 +260,10 @@ fn extension_via_bridge(g: &Graph, u: Vertex, unique_block_len: usize) -> Option
         let s = other_outgoing(g, u, bridge_p.link_at(0))?.end;
         let t = other_incoming(g, w, bridge_p.link_at(1))?.start;
 
-        let ext_block = LinearBlock::from_path(bridge_p,
-            admissible_alt_class(g, s, t, unique_block_len)?
-            .into_iter());
+        let ext_block = LinearBlock::from_path(
+            bridge_p,
+            admissible_alt_class(g, s, t, unique_block_len)?.into_iter(),
+        );
         let ext_block = ext_block.try_merge_in(unique_block_ahead(g, w, unique_block_len)?)?;
         Some(ext_block)
     } else {
@@ -263,8 +272,12 @@ fn extension_via_bridge(g: &Graph, u: Vertex, unique_block_len: usize) -> Option
 }
 
 //checks if s & t belong to one of considered alt cases and returns alt vertices
-fn admissible_alt_class(g: &Graph, s: Vertex, t: Vertex, unique_block_len: usize)
-    -> Option<Vec<Vertex>> {
+fn admissible_alt_class(
+    g: &Graph,
+    s: Vertex,
+    t: Vertex,
+    unique_block_len: usize,
+) -> Option<Vec<Vertex>> {
     if s == t {
         //FIXME in this case there can be loop on top of s which won't be added to alt
         return Some(vec![s]);
@@ -290,9 +303,13 @@ fn is_deadend(g: &Graph, v: Vertex) -> bool {
     g.outgoing_edge_cnt(v) == 0 || g.incoming_edge_cnt(v) == 0
 }
 
-fn visited_if_reachable(g: &Graph, v: Vertex, w: Vertex,
-    direction: dfs::TraversalDirection, max_node_len: usize)
-    -> Option<HashSet<Vertex>> {
+fn visited_if_reachable(
+    g: &Graph,
+    v: Vertex,
+    w: Vertex,
+    direction: dfs::TraversalDirection,
+    max_node_len: usize,
+) -> Option<HashSet<Vertex>> {
     let mut dfs = dfs::DFS::new(g, direction, None);
     dfs.set_max_node_len(max_node_len);
     dfs.extend_blocked(std::iter::once(w));
@@ -304,10 +321,11 @@ fn visited_if_reachable(g: &Graph, v: Vertex, w: Vertex,
     }
 }
 
-fn joining_vertices(g: &Graph, s: Vertex, t: Vertex, max_node_len: usize)
-    -> Option<Vec<Vertex>> {
-    let visited_fwd = visited_if_reachable(g, s, t, dfs::TraversalDirection::FORWARD, max_node_len)?;
-    let visited_rev = visited_if_reachable(g, t, s, dfs::TraversalDirection::REVERSE, max_node_len).unwrap();
+fn joining_vertices(g: &Graph, s: Vertex, t: Vertex, max_node_len: usize) -> Option<Vec<Vertex>> {
+    let visited_fwd =
+        visited_if_reachable(g, s, t, dfs::TraversalDirection::FORWARD, max_node_len)?;
+    let visited_rev =
+        visited_if_reachable(g, t, s, dfs::TraversalDirection::REVERSE, max_node_len).unwrap();
     let mut reachable: Vec<Vertex> = visited_fwd.intersection(&visited_rev).copied().collect();
     reachable.push(s);
     reachable.push(t);
@@ -326,8 +344,7 @@ fn end_vertex(b: &LinearBlock) -> Vertex {
     b.instance_path.end()
 }
 
-impl <'a> PrimaryDecomposer<'a> {
-
+impl<'a> PrimaryDecomposer<'a> {
     fn new(g: &Graph, unique_block_len: usize) -> PrimaryDecomposer {
         PrimaryDecomposer {
             g,
@@ -339,8 +356,7 @@ impl <'a> PrimaryDecomposer<'a> {
     fn extend_forward(&self, block: &mut LinearBlock) -> bool {
         let v = end_vertex(block);
         if let Some(ext) = forward_extension(self.g, v, self.unique_block_len) {
-            if ext.all_nodes().all(|n| !self.used_nodes.contains(&n))
-               && block.can_merge_in(&ext) {
+            if ext.all_nodes().all(|n| !self.used_nodes.contains(&n)) && block.can_merge_in(&ext) {
                 block.merge_in(ext);
                 return true;
             }
@@ -372,7 +388,10 @@ impl <'a> PrimaryDecomposer<'a> {
     fn run(&mut self) -> Vec<LinearBlock> {
         let mut resulting_blocks = Vec::new();
         for simple_block in simple_unique_blocks(self.g, self.unique_block_len) {
-            if simple_block.all_nodes().all(|n| !self.used_nodes.contains(&n)) {
+            if simple_block
+                .all_nodes()
+                .all(|n| !self.used_nodes.contains(&n))
+            {
                 if let Some(block) = self.extended_block(simple_block) {
                     assert!(block.all_nodes().all(|n| !self.used_nodes.contains(&n)));
                     self.used_nodes.extend(block.all_nodes());
@@ -382,8 +401,13 @@ impl <'a> PrimaryDecomposer<'a> {
         }
 
         for simple_block in simple_unique_blocks(self.g, self.unique_block_len) {
-            if simple_block.all_nodes().any(|n| self.used_nodes.contains(&n)) {
-                assert!(simple_block.all_nodes().all(|n| self.used_nodes.contains(&n)));
+            if simple_block
+                .all_nodes()
+                .any(|n| self.used_nodes.contains(&n))
+            {
+                assert!(simple_block
+                    .all_nodes()
+                    .all(|n| self.used_nodes.contains(&n)));
             } else {
                 resulting_blocks.push(simple_block);
             }
@@ -391,7 +415,6 @@ impl <'a> PrimaryDecomposer<'a> {
 
         resulting_blocks
     }
-
 }
 
 //prioritization step is cheap
@@ -463,8 +486,8 @@ pub fn detect_gap(g: &Graph, u: Vertex) -> Option<GapInfo> {
                 start: s,
                 end: t,
                 gap_size: (bridge_p.total_length(g) as i64
-                           - Path::from_link(s_l).total_length(g) as i64
-                           - Path::from_link(t_l).total_length(g) as i64)
+                    - Path::from_link(s_l).total_length(g) as i64
+                    - Path::from_link(t_l).total_length(g) as i64),
             });
         }
     }

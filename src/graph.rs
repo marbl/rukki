@@ -1,6 +1,6 @@
-use std::str;
-use std::collections::HashMap;
 use log::warn;
+use std::collections::HashMap;
+use std::str;
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum Direction {
@@ -71,11 +71,17 @@ pub struct Vertex {
 
 impl Vertex {
     pub fn forward(node_id: usize) -> Vertex {
-        Vertex {node_id, direction: Direction::FORWARD}
+        Vertex {
+            node_id,
+            direction: Direction::FORWARD,
+        }
     }
 
     pub fn reverse(node_id: usize) -> Vertex {
-        Vertex {node_id, direction: Direction::REVERSE}
+        Vertex {
+            node_id,
+            direction: Direction::REVERSE,
+        }
     }
 
     pub fn rc(&self) -> Vertex {
@@ -231,13 +237,12 @@ impl Default for Graph {
 }
 
 impl Graph {
-
     pub fn new() -> Graph {
         Graph {
             nodes: Vec::new(),
             incoming_links: Vec::new(),
             outgoing_links: Vec::new(),
-            name2ids:  HashMap::new(),
+            name2ids: HashMap::new(),
         }
     }
 
@@ -268,7 +273,9 @@ impl Graph {
             Direction::REVERSE => self.incoming_links[link.start.node_id].push(link.rc()),
         };
 
-        if link == link.rc() { return };
+        if link == link.rc() {
+            return;
+        };
 
         match link.end.direction {
             Direction::FORWARD => self.incoming_links[link.end.node_id].push(link),
@@ -282,16 +289,31 @@ impl Graph {
         assert!(self.nodes.len() == self.outgoing_links.len());
         for (node_id, _) in self.all_nodes().enumerate() {
             let v = Vertex::forward(node_id);
-            assert!(self.incoming_links[node_id].iter().filter(|l| l.end != v).count() == 0
-                        , "Problem with incoming links for node {}", self.nodes[node_id].name);
-            assert!(self.outgoing_links[node_id].iter().filter(|l| l.start != v).count() == 0
-                        , "Problem with incoming links for node {}", self.nodes[node_id].name);
+            assert!(
+                self.incoming_links[node_id]
+                    .iter()
+                    .filter(|l| l.end != v)
+                    .count()
+                    == 0,
+                "Problem with incoming links for node {}",
+                self.nodes[node_id].name
+            );
+            assert!(
+                self.outgoing_links[node_id]
+                    .iter()
+                    .filter(|l| l.start != v)
+                    .count()
+                    == 0,
+                "Problem with incoming links for node {}",
+                self.nodes[node_id].name
+            );
         }
     }
 
     //TODO switch to iterator?
     fn parse_tag<T: str::FromStr>(fields: &[&str], prefix: &str) -> Option<T> {
-        fields.iter()
+        fields
+            .iter()
             .filter(|s| s.starts_with(prefix))
             .map(|s| match s[prefix.len()..].parse::<T>() {
                 Ok(t) => t,
@@ -302,12 +324,16 @@ impl Graph {
 
     fn parse_overlap(cigar: &str) -> usize {
         assert!(cigar.ends_with('M'), "Invalid overlap {}", cigar);
-        let ovl = &cigar[..(cigar.len()-1)];
+        let ovl = &cigar[..(cigar.len() - 1)];
         ovl.trim().parse().expect("Invalid overlap")
     }
 
     //TODO switch to something iterable
-    pub fn custom_read(graph_str: &str, collapse_multi_edges: bool, normalize_overlaps: bool) -> Graph {
+    pub fn custom_read(
+        graph_str: &str,
+        collapse_multi_edges: bool,
+        normalize_overlaps: bool,
+    ) -> Graph {
         let mut g = Self::new();
 
         for line in graph_str.lines() {
@@ -317,19 +343,22 @@ impl Graph {
                 let name = String::from(split[1]);
                 let tags = &split[3..split.len()];
                 let length = if split[2] != "*" {
-                                 split[2].trim().len()
-                             } else {
-                                 Self::parse_tag(tags, "LN:i:")
-                                     .expect("Neither sequence nor LN tag provided")
-                             };
+                    split[2].trim().len()
+                } else {
+                    Self::parse_tag(tags, "LN:i:").expect("Neither sequence nor LN tag provided")
+                };
                 assert!(length > 0);
                 let coverage = match Self::parse_tag::<usize>(tags, "RC:i:")
-                                        .or_else(|| Self::parse_tag::<usize>(tags, "FC:i:")) {
-                    None => Self::parse_tag(tags, "ll:f:")
-                                        .unwrap_or(0.),
+                    .or_else(|| Self::parse_tag::<usize>(tags, "FC:i:"))
+                {
+                    None => Self::parse_tag(tags, "ll:f:").unwrap_or(0.),
                     Some(raw_cnt) => raw_cnt as f64 / length as f64,
                 };
-                g.add_node(Node{name, length, coverage});
+                g.add_node(Node {
+                    name,
+                    length,
+                    coverage,
+                });
             }
         }
 
@@ -357,15 +386,27 @@ impl Graph {
                 }
                 let max_ovl = std::cmp::min(g.vertex_length(start), g.vertex_length(end)) - 1;
                 if overlap > max_ovl {
-                    assert!(normalize_overlaps,
-                            "Invalid (too long) overlap of size {} between {} and {}",
-                            overlap, g.v_str(start), g.v_str(end));
-                    warn!("Normalizing overlap between {} and {} ({} -> {})",
-                            g.v_str(start), g.v_str(end),
-                            overlap, max_ovl);
+                    assert!(
+                        normalize_overlaps,
+                        "Invalid (too long) overlap of size {} between {} and {}",
+                        overlap,
+                        g.v_str(start),
+                        g.v_str(end)
+                    );
+                    warn!(
+                        "Normalizing overlap between {} and {} ({} -> {})",
+                        g.v_str(start),
+                        g.v_str(end),
+                        overlap,
+                        max_ovl
+                    );
                     overlap = max_ovl;
                 }
-                g.add_link(Link{start, end, overlap});
+                g.add_link(Link {
+                    start,
+                    end,
+                    overlap,
+                });
             }
         }
         g.check_links();
@@ -376,16 +417,24 @@ impl Graph {
         let mut gfa = String::new();
 
         for n in self.all_nodes() {
-            gfa += &format!("S\t{}\t*\tLN:i:{}\tRC:i:{}\tll:f:{:.1}\n",
-                n.name, n.length,
-                (n.coverage * n.length as f64).round() as u64, n.coverage);
+            gfa += &format!(
+                "S\t{}\t*\tLN:i:{}\tRC:i:{}\tll:f:{:.1}\n",
+                n.name,
+                n.length,
+                (n.coverage * n.length as f64).round() as u64,
+                n.coverage
+            );
         }
 
         for l in self.all_links() {
-            gfa += &format!("L\t{}\t{}\t{}\t{}\t{}M\n",
-                self.node(l.start.node_id).name, Direction::str(l.start.direction),
-                self.node(l.end.node_id).name, Direction::str(l.end.direction),
-                l.overlap);
+            gfa += &format!(
+                "L\t{}\t{}\t{}\t{}\t{}M\n",
+                self.node(l.start.node_id).name,
+                Direction::str(l.start.direction),
+                self.node(l.end.node_id).name,
+                Direction::str(l.end.direction),
+                l.overlap
+            );
         }
 
         gfa
@@ -464,21 +513,21 @@ impl Graph {
     }
 
     //TODO iterate over references
-    pub fn all_links(&self) -> impl Iterator<Item=Link> + '_ {
+    pub fn all_links(&self) -> impl Iterator<Item = Link> + '_ {
         AllLinkIter::new(self)
     }
 
-    pub fn all_nodes(&self) -> impl Iterator<Item=&Node> + '_ {
+    pub fn all_nodes(&self) -> impl Iterator<Item = &Node> + '_ {
         self.nodes.iter()
     }
 
     //TODO iterate over references
-    pub fn all_vertices(&self) -> impl Iterator<Item=Vertex> + '_ {
+    pub fn all_vertices(&self) -> impl Iterator<Item = Vertex> + '_ {
         VertexIter::new(self)
     }
 
     //TODO iterate over references
-    pub fn canonic_vertices(&self) -> impl Iterator<Item=Vertex> + '_ {
+    pub fn canonic_vertices(&self) -> impl Iterator<Item = Vertex> + '_ {
         (1..self.node_cnt()).map(Vertex::forward)
     }
 
@@ -513,7 +562,6 @@ impl Graph {
     pub fn l_str(&self, l: Link) -> String {
         format!("{}->{}", self.v_str(l.start), self.v_str(l.end))
     }
-
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
@@ -581,7 +629,6 @@ impl GeneralizedLink {
             Self::AMBIG(a) => Self::AMBIG(a.rc()),
         }
     }
-
 }
 
 #[derive(Clone)]
@@ -593,7 +640,6 @@ pub struct Path {
 //FIXME rename, doesn't know about haplotype!
 //Never empty! Use None instead
 impl Path {
-
     pub fn new(init_v: Vertex) -> Path {
         Path {
             v_storage: vec![init_v],
@@ -739,17 +785,19 @@ impl Path {
         let mut ans = String::new();
         for (i, &v) in self.v_storage.iter().enumerate() {
             if i > 0 {
-                match self.l_storage[i-1] {
+                match self.l_storage[i - 1] {
                     //GeneralizedLink::AMBIG(_) => if gaf { ">AMBIG" } else { ",AMBIG" },
                     GeneralizedLink::AMBIG(gap_info) | GeneralizedLink::GAP(gap_info) => {
                         //TODO use estimated gap size
                         ans += delim;
                         ans += &format!("[N{}N]", gap_info.gap_size);
-                    },
+                    }
                     GeneralizedLink::LINK(_) => {}
                 };
             }
-            if i > 0 { ans += delim; }
+            if i > 0 {
+                ans += delim;
+            }
             ans += &g.v_str_format(v, gaf);
         }
         ans
@@ -777,7 +825,9 @@ impl Path {
         if start_pos < (other.len() - 1) {
             return false;
         }
-        self.check_subpath(&other.clone().reverse_complement(), start_pos - (other.len() - 1))
+        self.check_subpath(
+            &other.clone().reverse_complement(),
+            start_pos - (other.len() - 1),
+        )
     }
-
 }

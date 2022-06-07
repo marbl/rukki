@@ -123,7 +123,11 @@ L a + b + 10M
     assert_eq!(1, g.link_cnt());
     let v = Vertex::forward(g.name2id("a"));
     let w = Vertex::forward(g.name2id("b"));
-    let l = Link{start: v, end: w, overlap: 10,};
+    let l = Link {
+        start: v,
+        end: w,
+        overlap: 10,
+    };
     assert_eq!(g.outgoing_edges(v), vec![l]);
     assert_eq!(g.incoming_edges(v), vec![]);
     assert_eq!(g.outgoing_edges(v.rc()), vec![]);

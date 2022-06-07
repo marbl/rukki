@@ -1,8 +1,8 @@
 use crate::graph::*;
-use std::cmp;
-use std::collections::HashSet;
-use std::collections::HashMap;
 use log::debug;
+use std::cmp;
+use std::collections::HashMap;
+use std::collections::HashSet;
 
 type DistRange = (usize, usize);
 
@@ -22,7 +22,6 @@ pub struct Superbubble {
 }
 
 impl Superbubble {
-
     fn link_dist_range(&self, l: Link, g: &Graph) -> Option<DistRange> {
         let &r = self.reached_vertices.get(&l.start)?;
         let enode_len = g.vertex_length(l.end);
@@ -74,12 +73,14 @@ impl Superbubble {
         rc_p.reverse_complement()
     }
 
-    pub fn vertices(&self) -> impl Iterator<Item=&Vertex> + '_ {
+    pub fn vertices(&self) -> impl Iterator<Item = &Vertex> + '_ {
         self.reached_vertices.keys()
     }
 
-    pub fn inner_vertices(&self) -> impl Iterator<Item=&Vertex> + '_ {
-        self.reached_vertices.keys().filter(|&v| *v != self.start_vertex() && *v != self.end_vertex())
+    pub fn inner_vertices(&self) -> impl Iterator<Item = &Vertex> + '_ {
+        self.reached_vertices
+            .keys()
+            .filter(|&v| *v != self.start_vertex() && *v != self.end_vertex())
     }
 
     pub fn start_vertex(&self) -> Vertex {
@@ -130,8 +131,12 @@ pub fn find_superbubble(g: &Graph, v: Vertex, params: &SbSearchParams) -> Option
 
 //TODO handle case when first/last vertex have other outgoing/incoming edges
 //last vertex case is almost handled
-pub fn find_superbubble_subgraph(g: &Graph, s: Vertex, params: &SbSearchParams,
-    consider_vertex_f: Option<&dyn Fn(Vertex)->bool>) -> Option<Superbubble> {
+pub fn find_superbubble_subgraph(
+    g: &Graph,
+    s: Vertex,
+    params: &SbSearchParams,
+    consider_vertex_f: Option<&dyn Fn(Vertex) -> bool>,
+) -> Option<Superbubble> {
     if let Some(f) = consider_vertex_f {
         if !f(s) {
             return None;
@@ -144,45 +149,51 @@ pub fn find_superbubble_subgraph(g: &Graph, s: Vertex, params: &SbSearchParams,
         end_vertex: None,
     };
 
-    let outgoing_edge_cnt = |v| {
-        match consider_vertex_f {
-            None => g.outgoing_edge_cnt(v),
-            Some(avail) => g.outgoing_edges(v).iter()
-                            .filter(|l| avail(l.end)).count(),
-        }
+    let outgoing_edge_cnt = |v| match consider_vertex_f {
+        None => g.outgoing_edge_cnt(v),
+        Some(avail) => g.outgoing_edges(v).iter().filter(|l| avail(l.end)).count(),
     };
 
-    let incoming_edge_cnt = |v| {
-        match consider_vertex_f {
-            None => g.incoming_edge_cnt(v),
-            Some(avail) => g.incoming_edges(v).iter()
-                            .filter(|l| avail(l.start)).count(),
-        }
+    let incoming_edge_cnt = |v| match consider_vertex_f {
+        None => g.incoming_edge_cnt(v),
+        Some(avail) => g
+            .incoming_edges(v)
+            .iter()
+            .filter(|l| avail(l.start))
+            .count(),
     };
 
-    let outgoing_edges = |v| {
-        match consider_vertex_f {
-            None => g.outgoing_edges(v),
-            Some(avail) => g.outgoing_edges(v).iter().copied()
-                            .filter(|l| avail(l.end)).collect(),
-        }
+    let outgoing_edges = |v| match consider_vertex_f {
+        None => g.outgoing_edges(v),
+        Some(avail) => g
+            .outgoing_edges(v)
+            .iter()
+            .copied()
+            .filter(|l| avail(l.end))
+            .collect(),
     };
 
-    let _incoming_edges = |v| {
-        match consider_vertex_f {
-            None => g.incoming_edges(v),
-            Some(avail) => g.incoming_edges(v).iter().copied()
-                            .filter(|l| avail(l.start)).collect(),
-        }
+    let _incoming_edges = |v| match consider_vertex_f {
+        None => g.incoming_edges(v),
+        Some(avail) => g
+            .incoming_edges(v)
+            .iter()
+            .copied()
+            .filter(|l| avail(l.start))
+            .collect(),
     };
 
     if outgoing_edge_cnt(bubble.start_vertex) < 2
         //same check, but excluding loops
-        || outgoing_edges(bubble.start_vertex).iter().filter(|l| l.start != l.end).count() < 2 {
+        || outgoing_edges(bubble.start_vertex).iter().filter(|l| l.start != l.end).count() < 2
+    {
         return None;
     }
 
-    debug!("Adding starting vertex {} to stack", g.v_str(bubble.start_vertex));
+    debug!(
+        "Adding starting vertex {} to stack",
+        g.v_str(bubble.start_vertex)
+    );
     //vertices with all incoming edges considered (can be processed)
     let mut can_be_processed: Vec<Vertex> = vec![bubble.start_vertex];
     bubble.reached_vertices.insert(bubble.start_vertex, (0, 0));
@@ -221,19 +232,28 @@ pub fn find_superbubble_subgraph(g: &Graph, s: Vertex, params: &SbSearchParams,
 
             if !bubble.reached_vertices.contains_key(&w) {
                 if bubble.reached_vertices.contains_key(&w.rc()) {
-                    debug!("Reverse-complement vertex {} was already reached",
-                        g.v_str(w.rc()));
+                    debug!(
+                        "Reverse-complement vertex {} was already reached",
+                        g.v_str(w.rc())
+                    );
                     return None;
                 }
                 not_ready_cnt += 1;
                 remaining_incoming.insert(w, incoming_edge_cnt(w));
-                bubble.reached_vertices.insert(w, bubble.link_dist_range(l, g).unwrap());
+                bubble
+                    .reached_vertices
+                    .insert(w, bubble.link_dist_range(l, g).unwrap());
             }
             let rem_inc = remaining_incoming.get_mut(&w).unwrap();
             *rem_inc -= 1;
             //self.reached_vertices.get(w) =
-            bubble.reached_vertices.insert(w,
-                merge_range(*bubble.reached_vertices.get(&w).unwrap(), bubble.link_dist_range(l, g).unwrap()));
+            bubble.reached_vertices.insert(
+                w,
+                merge_range(
+                    *bubble.reached_vertices.get(&w).unwrap(),
+                    bubble.link_dist_range(l, g).unwrap(),
+                ),
+            );
 
             if *remaining_incoming.get(&w).unwrap() == 0 {
                 can_be_processed.push(w);
@@ -255,13 +275,19 @@ pub fn find_superbubble_subgraph(g: &Graph, s: Vertex, params: &SbSearchParams,
 
             //FIXME it seems like only start_pos is ever checked
             if min_len > v_len && (min_len - v_len) > params.max_length {
-                debug!("Length of minimal additional sequence {} exceeded limit {}",
-                    min_len - v_len, params.max_length);
+                debug!(
+                    "Length of minimal additional sequence {} exceeded limit {}",
+                    min_len - v_len,
+                    params.max_length
+                );
                 return None;
             }
             if max_len - min_len > params.max_diff {
-                debug!("Minimal and maximal lengths differed by {} exceeded limit {}",
-                    max_len - min_len, params.max_diff);
+                debug!(
+                    "Minimal and maximal lengths differed by {} exceeded limit {}",
+                    max_len - min_len,
+                    params.max_diff
+                );
                 return None;
             }
             bubble.end_vertex = Some(t);
@@ -270,7 +296,10 @@ pub fn find_superbubble_subgraph(g: &Graph, s: Vertex, params: &SbSearchParams,
     }
 
     debug!("No more nodes could be added");
-    debug!("Finished search for starting vertex {}", g.v_str(bubble.start_vertex));
+    debug!(
+        "Finished search for starting vertex {}",
+        g.v_str(bubble.start_vertex)
+    );
     None
 }
 
@@ -359,8 +388,7 @@ pub fn length_range(chain: &[Superbubble], g: &Graph) -> DistRange {
         tot_min += min - s_l;
         tot_max += max - s_l;
     }
-    if !chain.is_empty()
-        && chain[0].start_vertex() != chain.last().unwrap().end_vertex() {
+    if !chain.is_empty() && chain[0].start_vertex() != chain.last().unwrap().end_vertex() {
         let s_l = g.vertex_length(chain[0].start_vertex());
         (tot_min + s_l, tot_max + s_l)
     } else {
@@ -410,6 +438,7 @@ pub fn linear_frac(chain: &[Superbubble], g: &Graph) -> f32 {
 //FIXME implement flattened vertex iterator even if it has duplicates
 pub fn check_chain<F>(chain: &[Superbubble], mut f: F) -> bool
 where
-F: FnMut(&Vertex) -> bool {
+    F: FnMut(&Vertex) -> bool,
+{
     chain.iter().flat_map(|b| b.vertices()).all(&mut f)
 }

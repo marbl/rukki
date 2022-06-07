@@ -16,17 +16,18 @@ pub enum TraversalDirection {
 pub struct DFS<'a> {
     g: &'a Graph,
     direction: TraversalDirection,
-    consider_f: Option<&'a dyn Fn(Vertex)->bool>,
+    consider_f: Option<&'a dyn Fn(Vertex) -> bool>,
     blocked: HashSet<Vertex>,
     tout: Vec<Vertex>,
     node_len_thr: usize,
 }
 
 impl<'a> DFS<'a> {
-
-    pub fn new(g: &'a Graph,
+    pub fn new(
+        g: &'a Graph,
         direction: TraversalDirection,
-        consider_f: Option<&'a dyn Fn(Vertex)->bool>) -> DFS<'a> {
+        consider_f: Option<&'a dyn Fn(Vertex) -> bool>,
+    ) -> DFS<'a> {
         DFS {
             g,
             direction,
@@ -56,21 +57,27 @@ impl<'a> DFS<'a> {
     }
 
     //FIXME make consume self and return new DFS
-    pub fn extend_blocked(&mut self, iter: impl IntoIterator<Item=Vertex>) {
+    pub fn extend_blocked(&mut self, iter: impl IntoIterator<Item = Vertex>) {
         self.blocked.extend(iter);
     }
 
     //TODO use iterators
     fn neighbors(&self, v: Vertex) -> Vec<Vertex> {
         match self.direction {
-            TraversalDirection::FORWARD => self.g.outgoing_edges(v).iter()
-                                                 .map(|l| l.end)
-                                                 .filter(|&x| self.consider_f.is_none()
-                                                    || self.consider_f.unwrap()(x)).collect(),
-            TraversalDirection::REVERSE => self.g.incoming_edges(v).iter()
-                                                 .map(|l| l.start)
-                                                 .filter(|&x| self.consider_f.is_none()
-                                                    || self.consider_f.unwrap()(x)).collect(),
+            TraversalDirection::FORWARD => self
+                .g
+                .outgoing_edges(v)
+                .iter()
+                .map(|l| l.end)
+                .filter(|&x| self.consider_f.is_none() || self.consider_f.unwrap()(x))
+                .collect(),
+            TraversalDirection::REVERSE => self
+                .g
+                .incoming_edges(v)
+                .iter()
+                .map(|l| l.start)
+                .filter(|&x| self.consider_f.is_none() || self.consider_f.unwrap()(x))
+                .collect(),
         }
     }
 
@@ -79,8 +86,7 @@ impl<'a> DFS<'a> {
         self.blocked.insert(v);
 
         for w in self.neighbors(v) {
-            if !self.blocked.contains(&w)
-                && self.g.vertex_length(w) <= self.node_len_thr {
+            if !self.blocked.contains(&w) && self.g.vertex_length(w) <= self.node_len_thr {
                 self.run_from(w);
             }
         }
@@ -116,7 +122,7 @@ impl<'a> DFS<'a> {
     //nodes that were reached, but not visited (initally blocked or too long)
     pub fn boundary(&self) -> Vec<Vertex> {
         let mut boundary = HashSet::new();
-        let visited : HashSet<Vertex> = self.tout.iter().copied().collect();
+        let visited: HashSet<Vertex> = self.tout.iter().copied().collect();
 
         for &v in &visited {
             for w in self.neighbors(v) {
@@ -131,17 +137,24 @@ impl<'a> DFS<'a> {
     //TODO return iterator?
     //return nodes that didn't have any neighbors
     pub fn dead_ends(&self) -> Vec<Vertex> {
-        self.exit_order().iter().filter(|&v| self.neighbors(*v).is_empty()).copied().collect()
+        self.exit_order()
+            .iter()
+            .filter(|&v| self.neighbors(*v).is_empty())
+            .copied()
+            .collect()
     }
-
 }
 
 //includes boundary vertices (longer than threshold) and visited dead-ends
 //currently will include v if it's a dead-end (but not if it's longer than threshold)
 //returns pair of sinks and all ('inner') visited vertices
 //visited vertices will overlap sinks by short dead-ends
-pub fn sinks_ahead(g: &Graph, v: Vertex, node_len_thr: usize,
-    subgraph_f: Option<&dyn Fn(Vertex)->bool>) -> (Vec<Vertex>, HashSet<Vertex>) {
+pub fn sinks_ahead(
+    g: &Graph,
+    v: Vertex,
+    node_len_thr: usize,
+    subgraph_f: Option<&dyn Fn(Vertex) -> bool>,
+) -> (Vec<Vertex>, HashSet<Vertex>) {
     let mut dfs = DFS::new(g, TraversalDirection::FORWARD, subgraph_f);
     dfs.set_max_node_len(node_len_thr);
     //inner_dfs(g, v, node_len_thr, &mut visited, &mut border);
@@ -157,8 +170,12 @@ pub fn sinks_ahead(g: &Graph, v: Vertex, node_len_thr: usize,
 //currently will include v if it's a dead-end (but not if it's longer than threshold)
 //returns pair of sources and all ('inner') visited vertices
 //visited vertices will overlap sources by short dead-ends
-pub fn sources_behind(g: &Graph, v: Vertex, node_len_thr: usize,
-    subgraph_f: Option<&dyn Fn(Vertex)->bool>) -> (Vec<Vertex>, HashSet<Vertex>) {
+pub fn sources_behind(
+    g: &Graph,
+    v: Vertex,
+    node_len_thr: usize,
+    subgraph_f: Option<&dyn Fn(Vertex) -> bool>,
+) -> (Vec<Vertex>, HashSet<Vertex>) {
     let mut dfs = DFS::new(g, TraversalDirection::REVERSE, subgraph_f);
     dfs.set_max_node_len(node_len_thr);
     //inner_dfs(g, v, node_len_thr, &mut visited, &mut border);
@@ -178,7 +195,6 @@ pub struct ShortNodeComponent {
 }
 
 impl ShortNodeComponent {
-
     fn consider(&mut self, g: &Graph, v: Vertex, l: Link, length_threshold: usize) {
         let mut is_source = false;
         let mut is_sink = false;
@@ -299,13 +315,26 @@ impl ShortNodeComponent {
         }
     }
 
-    pub fn all_nodes(&self) -> impl Iterator<Item=&Vertex> {
-        self.inner.iter().chain(self.sources.iter()).chain(self.sinks.iter())
+    pub fn all_nodes(&self) -> impl Iterator<Item = &Vertex> {
+        self.inner
+            .iter()
+            .chain(self.sources.iter())
+            .chain(self.sinks.iter())
     }
 
     pub fn print(&self, g: &Graph) -> String {
-        format!("Sources: {}; sinks: {}",
-          self.sources.iter().map(|&v| g.v_str(v)).collect::<Vec<String>>().join(", "),
-          self.sinks.iter().map(|&v| g.v_str(v)).collect::<Vec<String>>().join(", "))
+        format!(
+            "Sources: {}; sinks: {}",
+            self.sources
+                .iter()
+                .map(|&v| g.v_str(v))
+                .collect::<Vec<String>>()
+                .join(", "),
+            self.sinks
+                .iter()
+                .map(|&v| g.v_str(v))
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
     }
 }

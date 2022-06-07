@@ -1,22 +1,22 @@
+use log::{debug, info, warn};
+use std::collections::HashSet;
+use std::error::Error;
 use std::fs;
 use std::fs::File;
-use std::error::Error;
 use std::io::Write;
-use log::{info,warn,debug};
 use trio_walk::HaploSearchSettings;
-use std::collections::HashSet;
 
 //tests don't compile without the pub
 //FIXME what to do?
 pub mod graph;
 pub mod graph_algos;
+pub mod pseudo_hap;
 pub mod trio;
 pub mod trio_walk;
-pub mod pseudo_hap;
 
 pub use graph::*;
 
-use crate::trio::{TrioGroup, GroupAssignmentSettings};
+use crate::trio::{GroupAssignmentSettings, TrioGroup};
 
 //TODO use PathBuf
 #[derive(clap::Args)]
@@ -126,10 +126,9 @@ pub struct TrioSettings {
     /// Default gap size, which will be output in cases where reasonable estimate is not possible or (more likely) hasn't been implemented yet.
     #[clap(long, default_value_t = 5000)]
     default_gap_size: usize,
-
 }
 
-fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
+fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>> {
     info!("Reading graph from {:?}", graph_fn);
     let g = Graph::read_sanitize(&fs::read_to_string(graph_fn)?);
 
@@ -139,10 +138,11 @@ fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>>  {
     Ok(g)
 }
 
-fn output_coloring(g: &Graph,
-                   assignments: &trio::AssignmentStorage,
-                   file_name: &str)
-                   -> Result<(), std::io::Error> {
+fn output_coloring(
+    g: &Graph,
+    assignments: &trio::AssignmentStorage,
+    file_name: &str,
+) -> Result<(), std::io::Error> {
     let mut output = File::create(file_name)?;
     writeln!(output, "node\tassignment\tlength\tinfo\tcolor")?;
     for (node_id, n) in g.all_nodes().enumerate() {
@@ -154,45 +154,46 @@ fn output_coloring(g: &Graph,
                 trio::TrioGroup::ISSUE => "#FFDE24",
                 trio::TrioGroup::HOMOZYGOUS => "#7900D6",
             };
-            writeln!(output, "{}\t{:?}\t{}\t{}\t{}", n.name
-                                                   , assign.group
-                                                   , n.length
-                                                   , assign.info
-                                                   , color)?;
+            writeln!(
+                output,
+                "{}\t{:?}\t{}\t{}\t{}",
+                n.name, assign.group, n.length, assign.info, color
+            )?;
         }
     }
     Ok(())
 }
 
-pub fn augment_by_path_search(g: &Graph,
+pub fn augment_by_path_search(
+    g: &Graph,
     assignments: trio::AssignmentStorage,
-    settings: HaploSearchSettings) -> trio::AssignmentStorage {
+    settings: HaploSearchSettings,
+) -> trio::AssignmentStorage {
     info!("Augmenting node annotation by path search. Round 1.");
-    let assignments = augment_by_path_search_round(g,
-        assignments,
-        settings);
+    let assignments = augment_by_path_search_round(g, assignments, settings);
     info!("Augmenting node annotation by path search. Round 2.");
-    augment_by_path_search_round(g,
-        assignments,
-        settings)
+    augment_by_path_search_round(g, assignments, settings)
 }
 
-fn augment_by_path_search_round(g: &Graph,
+fn augment_by_path_search_round(
+    g: &Graph,
     assignments: trio::AssignmentStorage,
-    settings: HaploSearchSettings) -> trio::AssignmentStorage {
-
-    let mut path_searcher = trio_walk::HaploSearcher::new(g,
-        &assignments, settings.assigning_stage_adjusted());
+    settings: HaploSearchSettings,
+) -> trio::AssignmentStorage {
+    let mut path_searcher =
+        trio_walk::HaploSearcher::new(g, &assignments, settings.assigning_stage_adjusted());
 
     path_searcher.find_all();
     let node_usage = path_searcher.take_used();
     augment_assignments(g, assignments, &node_usage, true)
 }
 
-fn augment_assignments(g: &Graph,
+fn augment_assignments(
+    g: &Graph,
     mut assignments: trio::AssignmentStorage,
     extra_assignments: &trio::AssignmentStorage,
-    exclude_homozygous: bool) -> trio::AssignmentStorage {
+    exclude_homozygous: bool,
+) -> trio::AssignmentStorage {
     for node_id in extra_assignments.assigned() {
         let tentative_group = extra_assignments.group(node_id).unwrap();
         assert!(tentative_group != TrioGroup::ISSUE);
@@ -202,11 +203,16 @@ fn augment_assignments(g: &Graph,
         }
         match assignments.group(node_id) {
             None => {
-                debug!("Assigning tentative group {:?} to node {}", tentative_group, g.name(node_id));
+                debug!(
+                    "Assigning tentative group {:?} to node {}",
+                    tentative_group,
+                    g.name(node_id)
+                );
                 assignments.assign(node_id, tentative_group, String::from("PathSearch"));
-            },
-            Some(init_group) => assert!(init_group == tentative_group
-                    || init_group == trio::TrioGroup::HOMOZYGOUS),
+            }
+            Some(init_group) => {
+                assert!(init_group == tentative_group || init_group == trio::TrioGroup::HOMOZYGOUS)
+            }
         }
     }
     assignments
@@ -239,7 +245,10 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let trio_infos = trio::read_trio(&fs::read_to_string(&settings.markers)?);
 
     info!("Assigning initial parental groups to the nodes");
-    let assignments = trio::assign_parental_groups(&g, &trio_infos, &GroupAssignmentSettings {
+    let assignments = trio::assign_parental_groups(
+        &g,
+        &trio_infos,
+        &GroupAssignmentSettings {
             assign_cnt: settings.marker_cnt,
             assign_sparsity: settings.marker_sparsity,
             assign_ratio: settings.marker_ratio,
@@ -247,7 +256,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
             issue_cnt: settings.issue_cnt.unwrap_or(settings.marker_cnt),
             issue_sparsity: settings.issue_sparsity.unwrap_or(settings.marker_sparsity),
             issue_ratio: settings.issue_ratio.unwrap_or(settings.marker_ratio),
-        }
+        },
     );
 
     if let Some(output) = &settings.init_assign {
@@ -265,17 +274,25 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         settings.suspect_homozygous_cov_coeff * solid_cov_est
     };
 
-    let assignments = trio::assign_homozygous(&g, assignments,
-        settings.trusted_len, suspect_homozygous_cov,
-        settings.homozygous_max_len);
+    let assignments = trio::assign_homozygous(
+        &g,
+        assignments,
+        settings.trusted_len,
+        suspect_homozygous_cov,
+        settings.homozygous_max_len,
+    );
 
     let mut search_settings = HaploSearchSettings {
         solid_len: settings.solid_len,
         trusted_len: settings.trusted_len,
         fillable_bubble_len: settings.fillable_bubble_len,
         fillable_bubble_diff: settings.fillable_bubble_diff,
-        het_fill_bubble_len: settings.het_fill_bubble_len.unwrap_or(settings.fillable_bubble_len),
-        het_fill_bubble_diff: settings.het_fill_bubble_diff.unwrap_or(settings.fillable_bubble_diff),
+        het_fill_bubble_len: settings
+            .het_fill_bubble_len
+            .unwrap_or(settings.fillable_bubble_len),
+        het_fill_bubble_diff: settings
+            .het_fill_bubble_diff
+            .unwrap_or(settings.fillable_bubble_diff),
         min_gap_size: settings.min_gap_size as i64,
         default_gap_size: settings.default_gap_size as i64,
         ..HaploSearchSettings::default()
@@ -294,15 +311,16 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
             warn!("Looks like the graph didn't have coverage information, which we were hoping to use. Consider providing it or changing --max-unique-cov-coeff");
         }
         search_settings.max_unique_cov = settings.max_unique_cov_coeff * solid_cov_est;
-        info!("Maximal 'unique' coverage for bubble filling set to {}", search_settings.max_unique_cov);
+        info!(
+            "Maximal 'unique' coverage for bubble filling set to {}",
+            search_settings.max_unique_cov
+        );
         if search_settings.max_unique_cov == 0. {
             info!("Will only fill bubbles between solid or homozygous nodes");
         }
     }
 
-    let assignments = augment_by_path_search(&g,
-        assignments,
-        search_settings);
+    let assignments = augment_by_path_search(&g, assignments, search_settings);
 
     if let Some(output) = &settings.refined_assign {
         info!("Writing refined node annotation to {}", output);
@@ -313,20 +331,17 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let haplo_paths = path_searcher.find_all();
     let node_usage = path_searcher.take_used();
 
-    let assignments = augment_assignments(&g, assignments,
-        &node_usage, false);
+    let assignments = augment_assignments(&g, assignments, &node_usage, false);
 
     if let Some(output) = &settings.final_assign {
         info!("Writing final node annotation to {}", output);
         output_coloring(&g, &assignments, output)?;
     }
 
-    let short_group_str = |o_g: Option<TrioGroup>| {
-        match o_g {
-            Some(TrioGroup::MATERNAL) => "mat",
-            Some(TrioGroup::PATERNAL) => "pat",
-            _ => "na",
-        }
+    let short_group_str = |o_g: Option<TrioGroup>| match o_g {
+        Some(TrioGroup::MATERNAL) => "mat",
+        Some(TrioGroup::PATERNAL) => "pat",
+        _ => "na",
     };
 
     if let Some(output) = &settings.paths {
@@ -337,19 +352,25 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         for (path, node_id, group) in haplo_paths {
             assert!(path.vertices().contains(&Vertex::forward(node_id)));
             //info!("Identified {:?} path: {}", group, path.print(&g));
-            writeln!(output, "{}_from_{}\t{}\t{:?}",
+            writeln!(
+                output,
+                "{}_from_{}\t{}\t{:?}",
                 short_group_str(Some(group)),
                 g.node(node_id).name,
                 path.print_format(&g, settings.gaf_format),
-                group)?;
+                group
+            )?;
         }
 
         let mut write_node = |n: &Node, group: Option<TrioGroup>| {
-            writeln!(output, "{}_unused_{}\t{}\t{}",
+            writeln!(
+                output,
+                "{}_unused_{}\t{}\t{}",
                 short_group_str(group),
                 n.name,
                 Direction::format_node(&n.name, Direction::FORWARD, settings.gaf_format),
-                group.map_or(String::from("NA"), |x| format!("{:?}", x)))
+                group.map_or(String::from("NA"), |x| format!("{:?}", x))
+            )
         };
 
         for (node_id, n) in g.all_nodes().enumerate() {
@@ -365,7 +386,8 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
                     if TrioGroup::compatible(assign, TrioGroup::MATERNAL)
                         //not present in haplopaths paths or incompatible
                         && haplopath_assign.map_or(true,
-                            |x| TrioGroup::incompatible(x, TrioGroup::MATERNAL)) {
+                            |x| TrioGroup::incompatible(x, TrioGroup::MATERNAL))
+                    {
                         debug!("Node: {} length: {} not present in MATERNAL haplo-paths (adding trivial MATERNAL path)",
                             n.name, n.length);
                         write_node(g.node(node_id), Some(TrioGroup::MATERNAL))?;
@@ -373,7 +395,8 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
                     if TrioGroup::compatible(assign, TrioGroup::PATERNAL)
                         //not present in haplopaths paths or incompatible
                         && haplopath_assign.map_or(true,
-                            |x| TrioGroup::incompatible(x, TrioGroup::PATERNAL)) {
+                            |x| TrioGroup::incompatible(x, TrioGroup::PATERNAL))
+                    {
                         debug!("Node: {} length: {} not present in PATERNAL haplo-paths (adding trivial PATERNAL path)",
                             n.name, n.length);
                         write_node(g.node(node_id), Some(TrioGroup::PATERNAL))?;
@@ -387,10 +410,12 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     Ok(())
 }
 
-pub fn run_primary_alt_analysis(graph_fn: &str,
-                                colors_fn: &Option<String>,
-                                paths_fn: &Option<String>,
-                                gaf_paths: bool) -> Result<(), Box<dyn Error>> {
+pub fn run_primary_alt_analysis(
+    graph_fn: &str,
+    colors_fn: &Option<String>,
+    paths_fn: &Option<String>,
+    gaf_paths: bool,
+) -> Result<(), Box<dyn Error>> {
     let g = read_graph(graph_fn)?;
     let unique_block_len = 500_000;
     let linear_blocks = pseudo_hap::pseudo_hap_decompose(&g, unique_block_len);
@@ -405,8 +430,7 @@ pub fn run_primary_alt_analysis(graph_fn: &str,
 
         for block in &linear_blocks {
             let p = block.instance_path();
-            primary_nodes.extend(p.vertices()
-                                 .iter().map(|&v| v.node_id));
+            primary_nodes.extend(p.vertices().iter().map(|&v| v.node_id));
             alt_nodes.extend(block.known_alt_nodes().iter().copied());
             boundary_nodes.extend([p.start().node_id, p.end().node_id]);
         }
@@ -432,9 +456,7 @@ pub fn run_primary_alt_analysis(graph_fn: &str,
         }
     }
 
-    let used : HashSet<usize> = linear_blocks.iter()
-                                    .flat_map(|b| b.all_nodes())
-                                    .collect();
+    let used: HashSet<usize> = linear_blocks.iter().flat_map(|b| b.all_nodes()).collect();
 
     if let Some(output) = paths_fn {
         info!("Outputting paths in {}", output);
@@ -443,25 +465,34 @@ pub fn run_primary_alt_analysis(graph_fn: &str,
         writeln!(output, "name\tlen\tpath\tassignment")?;
 
         for (block_id, block) in linear_blocks.into_iter().enumerate() {
-            writeln!(output, "primary_{}\t{}\t{}\tPRIMARY",
+            writeln!(
+                output,
+                "primary_{}\t{}\t{}\tPRIMARY",
                 block_id,
                 block.instance_path().total_length(&g),
-                block.instance_path().print_format(&g, gaf_paths))?;
+                block.instance_path().print_format(&g, gaf_paths)
+            )?;
             for (alt_id, &known_alt) in block.known_alt_nodes().iter().enumerate() {
-                writeln!(output, "alt_{}_{}\t{}\t{}\tALT",
+                writeln!(
+                    output,
+                    "alt_{}_{}\t{}\t{}\tALT",
                     block_id,
                     alt_id,
                     g.node(known_alt).length,
-                    Path::new(Vertex::forward(known_alt)).print_format(&g, gaf_paths))?;
+                    Path::new(Vertex::forward(known_alt)).print_format(&g, gaf_paths)
+                )?;
             }
         }
 
         for (node_id, n) in g.all_nodes().enumerate() {
             if !used.contains(&node_id) {
-                writeln!(output, "unused_{}\t{}\t{}\tNA",
+                writeln!(
+                    output,
+                    "unused_{}\t{}\t{}\tNA",
                     n.name,
                     n.length,
-                    Path::new(Vertex::forward(node_id)).print_format(&g, gaf_paths))?;
+                    Path::new(Vertex::forward(node_id)).print_format(&g, gaf_paths)
+                )?;
             }
         }
     }

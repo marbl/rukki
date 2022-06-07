@@ -1,8 +1,8 @@
 //use std::io;
 #[macro_use]
 extern crate log;
-use env_logger::{Env, Builder, Target};
 use clap::{AppSettings, Parser, Subcommand};
+use env_logger::{Builder, Env, Target};
 
 /// Assembly graph analysis suite
 #[derive(Parser)]
@@ -17,10 +17,8 @@ struct Args {
     // /// A level of verbosity, and can be used multiple times
     // #[clap(short = "v", long = "verbose", parse(from_occurrences))]
     // verbose: i32,
-
     #[clap(subcommand)]
     subcmd: Commands,
-
 }
 
 #[derive(Subcommand)]
@@ -50,7 +48,6 @@ struct PriAltSettings {
     /// Use GAF ([<>]utg_name)+ format for paths
     #[clap(short, long)]
     gaf_format: bool,
-
 }
 
 fn main() {
@@ -70,19 +67,16 @@ fn main() {
 
             match rukki::run_trio_analysis(settings) {
                 Ok(()) => info!("Success"),
-                Err(e) => info!("Some error happened {:?}", e)
+                Err(e) => info!("Some error happened {:?}", e),
             }
-        }
-
-        //Commands::PriAlt(settings) => {
-        //    info!("Extracting primary/alt paths");
-        //    match rukki::run_primary_alt_analysis(&settings.graph,
-        //                                &settings.assign, &settings.paths,
-        //                                settings.gaf_paths) {
-        //        Ok(()) => info!("Success"),
-        //        Err(e) => info!("Some error happened {:?}", e)
-        //    }
-        //}
+        } //Commands::PriAlt(settings) => {
+          //    info!("Extracting primary/alt paths");
+          //    match rukki::run_primary_alt_analysis(&settings.graph,
+          //                                &settings.assign, &settings.paths,
+          //                                settings.gaf_paths) {
+          //        Ok(()) => info!("Success"),
+          //        Err(e) => info!("Some error happened {:?}", e)
+          //    }
+          //}
     }
-
 }
