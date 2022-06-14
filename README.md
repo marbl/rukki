@@ -1,6 +1,8 @@
 # Rukki
 
 [![Actions Status](https://github.com/marbl/rukki/workflows/Test%20and%20Build/badge.svg)](https://github.com/marbl/rukki/actions)
+[![Actions Status](https://github.com/marbl/rukki/workflows/Formatting/badge.svg)](https://github.com/marbl/rukki/actions)
+[![Actions Status](https://github.com/marbl/rukki/workflows/Clippy/badge.svg)](https://github.com/marbl/rukki/actions)
 
 Rukki ([“spinning wheel”](https://en.wikipedia.org/wiki/Spinning_wheel) in Finnish) is a companion tool of Verkko assembler for extracting longer ‘scaffold’ paths from assembly graphs.
 
