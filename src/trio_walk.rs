@@ -280,8 +280,14 @@ impl<'a> HaploSearcher<'a> {
                 allow_unassigned: settings.allow_unassigned,
             },
             small_tangle_index: HashMap::from_iter(
-                scc::find_small_localized(g, &scc::strongly_connected(g),
-                            settings.skippable_tangle_size).into_iter().map(|s| (s.entrance.start, s))),
+                scc::find_small_localized(
+                    g,
+                    &scc::strongly_connected(g),
+                    settings.skippable_tangle_size,
+                )
+                .into_iter()
+                .map(|s| (s.entrance.start, s)),
+            ),
         }
     }
 
@@ -301,7 +307,10 @@ impl<'a> HaploSearcher<'a> {
 
         for (node_id, node) in nodes.into_iter().rev() {
             //launch from long, definitely assigned nodes
-            if !self.used.contains(node_id) && node.length >= self.settings.solid_len && self.assignments.is_definite(node_id) {
+            if !self.used.contains(node_id)
+                && node.length >= self.settings.solid_len
+                && self.assignments.is_definite(node_id)
+            {
                 let group = self.assignments.get(node_id).unwrap().group;
                 let path = self.haplo_path(Vertex::forward(node_id), group);
                 self.used
@@ -640,9 +649,12 @@ impl<'a> HaploSearcher<'a> {
         consider_vertex_f: Option<&dyn Fn(Vertex) -> bool>,
     ) -> Option<Path> {
         //TODO think of growing within the bubble if possible (ensure symmetry)
-        let bubble =
-            superbubble::find_superbubble_subgraph(self.g, v,
-                &superbubble::SbSearchParams::unrestricted(), consider_vertex_f)?;
+        let bubble = superbubble::find_superbubble_subgraph(
+            self.g,
+            v,
+            &superbubble::SbSearchParams::unrestricted(),
+            consider_vertex_f,
+        )?;
         if bubble
             .inner_vertices()
             .any(|&v| self.g.vertex_length(v) >= self.settings.solid_len)
@@ -675,9 +687,14 @@ impl<'a> HaploSearcher<'a> {
 
             if !direct_connectors.is_empty() {
                 let cov = |x: &Vertex| self.g.node(x.node_id).coverage;
-                let p = self.connecting_path(v,
-                    direct_connectors.into_iter().max_by(|a, b| cov(a).partial_cmp(&cov(b)).unwrap()).unwrap(),
-                    w);
+                let p = self.connecting_path(
+                    v,
+                    direct_connectors
+                        .into_iter()
+                        .max_by(|a, b| cov(a).partial_cmp(&cov(b)).unwrap())
+                        .unwrap(),
+                    w,
+                );
                 debug!(
                     "Candidate extension by super-bubble fill (direct connector) {}",
                     p.print(self.g)

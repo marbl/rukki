@@ -37,8 +37,7 @@ fn haplo_paths() {
     let settings = trio_walk::HaploSearchSettings::default();
     let augment_assign = augment_by_path_search(&g, assignments, settings);
 
-    let mut haplo_searcher =
-        settings.build_searcher(&g, &augment_assign);
+    let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
     let mut answer: Vec<(TrioGroup, String)> = haplo_searcher
         .find_all()
         .into_iter()
