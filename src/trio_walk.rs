@@ -639,19 +639,10 @@ impl<'a> HaploSearcher<'a> {
         group: TrioGroup,
         consider_vertex_f: Option<&dyn Fn(Vertex) -> bool>,
     ) -> Option<Path> {
-        if !self.settings.fill_bubbles {
-            return None;
-        }
-
-        use superbubble::SbSearchParams;
-        let sb_params = SbSearchParams {
-            //max_length: self.solid_len,
-            ..SbSearchParams::unrestricted()
-        };
-
-        //TODO think of growing within the bubble if possible (ensyre symmetry)
+        //TODO think of growing within the bubble if possible (ensure symmetry)
         let bubble =
-            superbubble::find_superbubble_subgraph(self.g, v, &sb_params, consider_vertex_f)?;
+            superbubble::find_superbubble_subgraph(self.g, v,
+                &superbubble::SbSearchParams::unrestricted(), consider_vertex_f)?;
         if bubble
             .inner_vertices()
             .any(|&v| self.g.vertex_length(v) >= self.settings.solid_len)
@@ -666,12 +657,14 @@ impl<'a> HaploSearcher<'a> {
 
         let (fillable_bubble_len, fillable_bubble_diff) = self.bubble_fill_thresholds(v, w);
 
-        if length_range.1 <= fillable_bubble_diff + length_range.0
+        if self.settings.fill_bubbles
+            && length_range.1 <= fillable_bubble_diff + length_range.0
             && length_range.1
                 <= fillable_bubble_len + self.g.vertex_length(v) + self.g.vertex_length(w)
             && self.bubble_filling_cov_check(v)
             && self.bubble_filling_cov_check(w)
         {
+            //Filling the bubble
             let direct_connectors: Vec<Vertex> =
                 considered_extensions(self.g, v, consider_vertex_f)
                     .into_iter()
@@ -689,58 +682,34 @@ impl<'a> HaploSearcher<'a> {
                     "Candidate extension by super-bubble fill (direct connector) {}",
                     p.print(self.g)
                 );
-                return Some(p);
+                Some(p)
             } else {
                 let p = bubble.longest_path(self.g);
                 debug!(
                     "Candidate extension by super-bubble fill (longest path) {}",
                     p.print(self.g)
                 );
-                return Some(p);
+                Some(p)
             }
-        }
-
-        None
-    }
-
-    fn find_bubble_jump_ahead(
-        &self,
-        v: Vertex,
-        _group: TrioGroup,
-        consider_vertex_f: Option<&dyn Fn(Vertex) -> bool>,
-    ) -> Option<Path> {
-        use superbubble::SbSearchParams;
-        let sb_params = SbSearchParams {
-            //TODO think of relaxing a bit
-            max_length: self.settings.solid_len,
-            ..SbSearchParams::unrestricted()
-        };
-        //TODO think of growing within the bubble if possible (ensyre symmetry)
-        let bubble =
-            superbubble::find_superbubble_subgraph(self.g, v, &sb_params, consider_vertex_f)?;
-        if bubble
-            .inner_vertices()
-            .any(|&v| self.g.vertex_length(v) >= self.settings.solid_len)
-        {
-            return None;
-        }
-        let w = bubble.end_vertex();
-        let gap_est = if bubble.length_range(self.g).0
-            > self.g.vertex_length(v)
-                + self.g.vertex_length(w)
-                + self.settings.min_gap_size as usize
-        {
-            (bubble.length_range(self.g).0 - self.g.vertex_length(v) - self.g.vertex_length(w))
-                as i64
         } else {
-            self.settings.min_gap_size
-        };
-        debug!("Candidate across-bubble jump to {}", self.g.v_str(w));
-        Some(Path::from_general_link(GeneralizedLink::AMBIG(GapInfo {
-            start: v,
-            end: w,
-            gap_size: gap_est,
-        })))
+            //Jumping across bubble
+            let gap_est = if bubble.length_range(self.g).0
+                > self.g.vertex_length(v)
+                    + self.g.vertex_length(w)
+                    + self.settings.min_gap_size as usize
+            {
+                (bubble.length_range(self.g).0 - self.g.vertex_length(v) - self.g.vertex_length(w))
+                    as i64
+            } else {
+                self.settings.min_gap_size
+            };
+            debug!("Candidate across-bubble jump to {}", self.g.v_str(w));
+            Some(Path::from_general_link(GeneralizedLink::AMBIG(GapInfo {
+                start: v,
+                end: w,
+                gap_size: gap_est,
+            })))
+        }
     }
 
     fn find_small_tangle_jump_ahead(&self, v: Vertex, _group: TrioGroup) -> Option<Path> {
@@ -832,7 +801,6 @@ impl<'a> HaploSearcher<'a> {
                     .map(Path::from_link)
             })
             .or_else(|| self.find_bubble_fill_ahead(v, group, constraint_vertex_f))
-            .or_else(|| self.find_bubble_jump_ahead(v, group, constraint_vertex_f))
     }
 
     //returns false if ended in issue
