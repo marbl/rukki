@@ -258,7 +258,6 @@ pub struct HaploSearcher<'a> {
     extension_helper: ExtensionHelper<'a>,
     settings: HaploSearchSettings,
     used: AssignmentStorage,
-    in_sccs: HashSet<usize>,
     small_tangle_index: HashMap<Vertex, scc::LocalizedTangle>,
 }
 
@@ -270,25 +269,19 @@ impl<'a> HaploSearcher<'a> {
         assignments: &'a AssignmentStorage,
         settings: HaploSearchSettings,
     ) -> HaploSearcher<'a> {
-        let sccs = scc::strongly_connected(g);
-        let mut small_tangle_index = HashMap::new();
-
-        for small_tangle in scc::find_small_localized(g, &sccs, settings.skippable_tangle_size) {
-            small_tangle_index.insert(small_tangle.entrance.start, small_tangle);
-        }
-
         HaploSearcher {
             g,
             assignments,
             settings,
             used: AssignmentStorage::new(),
-            in_sccs: scc::nodes_in_sccs(g, &sccs),
             extension_helper: ExtensionHelper {
                 g,
                 assignments,
                 allow_unassigned: settings.allow_unassigned,
             },
-            small_tangle_index,
+            small_tangle_index: HashMap::from_iter(
+                scc::find_small_localized(g, &scc::strongly_connected(g),
+                            settings.skippable_tangle_size).into_iter().map(|s| (s.entrance.start, s))),
         }
     }
 
@@ -307,11 +300,8 @@ impl<'a> HaploSearcher<'a> {
         nodes.sort_by_key(|(_, n)| n.length);
 
         for (node_id, node) in nodes.into_iter().rev() {
-            if self.used.contains(node_id) || self.in_sccs.contains(&node_id) {
-                continue;
-            }
             //launch from long, definitely assigned nodes
-            if node.length >= self.settings.solid_len && self.assignments.is_definite(node_id) {
+            if !self.used.contains(node_id) && node.length >= self.settings.solid_len && self.assignments.is_definite(node_id) {
                 let group = self.assignments.get(node_id).unwrap().group;
                 let path = self.haplo_path(Vertex::forward(node_id), group);
                 self.used
@@ -871,11 +861,6 @@ impl<'a> HaploSearcher<'a> {
 
     //FIXME maybe stop grow process immediately when this fails
     fn check_available(&self, node_id: usize, target_group: TrioGroup) -> bool {
-        if self.in_sccs.contains(&node_id) {
-            //is part of some non-trivial SCC
-            return false;
-        }
-
         if !self.unassigned_or_compatible(node_id, target_group) {
             return false;
         }
