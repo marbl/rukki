@@ -199,10 +199,8 @@ pub struct HaploSearchSettings {
     pub allow_solid_intersections: bool,
     pub allow_unassigned: bool,
 
-    //configuring ambiguous region filling
-    //FIXME more reasonable configuration
-    //0 -- disabled, 1 -- patch paths, 2 -- fill in small bubbles
-    pub ambig_filling_level: usize,
+    //fill in small bubbles
+    pub fill_bubbles: bool,
     pub max_unique_cov: f64,
     pub fillable_bubble_len: usize,
     pub fillable_bubble_diff: usize,
@@ -222,7 +220,7 @@ impl Default for HaploSearchSettings {
             trusted_len: 200_000,
             allow_solid_intersections: false,
             allow_unassigned: false,
-            ambig_filling_level: 1,
+            fill_bubbles: false,
             max_unique_cov: f64::MAX,
             fillable_bubble_len: 50_000,
             fillable_bubble_diff: 200,
@@ -239,7 +237,7 @@ impl HaploSearchSettings {
     pub fn assigning_stage_adjusted(&self) -> HaploSearchSettings {
         HaploSearchSettings {
             allow_solid_intersections: true,
-            ambig_filling_level: 0,
+            fill_bubbles: false,
             allow_unassigned: true,
             ..*self
         }
@@ -742,7 +740,7 @@ impl<'a> HaploSearcher<'a> {
         group: TrioGroup,
         consider_vertex_f: Option<&dyn Fn(Vertex) -> bool>,
     ) -> Option<Path> {
-        if self.settings.ambig_filling_level < 2 {
+        if !self.settings.fill_bubbles {
             return None;
         }
 
@@ -844,7 +842,7 @@ impl<'a> HaploSearcher<'a> {
 
         let (fillable_bubble_len, fillable_bubble_diff) = self.bubble_fill_thresholds(v, w);
 
-        if self.settings.ambig_filling_level > 1
+        if self.settings.fill_bubbles
             && length_range.1 <= fillable_bubble_diff + length_range.0
             && length_range.1
                 <= fillable_bubble_len + self.g.vertex_length(v) + self.g.vertex_length(w)
@@ -870,7 +868,7 @@ impl<'a> HaploSearcher<'a> {
 
         //check if any satisfies the filling criteria (once added gap won't be filled in)
         //enabled only in case of the 'aimed' search (consider_vertex_f check)
-        if self.settings.ambig_filling_level > 0 && consider_vertex_f.is_some() {
+        if consider_vertex_f.is_some() {
             for &direct_conn in &direct_connectors {
                 if self.check_link_vertex(direct_conn, group) {
                     let p = self.connecting_path(v, direct_conn, w);
@@ -1000,7 +998,7 @@ impl<'a> HaploSearcher<'a> {
     }
 
     fn bubble_filling_cov_check(&self, v: Vertex) -> bool {
-        assert!(self.settings.ambig_filling_level > 1 && self.settings.max_unique_cov >= 0.);
+        assert!(self.settings.fill_bubbles && self.settings.max_unique_cov >= 0.);
         (self.settings.max_unique_cov > 0.
             && (self.g.node(v.node_id).coverage - 1e-5) < self.settings.max_unique_cov)
             || self.long_node(v.node_id)

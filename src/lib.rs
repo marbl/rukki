@@ -285,6 +285,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let mut search_settings = HaploSearchSettings {
         solid_len: settings.solid_len,
         trusted_len: settings.trusted_len,
+        fill_bubbles: settings.try_fill_bubbles,
         fillable_bubble_len: settings.fillable_bubble_len,
         fillable_bubble_diff: settings.fillable_bubble_diff,
         het_fill_bubble_len: settings
@@ -298,8 +299,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         ..HaploSearchSettings::default()
     };
 
-    if settings.try_fill_bubbles {
-        search_settings.ambig_filling_level = 2;
+    if search_settings.fill_bubbles {
         info!("Will try filling small bubbles");
         //assert!(settings.max_unique_cov_coeff >= 0.);
         if settings.max_unique_cov_coeff < 0. {
