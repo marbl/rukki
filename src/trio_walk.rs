@@ -398,19 +398,20 @@ impl<'a> HaploSearcher<'a> {
             assert!(p1.trim_to(&trim_to));
             p1.trim(1);
             debug_assert!(!p1.vertices().iter().any(|x| p2.in_path(x.node_id)));
-        } else if self.settings.ambig_filling_level > 0 {
-            debug!("Will try to patch the gap between forward/backward paths");
-            //if paths don't overlap -- try linking (works only near solid edges)
-            if let Some(link_p) = self.try_link(p1.end(), p2.start(), group) {
-                //TODO simplify? Here we know that p1 and p2 don't have common nodes
-                if p1.can_merge_in(&link_p) && link_p.can_merge_in(&p2) {
-                    debug!("Patch succesful");
-                    p1.merge_in(link_p);
-                    p1.merge_in(p2);
-                    return Some(p1);
-                }
-            }
         }
+        //} else if self.settings.ambig_filling_level > 0 {
+        //    debug!("Will try to patch the gap between forward/backward paths");
+        //    //if paths don't overlap -- try linking (works only near solid edges)
+        //    if let Some(link_p) = self.try_link(p1.end(), p2.start(), group) {
+        //        //TODO simplify? Here we know that p1 and p2 don't have common nodes
+        //        if p1.can_merge_in(&link_p) && link_p.can_merge_in(&p2) {
+        //            debug!("Patch successful");
+        //            p1.merge_in(link_p);
+        //            p1.merge_in(p2);
+        //            return Some(p1);
+        //        }
+        //    }
+        //}
 
         debug!(
             "Putting ambiguous gap between {} and {}",
