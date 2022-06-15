@@ -220,7 +220,7 @@ impl Default for HaploSearchSettings {
             trusted_len: 200_000,
             allow_solid_intersections: false,
             allow_unassigned: false,
-            fill_bubbles: false,
+            fill_bubbles: true,
             max_unique_cov: f64::MAX,
             fillable_bubble_len: 50_000,
             fillable_bubble_diff: 200,
@@ -868,18 +868,18 @@ impl<'a> HaploSearcher<'a> {
 
         //check if any satisfies the filling criteria (once added gap won't be filled in)
         //enabled only in case of the 'aimed' search (consider_vertex_f check)
-        if consider_vertex_f.is_some() {
-            for &direct_conn in &direct_connectors {
-                if self.check_link_vertex(direct_conn, group) {
-                    let p = self.connecting_path(v, direct_conn, w);
-                    debug!(
-                        "Candidate extension by super-bubble fill (link vertex) {}",
-                        p.print(self.g)
-                    );
-                    return Some(p);
-                }
-            }
-        }
+        //if consider_vertex_f.is_some() {
+        //    for &direct_conn in &direct_connectors {
+        //        if self.check_link_vertex(direct_conn, group) {
+        //            let p = self.connecting_path(v, direct_conn, w);
+        //            debug!(
+        //                "Candidate extension by super-bubble fill (link vertex) {}",
+        //                p.print(self.g)
+        //            );
+        //            return Some(p);
+        //        }
+        //    }
+        //}
 
         None
     }
