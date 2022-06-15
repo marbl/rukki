@@ -397,19 +397,6 @@ impl<'a> HaploSearcher<'a> {
             p1.trim(1);
             debug_assert!(!p1.vertices().iter().any(|x| p2.in_path(x.node_id)));
         }
-        //} else if self.settings.ambig_filling_level > 0 {
-        //    debug!("Will try to patch the gap between forward/backward paths");
-        //    //if paths don't overlap -- try linking (works only near solid edges)
-        //    if let Some(link_p) = self.try_link(p1.end(), p2.start(), group) {
-        //        //TODO simplify? Here we know that p1 and p2 don't have common nodes
-        //        if p1.can_merge_in(&link_p) && link_p.can_merge_in(&p2) {
-        //            debug!("Patch successful");
-        //            p1.merge_in(link_p);
-        //            p1.merge_in(p2);
-        //            return Some(p1);
-        //        }
-        //    }
-        //}
 
         debug!(
             "Putting ambiguous gap between {} and {}",
@@ -633,63 +620,6 @@ impl<'a> HaploSearcher<'a> {
         self.g.node(node_id).length >= self.settings.solid_len
     }
 
-    fn check_link_vertex(&self, w: Vertex, group: TrioGroup) -> bool {
-        let long_node_ahead = |v: Vertex| {
-            assert!(self.g.outgoing_edge_cnt(v) == 1);
-            let node_id = self.g.outgoing_edges(v)[0].end.node_id;
-            self.long_node(node_id) && self.assignments.group(node_id) == Some(group)
-        };
-
-        !self.long_node(w.node_id)
-            //this check will never allow to patch with unassigned node
-            //&& self.assignments.contains(w.node_id)
-            && self.check_available(w.node_id, group)
-            && self.g.incoming_edge_cnt(w) == 1
-            && self.g.outgoing_edge_cnt(w) == 1
-            && (long_node_ahead(w)
-                || long_node_ahead(w.rc()))
-        //    || self.assignments.group(w.node_id) == Some(group))
-    }
-
-    fn try_link(&self, u: Vertex, w: Vertex, group: TrioGroup) -> Option<Path> {
-        debug!("Trying to link {} and {}", self.g.v_str(u), self.g.v_str(w));
-        for l in self.g.outgoing_edges(u) {
-            if l.end == w {
-                debug!("Found direct link {}", self.g.l_str(l));
-                return Some(Path::from_link(l));
-            }
-        }
-
-        let mut outgoing_edges = self.g.outgoing_edges(u);
-        outgoing_edges.sort_by(|a, b| {
-            self.g
-                .node(b.end.node_id)
-                .coverage
-                .partial_cmp(&self.g.node(a.end.node_id).coverage)
-                .unwrap()
-        });
-
-        for l in outgoing_edges {
-            let v = l.end;
-            //TODO think if checks are reasonable
-            //FIXME think if we should check coverage too
-            if self.check_link_vertex(v, group) {
-                if let Some(l2) = self.g.connector(v, w) {
-                    debug!(
-                        "Was able to link {} and {} via {}",
-                        self.g.v_str(u),
-                        self.g.v_str(w),
-                        self.g.v_str(v)
-                    );
-                    let mut path = Path::from_link(l);
-                    path.append(l2);
-                    return Some(path);
-                }
-            }
-        }
-        None
-    }
-
     fn bubble_fill_thresholds(&self, v: Vertex, w: Vertex) -> (usize, usize) {
         if self.assignments.group(v.node_id) == Some(TrioGroup::HOMOZYGOUS)
             && self.assignments.group(w.node_id) == Some(TrioGroup::HOMOZYGOUS)
@@ -808,6 +738,10 @@ impl<'a> HaploSearcher<'a> {
         group: TrioGroup,
         consider_vertex_f: Option<&dyn Fn(Vertex) -> bool>,
     ) -> Option<Path> {
+        if !self.settings.fill_bubbles {
+            return None;
+        }
+
         use superbubble::SbSearchParams;
         let sb_params = SbSearchParams {
             //max_length: self.solid_len,
@@ -842,8 +776,7 @@ impl<'a> HaploSearcher<'a> {
 
         let (fillable_bubble_len, fillable_bubble_diff) = self.bubble_fill_thresholds(v, w);
 
-        if self.settings.fill_bubbles
-            && length_range.1 <= fillable_bubble_diff + length_range.0
+        if length_range.1 <= fillable_bubble_diff + length_range.0
             && length_range.1
                 <= fillable_bubble_len + self.g.vertex_length(v) + self.g.vertex_length(w)
             && self.bubble_filling_cov_check(v)
@@ -865,21 +798,6 @@ impl<'a> HaploSearcher<'a> {
                 return Some(p);
             }
         }
-
-        //check if any satisfies the filling criteria (once added gap won't be filled in)
-        //enabled only in case of the 'aimed' search (consider_vertex_f check)
-        //if consider_vertex_f.is_some() {
-        //    for &direct_conn in &direct_connectors {
-        //        if self.check_link_vertex(direct_conn, group) {
-        //            let p = self.connecting_path(v, direct_conn, w);
-        //            debug!(
-        //                "Candidate extension by super-bubble fill (link vertex) {}",
-        //                p.print(self.g)
-        //            );
-        //            return Some(p);
-        //        }
-        //    }
-        //}
 
         None
     }
