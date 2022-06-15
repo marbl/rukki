@@ -34,8 +34,11 @@ fn haplo_paths() {
     let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
     let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
+    let settings = trio_walk::HaploSearchSettings::default();
+    let augment_assign = augment_by_path_search(&g, assignments, settings);
+
     let mut haplo_searcher =
-        trio_walk::HaploSearchSettings::default().build_searcher(&g, &assignments);
+        settings.build_searcher(&g, &augment_assign);
     let mut answer: Vec<(TrioGroup, String)> = haplo_searcher
         .find_all()
         .into_iter()
