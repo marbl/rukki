@@ -751,17 +751,6 @@ impl<'a> HaploSearcher<'a> {
         let w = bubble.end_vertex();
         assert!(w.node_id != v.node_id);
 
-        let mut direct_connectors: Vec<Vertex> =
-            considered_extensions(self.g, v, consider_vertex_f)
-                .into_iter()
-                .filter_map(|l1| self.g.connector(l1.end, w))
-                .map(|l2| l2.start)
-                .filter(|tc_v| self.unassigned_or_compatible(tc_v.node_id, group))
-                .collect();
-
-        let cov = |x: &Vertex| self.g.node(x.node_id).coverage;
-        direct_connectors.sort_by(|a, b| cov(b).partial_cmp(&cov(a)).unwrap());
-
         let length_range = bubble.length_range(self.g);
 
         let (fillable_bubble_len, fillable_bubble_diff) = self.bubble_fill_thresholds(v, w);
@@ -772,8 +761,19 @@ impl<'a> HaploSearcher<'a> {
             && self.bubble_filling_cov_check(v)
             && self.bubble_filling_cov_check(w)
         {
+            let direct_connectors: Vec<Vertex> =
+                considered_extensions(self.g, v, consider_vertex_f)
+                    .into_iter()
+                    .filter_map(|l1| self.g.connector(l1.end, w))
+                    .map(|l2| l2.start)
+                    .filter(|tc_v| self.unassigned_or_compatible(tc_v.node_id, group))
+                    .collect();
+
             if !direct_connectors.is_empty() {
-                let p = self.connecting_path(v, direct_connectors[0], w);
+                let cov = |x: &Vertex| self.g.node(x.node_id).coverage;
+                let p = self.connecting_path(v,
+                    direct_connectors.into_iter().max_by(|a, b| cov(a).partial_cmp(&cov(b)).unwrap()).unwrap(),
+                    w);
                 debug!(
                     "Candidate extension by super-bubble fill (direct connector) {}",
                     p.print(self.g)
@@ -920,7 +920,7 @@ impl<'a> HaploSearcher<'a> {
                     .group_extension(v, group, constraint_vertex_f)
                     .map(Path::from_link)
             })
-            .or_else(|| self.choose_trivial_bubble_side(v, group, constraint_vertex_f))
+            //.or_else(|| self.choose_trivial_bubble_side(v, group, constraint_vertex_f))
             .or_else(|| self.find_bubble_fill_ahead(v, group, constraint_vertex_f))
             .or_else(|| self.find_bubble_jump_ahead(v, group, constraint_vertex_f))
     }
