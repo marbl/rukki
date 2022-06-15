@@ -626,95 +626,6 @@ impl<'a> HaploSearcher<'a> {
         }
     }
 
-    fn trivial_bubble_end(
-        &self,
-        u: Vertex,
-        hint_f: Option<&dyn Fn(Vertex) -> bool>,
-    ) -> Option<Vertex> {
-        let outgoing = considered_extensions(self.g, u, hint_f);
-        if outgoing.len() < 2 {
-            return None;
-        }
-        let mut opt_w = None;
-        for v in outgoing.iter().map(|l1| l1.end) {
-            if self.g.incoming_edge_cnt(v) > 1 {
-                return None;
-            }
-            assert!(self.g.incoming_edge_cnt(v) == 1);
-            let l2 = only_or_none(considered_extensions(self.g, v, hint_f).into_iter())?;
-            if let Some(w) = opt_w {
-                if w != l2.end {
-                    return None;
-                }
-            } else {
-                opt_w = Some(l2.end);
-            }
-        }
-        assert!(opt_w.is_some());
-        opt_w
-    }
-
-    fn choose_trivial_bubble_side(
-        &self,
-        v: Vertex,
-        group: TrioGroup,
-        consider_vertex_f: Option<&dyn Fn(Vertex) -> bool>,
-    ) -> Option<Path> {
-        if !self.settings.fill_bubbles {
-            return None;
-        }
-
-        let len_across = |u, v, w| {
-            self.g.vertex_length(v) as i64
-                - self.g.connector(u, v).unwrap().overlap as i64
-                - self.g.connector(v, w).unwrap().overlap as i64
-        };
-
-        let end_cov = |l: &Link| self.g.node(l.end.node_id).coverage;
-        let w = self.trivial_bubble_end(v, consider_vertex_f)?;
-        if !self.bubble_filling_cov_check(v) || !self.bubble_filling_cov_check(w) {
-            return None;
-        }
-
-        let filtered_outgoing: Vec<Link> = considered_extensions(self.g, v, consider_vertex_f)
-            .into_iter()
-            .filter(|l| self.unassigned_or_compatible(l.end.node_id, group))
-            .collect();
-        if !filtered_outgoing.is_empty()
-            && filtered_outgoing
-                .iter()
-                .all(|&l| self.g.vertex_length(l.end) < self.settings.solid_len)
-            && w.node_id != v.node_id
-        {
-            let max_len = filtered_outgoing
-                .iter()
-                .map(|l| len_across(v, l.end, w))
-                .max()
-                .unwrap();
-            let min_len = filtered_outgoing
-                .iter()
-                .map(|l| len_across(v, l.end, w))
-                .min()
-                .unwrap();
-            let (fillable_bubble_len, fillable_bubble_diff) = self.bubble_fill_thresholds(v, w);
-
-            if filtered_outgoing.len() > 1
-                && (max_len > fillable_bubble_len as i64
-                    || (max_len - min_len) > fillable_bubble_diff as i64)
-            {
-                return None;
-            }
-            let ext = filtered_outgoing
-                .into_iter()
-                .max_by(|a, b| end_cov(a).partial_cmp(&end_cov(b)).unwrap())
-                .unwrap();
-            debug!("Candidate simple bubble side {}", self.g.v_str(ext.end));
-            Some(Path::from_link(ext))
-        } else {
-            None
-        }
-    }
-
     fn connecting_path(&self, v1: Vertex, v2: Vertex, v3: Vertex) -> Path {
         let mut path = Path::from_link(self.g.connector(v1, v2).unwrap());
         path.append(self.g.connector(v2, v3).unwrap());
@@ -920,7 +831,6 @@ impl<'a> HaploSearcher<'a> {
                     .group_extension(v, group, constraint_vertex_f)
                     .map(Path::from_link)
             })
-            //.or_else(|| self.choose_trivial_bubble_side(v, group, constraint_vertex_f))
             .or_else(|| self.find_bubble_fill_ahead(v, group, constraint_vertex_f))
             .or_else(|| self.find_bubble_jump_ahead(v, group, constraint_vertex_f))
     }
