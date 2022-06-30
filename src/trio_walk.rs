@@ -402,7 +402,7 @@ impl<'a> HaploSearcher<'a> {
             self.g.v_str(p1.end()),
             self.g.v_str(p2.start())
         );
-        p1.append_general(GeneralizedLink::AMBIG(GapInfo {
+        p1.append_general(GeneralizedLink::GAP(GapInfo {
             start: p1.end(),
             end: p2.start(),
             //FIXME use something reasonable
@@ -721,7 +721,7 @@ impl<'a> HaploSearcher<'a> {
                 self.settings.min_gap_size
             };
             debug!("Candidate across-bubble jump to {}", self.g.v_str(w));
-            Some(Path::from_general_link(GeneralizedLink::AMBIG(GapInfo {
+            Some(Path::from_general_link(GeneralizedLink::GAP(GapInfo {
                 start: v,
                 end: w,
                 gap_size: gap_est,
@@ -735,7 +735,7 @@ impl<'a> HaploSearcher<'a> {
             "Candidate tangle jump to {}",
             self.g.v_str(small_tangle.exit.end)
         );
-        Some(Path::from_general_link(GeneralizedLink::AMBIG(GapInfo {
+        Some(Path::from_general_link(GeneralizedLink::GAP(GapInfo {
             start: small_tangle.entrance.start,
             end: small_tangle.exit.end,
             //TODO cache estimated size inside tangle
@@ -880,8 +880,8 @@ mod tests {
             trio::TrioGroup::PATERNAL,
         );
         assert!(path.len() == 2);
-        if let graph::GeneralizedLink::AMBIG(ambig) = path.general_link_at(0) {
-            assert!(ambig.gap_size > 900_000 && ambig.gap_size < 1_000_000);
+        if let graph::GeneralizedLink::GAP(gap) = path.general_link_at(0) {
+            assert!(gap.gap_size > 900_000 && gap.gap_size < 1_000_000);
         } else {
             panic!();
         }

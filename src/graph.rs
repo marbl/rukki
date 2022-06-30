@@ -585,7 +585,6 @@ impl GapInfo {
 pub enum GeneralizedLink {
     LINK(Link),
     GAP(GapInfo),
-    AMBIG(GapInfo),
 }
 
 //TODO think of refactoring
@@ -594,7 +593,6 @@ impl GeneralizedLink {
         match &self {
             Self::LINK(l) => l.start,
             Self::GAP(g) => g.start,
-            Self::AMBIG(a) => a.start,
         }
     }
 
@@ -602,7 +600,6 @@ impl GeneralizedLink {
         match &self {
             Self::LINK(l) => l.end,
             Self::GAP(g) => g.end,
-            Self::AMBIG(a) => a.end,
         }
     }
 
@@ -618,7 +615,6 @@ impl GeneralizedLink {
         match &self {
             Self::LINK(l) => l.overlap as i64,
             Self::GAP(g) => -g.gap_size,
-            Self::AMBIG(a) => -a.gap_size,
         }
     }
 
@@ -626,7 +622,6 @@ impl GeneralizedLink {
         match &self {
             Self::LINK(l) => Self::LINK(l.rc()),
             Self::GAP(g) => Self::GAP(g.rc()),
-            Self::AMBIG(a) => Self::AMBIG(a.rc()),
         }
     }
 }
@@ -786,9 +781,7 @@ impl Path {
         for (i, &v) in self.v_storage.iter().enumerate() {
             if i > 0 {
                 match self.l_storage[i - 1] {
-                    //GeneralizedLink::AMBIG(_) => if gaf { ">AMBIG" } else { ",AMBIG" },
-                    GeneralizedLink::AMBIG(gap_info) | GeneralizedLink::GAP(gap_info) => {
-                        //TODO use estimated gap size
+                    GeneralizedLink::GAP(gap_info) => {
                         ans += delim;
                         ans += &format!("[N{}N]", gap_info.gap_size);
                     }
