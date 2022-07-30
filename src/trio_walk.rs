@@ -121,10 +121,7 @@ impl<'a> ExtensionHelper<'a> {
                 .group(l.end.node_id)
                 .map_or(true, |g| TrioGroup::compatible(g, group))
             {
-                debug!(
-                    "Candidate unambiguous extension {}",
-                    self.g.v_str(l.end)
-                );
+                debug!("Candidate unambiguous extension {}", self.g.v_str(l.end));
                 return Some(l);
             }
         }
