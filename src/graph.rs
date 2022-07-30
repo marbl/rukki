@@ -647,7 +647,7 @@ impl Path {
     }
 
     pub fn from_general_link(l: GeneralizedLink) -> Path {
-        assert!(l.start().node_id != l.end().node_id);
+        //assert!(l.start().node_id != l.end().node_id);
         Path {
             v_storage: vec![l.start(), l.end()],
             l_storage: vec![l],
