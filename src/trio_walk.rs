@@ -122,7 +122,7 @@ impl<'a> ExtensionHelper<'a> {
                 .map_or(true, |g| TrioGroup::compatible(g, group))
             {
                 debug!(
-                    "Candidate adjacent extension {} (was unique considered)",
+                    "Candidate unambiguous extension {}",
                     self.g.v_str(l.end)
                 );
                 return Some(l);

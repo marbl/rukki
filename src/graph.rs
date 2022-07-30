@@ -632,7 +632,6 @@ pub struct Path {
     l_storage: Vec<GeneralizedLink>,
 }
 
-//FIXME rename, doesn't know about haplotype!
 //Never empty! Use None instead
 impl Path {
     pub fn new(init_v: Vertex) -> Path {
