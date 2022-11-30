@@ -41,6 +41,10 @@ pub struct TrioSettings {
     #[clap(long)]
     pub final_assign: Option<String>,
 
+    /// Comma separated haplotype names to be used in outputs (default: "mat,pat")
+    #[clap(long, default_value_t = String::from("mat,pat"))]
+    pub hap_names: String,
+
     /// Marker-assisted extracted haplo-paths
     #[clap(long, short)]
     pub paths: Option<String>,
@@ -129,7 +133,7 @@ pub struct TrioSettings {
 }
 
 fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>> {
-    info!("Reading graph from {:?}", graph_fn);
+    info!("Reading graph from {}", graph_fn);
     let g = Graph::read_sanitize(&fs::read_to_string(graph_fn)?);
 
     info!("Graph read successfully");
@@ -142,6 +146,7 @@ fn output_coloring(
     g: &Graph,
     assignments: &trio::AssignmentStorage,
     file_name: &str,
+    hap_names: &(String, String),
 ) -> Result<(), std::io::Error> {
     let mut output = File::create(file_name)?;
     writeln!(output, "node\tassignment\tlength\tinfo\tcolor")?;
@@ -156,8 +161,12 @@ fn output_coloring(
             };
             writeln!(
                 output,
-                "{}\t{:?}\t{}\t{}\t{}",
-                n.name, assign.group, n.length, assign.info, color
+                "{}\t{}\t{}\t{}\t{}",
+                n.name,
+                group_str(Some(assign.group), hap_names).to_uppercase(),
+                n.length,
+                assign.info,
+                color
             )?;
         }
     }
@@ -230,6 +239,21 @@ fn weighted_mean_solid_cov(g: &Graph, solid_len_thr: usize) -> f64 {
     total_cov / total_len as f64
 }
 
+fn parse_hap_names(hap_names_s: &str) -> Option<(String, String)> {
+    let mut split = hap_names_s.split(',');
+    Some((String::from(split.next()?), String::from(split.next()?)))
+}
+
+fn group_str(o_g: Option<TrioGroup>, hap_names: &(String, String)) -> &str {
+    match o_g {
+        Some(TrioGroup::MATERNAL) => &hap_names.0,
+        Some(TrioGroup::PATERNAL) => &hap_names.1,
+        Some(TrioGroup::HOMOZYGOUS) => "hom",
+        Some(TrioGroup::ISSUE) => "issue",
+        _ => "na",
+    }
+}
+
 pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> {
     let g = read_graph(&settings.graph)?;
 
@@ -240,6 +264,9 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     //    println!("Link: {}", g.l_str(l));
     //}
     //write!(output, "{}", g.as_gfa())?;
+
+    let hap_names =
+        parse_hap_names(&settings.hap_names).expect("Problem while parsing haplotype names");
 
     info!("Reading trio marker information from {}", &settings.markers);
     let trio_infos = trio::read_trio(&fs::read_to_string(&settings.markers)?);
@@ -261,7 +288,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
 
     if let Some(output) = &settings.init_assign {
         info!("Writing initial node annotation to {}", output);
-        output_coloring(&g, &assignments, output)?;
+        output_coloring(&g, &assignments, output, &hap_names)?;
     }
 
     let solid_cov_est = weighted_mean_solid_cov(&g, settings.solid_len);
@@ -324,7 +351,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
 
     if let Some(output) = &settings.refined_assign {
         info!("Writing refined node annotation to {}", output);
-        output_coloring(&g, &assignments, output)?;
+        output_coloring(&g, &assignments, output, &hap_names)?;
     }
     let mut path_searcher = search_settings.build_searcher(&g, &assignments);
 
@@ -335,14 +362,8 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
 
     if let Some(output) = &settings.final_assign {
         info!("Writing final node annotation to {}", output);
-        output_coloring(&g, &assignments, output)?;
+        output_coloring(&g, &assignments, output, &hap_names)?;
     }
-
-    let short_group_str = |o_g: Option<TrioGroup>| match o_g {
-        Some(TrioGroup::MATERNAL) => "mat",
-        Some(TrioGroup::PATERNAL) => "pat",
-        _ => "na",
-    };
 
     if let Some(output) = &settings.paths {
         info!("Outputting haplo-paths to {}", output);
@@ -354,11 +375,11 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
             //info!("Identified {:?} path: {}", group, path.print(&g));
             writeln!(
                 output,
-                "{}_from_{}\t{}\t{:?}",
-                short_group_str(Some(group)),
+                "{}_from_{}\t{}\t{}",
+                group_str(Some(group), &hap_names),
                 g.node(node_id).name,
                 path.print_format(&g, settings.gaf_format),
-                group
+                group_str(Some(group), &hap_names).to_uppercase()
             )?;
         }
 
@@ -366,10 +387,10 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
             writeln!(
                 output,
                 "{}_unused_{}\t{}\t{}",
-                short_group_str(group),
+                group_str(group, &hap_names),
                 n.name,
                 Direction::format_node(&n.name, Direction::FORWARD, settings.gaf_format),
-                group.map_or(String::from("NA"), |x| format!("{:?}", x))
+                group_str(group, &hap_names).to_uppercase()
             )
         };
 
