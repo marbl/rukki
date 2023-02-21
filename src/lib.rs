@@ -1,9 +1,9 @@
 use log::{debug, info, warn};
-use std::collections::HashSet;
+use std::{collections::HashSet, path::PathBuf};
 use std::error::Error;
 use std::fs;
 use std::fs::File;
-use std::io::Write;
+use std::io::{Write, BufWriter};
 use trio_walk::HaploSearchSettings;
 
 //tests don't compile without the pub
@@ -23,23 +23,23 @@ use crate::trio::{GroupAssignmentSettings, TrioGroup};
 pub struct TrioSettings {
     /// GFA file
     #[clap(short, long)]
-    pub graph: String,
+    pub graph: PathBuf,
 
     /// Parental markers file
     #[clap(short, long)]
-    pub markers: String,
+    pub markers: PathBuf,
 
     /// Marker-based annotation output file
     #[clap(long)]
-    pub init_assign: Option<String>,
+    pub init_assign: Option<PathBuf>,
 
     /// Refined annotation output file
     #[clap(long)]
-    pub refined_assign: Option<String>,
+    pub refined_assign: Option<PathBuf>,
 
     /// Final annotation output file
     #[clap(long)]
-    pub final_assign: Option<String>,
+    pub final_assign: Option<PathBuf>,
 
     /// Comma separated haplotype names to be used in outputs (default: "mat,pat")
     #[clap(long, default_value_t = String::from("mat,pat"))]
@@ -47,7 +47,7 @@ pub struct TrioSettings {
 
     /// Marker-assisted extracted haplo-paths
     #[clap(long, short)]
-    pub paths: Option<String>,
+    pub paths: Option<PathBuf>,
 
     /// Use GAF ([<>]<name1>)+ format for paths
     #[clap(long)]
@@ -132,8 +132,8 @@ pub struct TrioSettings {
     default_gap_size: usize,
 }
 
-fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>> {
-    info!("Reading graph from {}", graph_fn);
+fn read_graph(graph_fn: &PathBuf) -> Result<Graph, Box<dyn Error>> {
+    info!("Reading graph from {}", graph_fn.to_str().unwrap());
     let g = Graph::read_sanitize(&fs::read_to_string(graph_fn)?);
 
     info!("Graph read successfully");
@@ -145,10 +145,10 @@ fn read_graph(graph_fn: &str) -> Result<Graph, Box<dyn Error>> {
 fn output_coloring(
     g: &Graph,
     assignments: &trio::AssignmentStorage,
-    file_name: &str,
+    file_name: &PathBuf,
     hap_names: &(String, String),
 ) -> Result<(), std::io::Error> {
-    let mut output = File::create(file_name)?;
+    let mut output = BufWriter::new(File::create(file_name)?);
     writeln!(output, "node\tassignment\tlength\tinfo\tcolor")?;
     for (node_id, n) in g.all_nodes().enumerate() {
         assert!(g.name2id(&n.name) == node_id);
@@ -268,8 +268,8 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let hap_names =
         parse_hap_names(&settings.hap_names).expect("Problem while parsing haplotype names");
 
-    info!("Reading trio marker information from {}", &settings.markers);
-    let trio_infos = trio::read_trio(&fs::read_to_string(&settings.markers)?);
+    info!("Reading trio marker information from {}", &settings.markers.to_str().unwrap());
+    let trio_infos = trio::read_trio(&settings.markers)?;
 
     info!("Assigning initial parental groups to the nodes");
     let assignments = trio::assign_parental_groups(
@@ -287,7 +287,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     );
 
     if let Some(output) = &settings.init_assign {
-        info!("Writing initial node annotation to {}", output);
+        info!("Writing initial node annotation to {}", output.to_str().unwrap());
         output_coloring(&g, &assignments, output, &hap_names)?;
     }
 
@@ -350,7 +350,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let assignments = augment_by_path_search(&g, assignments, search_settings);
 
     if let Some(output) = &settings.refined_assign {
-        info!("Writing refined node annotation to {}", output);
+        info!("Writing refined node annotation to {}", output.to_str().unwrap());
         output_coloring(&g, &assignments, output, &hap_names)?;
     }
     let mut path_searcher = search_settings.build_searcher(&g, &assignments);
@@ -361,12 +361,12 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let assignments = augment_assignments(&g, assignments, &node_usage, false);
 
     if let Some(output) = &settings.final_assign {
-        info!("Writing final node annotation to {}", output);
+        info!("Writing final node annotation to {}", output.to_str().unwrap());
         output_coloring(&g, &assignments, output, &hap_names)?;
     }
 
     if let Some(output) = &settings.paths {
-        info!("Outputting haplo-paths to {}", output);
+        info!("Outputting haplo-paths to {}", output.to_str().unwrap());
         let mut output = File::create(output)?;
 
         writeln!(output, "name\tpath\tassignment")?;
@@ -432,7 +432,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
 }
 
 pub fn run_primary_alt_analysis(
-    graph_fn: &str,
+    graph_fn: &PathBuf,
     colors_fn: &Option<String>,
     paths_fn: &Option<String>,
     gaf_paths: bool,

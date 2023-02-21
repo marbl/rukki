@@ -5,6 +5,10 @@ use log::debug;
 use log::info;
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::{BufRead,BufReader};
+use std::io::Result as IOResult;
+use std::path::PathBuf;
 
 //TODO add UNASSIGNED to display useful info for all nodes
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
@@ -74,10 +78,12 @@ impl TrioInfo {
     }
 }
 
-pub fn read_trio(trio_str: &str) -> Vec<TrioInfo> {
+pub fn read_trio(path: &PathBuf) -> IOResult<Vec<TrioInfo>> {
     let mut infos = Vec::new();
-    for line in trio_str.lines() {
-        let split: Vec<&str> = line.trim().split('\t').collect();
+    let file = File::open(path)?;
+    for line in BufReader::new(file).lines() {
+        let l = line?;
+        let split: Vec<&str> = l.trim().split('\t').collect();
         if &split[0].to_lowercase() != "node" && &split[0].to_lowercase() != "contig" {
             let node_name = String::from(split[0]);
             let mat: usize = split[1].parse().expect("Invalid maternal count");
@@ -89,7 +95,7 @@ pub fn read_trio(trio_str: &str) -> Vec<TrioInfo> {
             })
         }
     }
-    infos
+    Ok(infos)
 }
 
 //TODO add template parameter
