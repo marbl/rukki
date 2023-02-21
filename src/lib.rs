@@ -19,7 +19,7 @@ pub use graph::*;
 use crate::trio::{GroupAssignmentSettings, TrioGroup};
 
 //TODO use PathBuf
-#[derive(clap::Args)]
+#[derive(clap::Args, Debug)]
 pub struct TrioSettings {
     /// GFA file
     #[clap(short, long)]

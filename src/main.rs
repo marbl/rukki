@@ -1,53 +1,20 @@
 //use std::io;
 #[macro_use]
 extern crate log;
-use clap::{AppSettings, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use env_logger::{Builder, Env, Target};
 
-/// Assembly graph analysis suite
-#[derive(Parser)]
-#[clap(global_setting(AppSettings::DeriveDisplayOrder))]
-#[clap(about, version, author)]
+#[derive(Parser, Debug)]
+#[command(name = "rukki", author = "Sergey Nurk", about = "extraction of paths from assembly graphs", long_about=None)]
 struct Args {
-    //TODO add those
-    ///// Sets a custom config file. Could have been an Option<T> with no default too
-    //#[clap(short = "c", long = "config", default_value = "default.conf")]
-    //config: String,
-
-    // /// A level of verbosity, and can be used multiple times
-    // #[clap(short = "v", long = "verbose", parse(from_occurrences))]
-    // verbose: i32,
     #[clap(subcommand)]
     subcmd: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 enum Commands {
     /// Trio-marker based analysis
     Trio(rukki::TrioSettings),
-    // /// Primary-alt style analysis
-    // #[clap(setting(AppSettings::ArgRequiredElseHelp))]
-    // PriAlt(PriAltSettings),
-}
-
-//TODO use PathBuf?
-#[derive(clap::Args)]
-struct PriAltSettings {
-    /// GFA file
-    #[clap(short, long)]
-    graph: String,
-
-    /// colors output file
-    #[clap(short, long)]
-    assign: Option<String>,
-
-    /// Extracted primary and alt paths
-    #[clap(long)]
-    paths: Option<String>,
-
-    /// Use GAF ([<>]utg_name)+ format for paths
-    #[clap(short, long)]
-    gaf_format: bool,
 }
 
 fn main() {
@@ -69,14 +36,6 @@ fn main() {
                 Ok(()) => info!("Success"),
                 Err(e) => info!("Some error happened {:?}", e),
             }
-        } //Commands::PriAlt(settings) => {
-          //    info!("Extracting primary/alt paths");
-          //    match rukki::run_primary_alt_analysis(&settings.graph,
-          //                                &settings.assign, &settings.paths,
-          //                                settings.gaf_paths) {
-          //        Ok(()) => info!("Success"),
-          //        Err(e) => info!("Some error happened {:?}", e)
-          //    }
-          //}
+        }
     }
 }
