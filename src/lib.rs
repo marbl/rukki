@@ -272,10 +272,10 @@ pub fn write_paths(g: &Graph,
         writeln!(
             output,
             "{}_from_{}\t{}\t{}",
-            group_str(Some(group), &hap_names),
+            group_str(Some(group), hap_names),
             g.node(node_id).name,
-            path.print_format(&g, gaf_format),
-            group_str(Some(group), &hap_names).to_uppercase()
+            path.print_format(g, gaf_format),
+            group_str(Some(group), hap_names).to_uppercase()
         )?;
     }
 
@@ -283,10 +283,10 @@ pub fn write_paths(g: &Graph,
         writeln!(
             output,
             "{}_unused_{}\t{}\t{}",
-            group_str(group, &hap_names),
+            group_str(group, hap_names),
             n.name,
             Direction::format_node(&n.name, Direction::FORWARD, gaf_format),
-            group_str(group, &hap_names).to_uppercase()
+            group_str(group, hap_names).to_uppercase()
         )
     };
 

@@ -274,7 +274,7 @@ fn parse_group(group_str: &str) -> TrioGroup {
         "PATERNAL" => TrioGroup::PATERNAL,
         "HOMOZYGOUS" => TrioGroup::HOMOZYGOUS,
         "ISSUE" => TrioGroup::ISSUE,
-        _ => panic!("Invalid group string {}", group_str),
+        _ => panic!("Invalid group string {group_str}"),
     }
 }
 

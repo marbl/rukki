@@ -20,12 +20,12 @@ impl Direction {
         match c {
             '+' => Self::FORWARD,
             '-' => Self::REVERSE,
-            _ => panic!("Unknown direction {}", c),
+            _ => panic!("Unknown direction {c}"),
         }
     }
 
     fn parse(s: &str) -> Direction {
-        assert!(s.len() == 1, "Unknown direction {}", s);
+        assert!(s.len() == 1, "Unknown direction {s}");
         Self::parse_char(s.chars().next().unwrap())
     }
 
@@ -317,13 +317,13 @@ impl Graph {
             .filter(|s| s.starts_with(prefix))
             .map(|s| match s[prefix.len()..].parse::<T>() {
                 Ok(t) => t,
-                Err(_) => panic!("Couldn't parse tag {}", s),
+                Err(_) => panic!("Couldn't parse tag {s}"),
             })
             .next()
     }
 
     fn parse_overlap(cigar: &str) -> usize {
-        assert!(cigar.ends_with('M'), "Invalid overlap {}", cigar);
+        assert!(cigar.ends_with('M'), "Invalid overlap {cigar}");
         let ovl = &cigar[..(cigar.len() - 1)];
         ovl.trim().parse().expect("Invalid overlap")
     }
@@ -508,7 +508,7 @@ impl Graph {
     pub fn name2id(&self, name: &str) -> usize {
         match self.name2ids.get(name) {
             Some(&id) => id,
-            None => panic!("Node {} is not in the graph", name),
+            None => panic!("Node {name} is not in the graph"),
         }
     }
 
@@ -538,13 +538,7 @@ impl Graph {
     //note that the graph supports multi-edges,
     // if they are present returns only the first one
     pub fn connector(&self, v: Vertex, w: Vertex) -> Option<Link> {
-        //TODO rewrite via filter
-        for l in self.outgoing_edges(v) {
-            if l.end == w {
-                return Some(l);
-            }
-        }
-        None
+        self.outgoing_edges(v).into_iter().find(|&l| l.end == w)
     }
 
     pub fn v_str_format(&self, v: Vertex, gaf: bool) -> String {
@@ -680,7 +674,7 @@ impl Path {
     pub fn link_at(&self, idx: usize) -> Link {
         match self.general_link_at(idx) {
             GeneralizedLink::LINK(l) => l,
-            _ => panic!("Not an actual graph link at index {}", idx),
+            _ => panic!("Not an actual graph link at index {idx}"),
         }
     }
 

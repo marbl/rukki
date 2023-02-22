@@ -900,7 +900,7 @@ mod tests {
             trio_walk::HaploSearchSettings::default().build_searcher(&g, &assignments);
         for node in ["utig4-1322", "utig4-1320", "utig4-947"] {
             info!("Starting from {}", node);
-            println!("Print Starting from {}", node);
+            println!("Print Starting from {node}");
             let path = haplo_searcher.haplo_path(
                 graph::Vertex::forward(g.name2id(node)),
                 trio::TrioGroup::MATERNAL,

@@ -3,7 +3,7 @@ use rukki::*;
 #[test]
 fn one_node() {
     let s = "S a * LN:i:100";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     assert_eq!(1, g.node_cnt());
     assert_eq!(0, g.link_cnt());
     let n = g.all_nodes().next().unwrap();
