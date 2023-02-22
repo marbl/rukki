@@ -1,4 +1,5 @@
 use log::{debug, info, warn};
+use std::collections::HashMap;
 use std::{collections::HashSet, path::PathBuf};
 use std::error::Error;
 use std::fs;
@@ -17,6 +18,7 @@ pub mod trio_walk;
 pub use graph::*;
 
 use crate::trio::{GroupAssignmentSettings, TrioGroup};
+use crate::trio_walk::HaploSearcher;
 
 //TODO use PathBuf
 #[derive(clap::Args, Debug)]
@@ -190,7 +192,7 @@ fn augment_by_path_search_round(
     settings: HaploSearchSettings,
 ) -> trio::AssignmentStorage {
     let mut path_searcher =
-        trio_walk::HaploSearcher::new(g, &assignments, settings.assigning_stage_adjusted());
+        settings.assigning_stage_adjusted().build_searcher(g, &assignments);
 
     path_searcher.find_all();
     let node_usage = path_searcher.take_used();
@@ -254,6 +256,74 @@ fn group_str(o_g: Option<TrioGroup>, hap_names: &(String, String)) -> &str {
     }
 }
 
+pub fn write_paths(g: &Graph,
+    haplo_paths: Vec<trio_walk::HaploPath>,
+    assignments: &trio::AssignmentStorage,
+    node_usage: &trio::AssignmentStorage,
+    output: &PathBuf,
+    gaf_format: bool,
+    hap_names: &(String, String)) -> Result<(), std::io::Error> {
+    //FIXME buffer
+    let mut output = File::create(output)?;
+    writeln!(output, "name\tpath\tassignment")?;
+    for (path, node_id, group) in haplo_paths {
+        assert!(path.vertices().contains(&Vertex::forward(node_id)));
+        //info!("Identified {:?} path: {}", group, path.print(&g));
+        writeln!(
+            output,
+            "{}_from_{}\t{}\t{}",
+            group_str(Some(group), &hap_names),
+            g.node(node_id).name,
+            path.print_format(&g, gaf_format),
+            group_str(Some(group), &hap_names).to_uppercase()
+        )?;
+    }
+
+    let mut write_node = |n: &Node, group: Option<TrioGroup>| {
+        writeln!(
+            output,
+            "{}_unused_{}\t{}\t{}",
+            group_str(group, &hap_names),
+            n.name,
+            Direction::format_node(&n.name, Direction::FORWARD, gaf_format),
+            group_str(group, &hap_names).to_uppercase()
+        )
+    };
+
+    for (node_id, n) in g.all_nodes().enumerate() {
+        let haplopath_assign = node_usage.group(node_id);
+        match assignments.group(node_id) {
+            None | Some(TrioGroup::ISSUE) => {
+                assert!(!node_usage.contains(node_id));
+                debug!("Node: {} length: {} not assigned to any haplotype (adding trivial NA path)",
+                    n.name, n.length);
+                write_node(g.node(node_id), None)?;
+            }
+            Some(assign) => {
+                if TrioGroup::compatible(assign, TrioGroup::MATERNAL)
+                    //not present in haplopaths paths or incompatible
+                    && haplopath_assign.map_or(true,
+                        |x| TrioGroup::incompatible(x, TrioGroup::MATERNAL))
+                {
+                    debug!("Node: {} length: {} not present in MATERNAL haplo-paths (adding trivial MATERNAL path)",
+                        n.name, n.length);
+                    write_node(g.node(node_id), Some(TrioGroup::MATERNAL))?;
+                }
+                if TrioGroup::compatible(assign, TrioGroup::PATERNAL)
+                    //not present in haplopaths paths or incompatible
+                    && haplopath_assign.map_or(true,
+                        |x| TrioGroup::incompatible(x, TrioGroup::PATERNAL))
+                {
+                    debug!("Node: {} length: {} not present in PATERNAL haplo-paths (adding trivial PATERNAL path)",
+                        n.name, n.length);
+                    write_node(g.node(node_id), Some(TrioGroup::PATERNAL))?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> {
     let g = read_graph(&settings.graph)?;
 
@@ -285,6 +355,11 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
             issue_ratio: settings.issue_ratio.unwrap_or(settings.marker_ratio),
         },
     );
+
+    let raw_cnts = trio_infos
+                        .into_iter()
+                        .map(|ti| {(g.name2id(&ti.node_name), ti)})
+                        .collect::<HashMap<usize, trio::TrioInfo>>();
 
     if let Some(output) = &settings.init_assign {
         info!("Writing initial node annotation to {}", output.to_str().unwrap());
@@ -353,7 +428,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         info!("Writing refined node annotation to {}", output.to_str().unwrap());
         output_coloring(&g, &assignments, output, &hap_names)?;
     }
-    let mut path_searcher = search_settings.build_searcher(&g, &assignments);
+    let mut path_searcher = HaploSearcher::new(&g, &assignments, search_settings, Some(&raw_cnts));
 
     let haplo_paths = path_searcher.find_all();
     let node_usage = path_searcher.take_used();
@@ -367,64 +442,8 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
 
     if let Some(output) = &settings.paths {
         info!("Outputting haplo-paths to {}", output.to_str().unwrap());
-        let mut output = File::create(output)?;
-
-        writeln!(output, "name\tpath\tassignment")?;
-        for (path, node_id, group) in haplo_paths {
-            assert!(path.vertices().contains(&Vertex::forward(node_id)));
-            //info!("Identified {:?} path: {}", group, path.print(&g));
-            writeln!(
-                output,
-                "{}_from_{}\t{}\t{}",
-                group_str(Some(group), &hap_names),
-                g.node(node_id).name,
-                path.print_format(&g, settings.gaf_format),
-                group_str(Some(group), &hap_names).to_uppercase()
-            )?;
-        }
-
-        let mut write_node = |n: &Node, group: Option<TrioGroup>| {
-            writeln!(
-                output,
-                "{}_unused_{}\t{}\t{}",
-                group_str(group, &hap_names),
-                n.name,
-                Direction::format_node(&n.name, Direction::FORWARD, settings.gaf_format),
-                group_str(group, &hap_names).to_uppercase()
-            )
-        };
-
-        for (node_id, n) in g.all_nodes().enumerate() {
-            let haplopath_assign = node_usage.group(node_id);
-            match assignments.group(node_id) {
-                None | Some(TrioGroup::ISSUE) => {
-                    assert!(!node_usage.contains(node_id));
-                    debug!("Node: {} length: {} not assigned to any haplotype (adding trivial NA path)",
-                        n.name, n.length);
-                    write_node(g.node(node_id), None)?;
-                }
-                Some(assign) => {
-                    if TrioGroup::compatible(assign, TrioGroup::MATERNAL)
-                        //not present in haplopaths paths or incompatible
-                        && haplopath_assign.map_or(true,
-                            |x| TrioGroup::incompatible(x, TrioGroup::MATERNAL))
-                    {
-                        debug!("Node: {} length: {} not present in MATERNAL haplo-paths (adding trivial MATERNAL path)",
-                            n.name, n.length);
-                        write_node(g.node(node_id), Some(TrioGroup::MATERNAL))?;
-                    }
-                    if TrioGroup::compatible(assign, TrioGroup::PATERNAL)
-                        //not present in haplopaths paths or incompatible
-                        && haplopath_assign.map_or(true,
-                            |x| TrioGroup::incompatible(x, TrioGroup::PATERNAL))
-                    {
-                        debug!("Node: {} length: {} not present in PATERNAL haplo-paths (adding trivial PATERNAL path)",
-                            n.name, n.length);
-                        write_node(g.node(node_id), Some(TrioGroup::PATERNAL))?;
-                    }
-                }
-            }
-        }
+        write_paths(&g, haplo_paths, &assignments, &node_usage,
+                    output, settings.gaf_format, &hap_names)?;
     }
 
     info!("All done");

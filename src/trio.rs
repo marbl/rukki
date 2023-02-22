@@ -63,9 +63,9 @@ pub struct Assignment {
 
 #[derive(Clone, Debug)]
 pub struct TrioInfo {
-    node_name: String,
-    mat: usize,
-    pat: usize,
+    pub node_name: String,
+    pub mat: usize,
+    pub pat: usize,
 }
 
 impl TrioInfo {

@@ -245,7 +245,7 @@ impl HaploSearchSettings {
         g: &'a Graph,
         assignments: &'a AssignmentStorage,
     ) -> HaploSearcher<'a> {
-        HaploSearcher::new(g, assignments, *self)
+        HaploSearcher::new(g, assignments, *self, None)
     }
 }
 
@@ -256,15 +256,17 @@ pub struct HaploSearcher<'a> {
     settings: HaploSearchSettings,
     used: AssignmentStorage,
     small_tangle_index: HashMap<Vertex, scc::LocalizedTangle>,
+    _raw_cnts: Option<&'a HashMap<usize, TrioInfo>>,
 }
 
-type HaploPath = (Path, usize, TrioGroup);
+pub type HaploPath = (Path, usize, TrioGroup);
 
 impl<'a> HaploSearcher<'a> {
     pub fn new(
         g: &'a Graph,
         assignments: &'a AssignmentStorage,
         settings: HaploSearchSettings,
+        _raw_cnts: Option<&'a HashMap<usize, TrioInfo>>,
     ) -> HaploSearcher<'a> {
         HaploSearcher {
             g,
@@ -285,6 +287,7 @@ impl<'a> HaploSearcher<'a> {
                 .into_iter()
                 .map(|s| (s.entrance.start, s)),
             ),
+            _raw_cnts,
         }
     }
 
