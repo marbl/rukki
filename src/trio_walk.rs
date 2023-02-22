@@ -203,6 +203,7 @@ pub struct HaploSearchSettings {
     pub fillable_bubble_diff: usize,
     pub het_fill_bubble_len: usize,
     pub het_fill_bubble_diff: usize,
+    pub good_side_cov_gap: f64,
 
     //configuring scaffolding insertion
     pub skippable_tangle_size: usize,
@@ -223,6 +224,7 @@ impl Default for HaploSearchSettings {
             fillable_bubble_diff: 200,
             het_fill_bubble_len: 50_000,
             het_fill_bubble_diff: 200,
+            good_side_cov_gap: 5.,
             skippable_tangle_size: 1_000_000,
             min_gap_size: 1000,
             default_gap_size: 5000,
@@ -256,7 +258,7 @@ pub struct HaploSearcher<'a> {
     settings: HaploSearchSettings,
     used: AssignmentStorage,
     small_tangle_index: HashMap<Vertex, scc::LocalizedTangle>,
-    _raw_cnts: Option<&'a HashMap<usize, TrioInfo>>,
+    raw_cnts: Option<&'a HashMap<usize, TrioInfo>>,
 }
 
 pub type HaploPath = (Path, usize, TrioGroup);
@@ -266,7 +268,7 @@ impl<'a> HaploSearcher<'a> {
         g: &'a Graph,
         assignments: &'a AssignmentStorage,
         settings: HaploSearchSettings,
-        _raw_cnts: Option<&'a HashMap<usize, TrioInfo>>,
+        raw_cnts: Option<&'a HashMap<usize, TrioInfo>>,
     ) -> HaploSearcher<'a> {
         HaploSearcher {
             g,
@@ -287,7 +289,7 @@ impl<'a> HaploSearcher<'a> {
                 .into_iter()
                 .map(|s| (s.entrance.start, s)),
             ),
-            _raw_cnts,
+            raw_cnts,
         }
     }
 
@@ -619,10 +621,13 @@ impl<'a> HaploSearcher<'a> {
         self.g.node(node_id).length >= self.settings.solid_len
     }
 
-    fn bubble_fill_thresholds(&self, v: Vertex, w: Vertex) -> (usize, usize) {
-        if self.assignments.group(v.node_id) == Some(TrioGroup::HOMOZYGOUS)
+    fn homozygous_bubble(&self, v: Vertex, w: Vertex) -> bool {
+        self.assignments.group(v.node_id) == Some(TrioGroup::HOMOZYGOUS)
             && self.assignments.group(w.node_id) == Some(TrioGroup::HOMOZYGOUS)
-        {
+    }
+
+    fn bubble_fill_thresholds(&self, v: Vertex, w: Vertex) -> (usize, usize) {
+        if self.homozygous_bubble(v, w) {
             (
                 self.settings.het_fill_bubble_len,
                 self.settings.het_fill_bubble_diff,
@@ -639,6 +644,17 @@ impl<'a> HaploSearcher<'a> {
         let mut path = Path::from_link(self.g.connector(v1, v2).unwrap());
         path.append(self.g.connector(v2, v3).unwrap());
         path
+    }
+
+    fn raw_marker_excess(&self, v: &Vertex, group: TrioGroup) -> Option<i64> {
+        let raw_cnts = self.raw_cnts?;
+        let info = raw_cnts.get(&v.node_id)?;
+        let mmp = info.mat as i64 - info.pat as i64;
+        match group {
+            TrioGroup::MATERNAL => Some(mmp),
+            TrioGroup::PATERNAL => Some(-mmp),
+            _ => panic!(),
+        }
     }
 
     //TODO improve to actually use group while choosing a path
@@ -676,25 +692,46 @@ impl<'a> HaploSearcher<'a> {
             && self.bubble_filling_cov_check(v)
             && self.bubble_filling_cov_check(w)
         {
+            let cov = |x: &Vertex| self.g.node(x.node_id).coverage;
+
             //Filling the bubble
-            let direct_connectors: Vec<Vertex> =
+            let mut direct_connectors =
                 considered_extensions(self.g, v, consider_vertex_f)
                     .into_iter()
                     .filter_map(|l1| self.g.connector(l1.end, w))
                     .map(|l2| l2.start)
                     .filter(|tc_v| self.unassigned_or_compatible(tc_v.node_id, group))
-                    .collect();
+                    .collect::<Vec<Vertex>>();
 
             if !direct_connectors.is_empty() {
-                let cov = |x: &Vertex| self.g.node(x.node_id).coverage;
-                let p = self.connecting_path(
-                    v,
+                let c = if self.homozygous_bubble(v, w) {
+                    let filtered_connectors = direct_connectors
+                                            .iter()
+                                            .filter(|&c| !self.used.contains(c.node_id))
+                                            .filter(|&c| cov(c) > ((cov(&v) + cov(&w)) / 2.) / self.settings.good_side_cov_gap - 1e-5)
+                                            .cloned()
+                                            .collect::<Vec<Vertex>>();
+
+                    if !filtered_connectors.is_empty() {
+                        direct_connectors = filtered_connectors;
+                    }
+
+                    //direct_connectors.sort_by_key(|c| cov(c));
+                    //direct_connectors.into_iter().max_by_key(|&c| (cov(c), self.raw_marker_excess(c, group)));
+                    direct_connectors
+                        .into_iter()
+                        .max_by(|a, b| (self.raw_marker_excess(a, group).unwrap_or_default(), cov(a))
+                                                                .partial_cmp(&(self.raw_marker_excess(b, group).unwrap_or_default(), cov(b)))
+                                                                .unwrap())
+                                                                .unwrap()
+                } else {
                     direct_connectors
                         .into_iter()
                         .max_by(|a, b| cov(a).partial_cmp(&cov(b)).unwrap())
-                        .unwrap(),
-                    w,
-                );
+                        .unwrap()
+                };
+
+                let p = self.connecting_path(v, c, w);
                 debug!(
                     "Candidate extension by super-bubble fill (direct connector) {}",
                     p.print(self.g)

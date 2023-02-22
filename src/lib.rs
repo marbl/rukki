@@ -125,6 +125,10 @@ pub struct TrioSettings {
     #[clap(long)]
     het_fill_bubble_diff: Option<usize>,
 
+    /// During bubble filling Ignore simple sides of bubbles with coverage less than source/sink average divided by this value
+    #[clap(long, default_value_t = 5.0)]
+    good_side_cov_gap: f64,
+
     /// Minimal introducible gap size (number of Ns reported). If the gap size estimate is smaller it will be artificially increased to this value.
     #[clap(long, default_value_t = 1000)]
     min_gap_size: usize,
@@ -396,6 +400,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         het_fill_bubble_diff: settings
             .het_fill_bubble_diff
             .unwrap_or(settings.fillable_bubble_diff),
+        good_side_cov_gap: settings.good_side_cov_gap,
         min_gap_size: settings.min_gap_size as i64,
         default_gap_size: settings.default_gap_size as i64,
         ..HaploSearchSettings::default()
