@@ -806,7 +806,7 @@ impl<'a> HaploSearcher<'a> {
                     if self.long_node(node_id)
                         && self.assignments.group(node_id) != Some(TrioGroup::HOMOZYGOUS)
                     {
-                        debug!("Can't reuse long node {} (not initially marked as homozygous) in different haplotype",
+                        warn!("Can't reuse long node {} (not initially marked as homozygous) in different haplotype",
                             self.g.name(node_id));
                         return false;
                     }
