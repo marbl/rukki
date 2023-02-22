@@ -76,7 +76,7 @@ pub struct TrioSettings {
     pub suspect_homozygous_cov_coeff: f64,
 
     /// Longer nodes can not be classified as homozygous
-    #[clap(long, default_value_t = 1_000_000)]
+    #[clap(long, default_value_t = 2_000_000)]
     pub homozygous_max_len: usize,
 
     //TODO maybe check that it is > trusted_len
