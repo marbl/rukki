@@ -9,7 +9,7 @@ S b * LN:i:100
 L a + b + 50M
 L a + b + 75M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     let bubble = superbubble::find_superbubble(
         &g,
         Vertex::forward(0),
@@ -31,7 +31,7 @@ L a + b + 50M
 L a + b + 75M
 L a + c + 50M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     let _bubble = superbubble::find_superbubble(
         &g,
         Vertex::forward(0),
@@ -51,7 +51,7 @@ L a + b + 50M
 L a + b + 50M
 L c + b + 50M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     let _bubble = superbubble::find_superbubble(
         &g,
         Vertex::forward(0),
@@ -72,7 +72,7 @@ L a + c + 50M
 L b + d + 50M
 L c + d + 50M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     let bubble = superbubble::find_superbubble(
         &g,
         Vertex::forward(0),
@@ -103,7 +103,7 @@ L a + c + 50M
 L b + a + 50M
 L c + a + 50M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     let bubble = superbubble::find_superbubble(
         &g,
         Vertex::forward(0),
@@ -134,7 +134,7 @@ L b + d + 50M
 L c + d + 50M
 L a + d + 50M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     let bubble = superbubble::find_superbubble(
         &g,
         Vertex::forward(0),
@@ -165,7 +165,7 @@ L b + c + 50M
 L b + d + 50M
 L c + d + 50M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     let bubble = superbubble::find_superbubble(
         &g,
         Vertex::forward(0),
@@ -196,7 +196,7 @@ L b + c + 50M
 L b + d + 50M
 L c + d + 50M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     let bubble = superbubble::find_superbubble(
         &g,
         Vertex::reverse(3),
@@ -232,7 +232,7 @@ L c + e + 50M
 L d + f + 50M
 L e + f + 50M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     let bubble = superbubble::find_superbubble(
         &g,
         Vertex::forward(0),
@@ -269,7 +269,7 @@ L d + f + 50M
 L e + g + 50M
 L f + g + 50M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     let chain = superbubble::find_maximal_chain(
         &g,
         Vertex::forward(g.name2id("d")),
@@ -301,7 +301,7 @@ L d + f + 50M
 L e + a + 50M
 L f + a + 50M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     //testing search ahead
     let chain = superbubble::find_chain_ahead(
         &g,

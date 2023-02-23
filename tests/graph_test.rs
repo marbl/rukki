@@ -21,7 +21,7 @@ fn loop1() {
 S a * LN:i:100
 L a + a + 10M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     assert_eq!(1, g.node_cnt());
     assert_eq!(1, g.link_cnt());
     let l = g.all_links().next().unwrap();
@@ -40,7 +40,7 @@ fn nontrivial_cigar() {
 S a * LN:i:100
 L a + a + 1D10M1I
 ";
-    Graph::read(&s.replace(" ", "\t"));
+    Graph::read(&s.replace(' ', "\t"));
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn loop2() {
 S a * LN:i:100
 L a - a - 10M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     assert_eq!(1, g.node_cnt());
     assert_eq!(1, g.link_cnt());
     let l = g.all_links().next().unwrap();
@@ -69,7 +69,7 @@ fn self_conj1() {
 S a * LN:i:100
 L a + a - 10M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     assert_eq!(1, g.node_cnt());
     assert_eq!(1, g.link_cnt());
     let l = g.all_links().next().unwrap();
@@ -87,7 +87,7 @@ fn self_conj2() {
 S a * LN:i:100
 L a - a + 10M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     assert_eq!(1, g.node_cnt());
     assert_eq!(1, g.link_cnt());
     let l = g.all_links().next().unwrap();
@@ -105,7 +105,7 @@ fn two_nodes() {
 S a * LN:i:100
 S b * LN:i:200
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     assert_eq!(2, g.node_cnt());
     assert_eq!(0, g.link_cnt());
     assert_eq!(g.all_vertices().count(), 4);
@@ -118,7 +118,7 @@ S a * LN:i:100
 S b * LN:i:200
 L a + b + 10M
 ";
-    let g = Graph::read(&s.replace(" ", "\t"));
+    let g = Graph::read(&s.replace(' ', "\t"));
     assert_eq!(2, g.node_cnt());
     assert_eq!(1, g.link_cnt());
     let v = Vertex::forward(g.name2id("a"));
@@ -146,7 +146,7 @@ S a * LN:i:100
 S b * LN:i:200
 L a + b + 100M
 ";
-    Graph::read(&s.replace(" ", "\t"));
+    Graph::read(&s.replace(' ', "\t"));
 }
 
 #[test]
@@ -157,7 +157,7 @@ S b * LN:i:200
 L a + b + 100M
 L b - a - 50M
 ";
-    let g = Graph::read_sanitize(&s.replace(" ", "\t"));
+    let g = Graph::read_sanitize(&s.replace(' ', "\t"));
     assert_eq!(2, g.node_cnt());
     assert_eq!(1, g.link_cnt());
     assert_eq!(99, g.all_links().next().unwrap().overlap);
