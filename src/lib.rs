@@ -155,6 +155,11 @@ impl TrioSettings {
             assert!(solid_ratio <= self.marker_ratio,
                 "--solid-ratio can't be set to a value higher than --marker-ratio"
             );
+
+            if solid_ratio < self.issue_ratio.unwrap_or(self.marker_ratio) {
+                warn!("Specified --solid-ratio value is smaller than --issue-ratio. \
+                    Please double-check the logic and consider specifying smaller --issue-ratio.");
+            }
         }
     }
 }
