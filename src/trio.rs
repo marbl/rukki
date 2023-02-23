@@ -177,6 +177,8 @@ pub struct GroupAssignmentSettings {
     pub assign_sparsity: usize,
     /// Sets minimal marker excess for assigning a parental group to <value>:1
     pub assign_ratio: f64,
+    /// Sets minimal marker excess for assigning a parental group of solid nodes to <value>:1
+    pub solid_ratio: f64,
     /// Minimal node length for assigning ISSUE label
     pub issue_len: usize,
     /// Minimal number of markers for assigning ISSUE label, will typically be set to a value >= assign_cnt
@@ -193,6 +195,7 @@ impl Default for GroupAssignmentSettings {
             assign_cnt: 10,
             assign_sparsity: 10_000,
             assign_ratio: 5.,
+            solid_ratio: 5.,
             issue_len: 50_000,
             issue_cnt: 10,
             issue_sparsity: 10_000,
@@ -205,6 +208,7 @@ pub fn assign_parental_groups(
     g: &Graph,
     trio_infos: &[TrioInfo],
     settings: &GroupAssignmentSettings,
+    solid_len: usize,
 ) -> AssignmentStorage {
     let mut assignments = AssignmentStorage::new();
 
@@ -220,7 +224,9 @@ pub fn assign_parental_groups(
         let tot = x + y;
         tot >= settings.assign_cnt
             && node_len <= tot * settings.assign_sparsity
-            && (x as f64) > settings.assign_ratio * (y as f64) - 1e-6
+            && ((x as f64) > settings.assign_ratio * (y as f64) - 1e-6
+                || (node_len > solid_len
+                    && (x as f64) > settings.solid_ratio * (y as f64) - 1e-6))
     };
 
     let issue_node_f = |x: usize, y: usize, node_len: usize| {

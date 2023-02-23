@@ -31,6 +31,7 @@ fn main() {
     match &args.subcmd {
         Commands::Trio(settings) => {
             info!("Running trio marker analysis");
+            settings.validate();
 
             match rukki::run_trio_analysis(settings) {
                 Ok(()) => info!("Success"),

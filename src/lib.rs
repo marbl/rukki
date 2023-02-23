@@ -84,6 +84,11 @@ pub struct TrioSettings {
     #[clap(long, default_value_t = 500_000)]
     pub solid_len: usize,
 
+    /// Sets minimal marker excess for assigning a parental group of solid nodes to <value>:1.
+    /// Must be <= marker_ratio (by default == marker_ratio)
+    #[clap(long)]
+    pub solid_ratio: Option<f64>,
+
     /// Minimal node length for assigning ISSUE label
     #[clap(long, default_value_t = 50_000)]
     pub issue_len: usize,
@@ -136,6 +141,22 @@ pub struct TrioSettings {
     /// Default gap size, which will be output in cases where reasonable estimate is not possible or (more likely) hasn't been implemented yet.
     #[clap(long, default_value_t = 5000)]
     default_gap_size: usize,
+}
+
+impl TrioSettings {
+    pub fn validate(&self) {
+        if let Some(issue_ratio) = self.issue_ratio {
+            assert!(issue_ratio <= self.marker_ratio,
+                "--issue-ratio can't be set to a value higher than --marker-ratio"
+            );
+        }
+
+        if let Some(solid_ratio) = self.solid_ratio {
+            assert!(solid_ratio <= self.marker_ratio,
+                "--solid-ratio can't be set to a value higher than --marker-ratio"
+            );
+        }
+    }
 }
 
 fn read_graph(graph_fn: &PathBuf) -> Result<Graph, Box<dyn Error>> {
@@ -353,11 +374,13 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
             assign_cnt: settings.marker_cnt,
             assign_sparsity: settings.marker_sparsity,
             assign_ratio: settings.marker_ratio,
+            solid_ratio: settings.solid_ratio.unwrap_or(settings.marker_ratio),
             issue_len: settings.issue_len,
             issue_cnt: settings.issue_cnt.unwrap_or(settings.marker_cnt),
             issue_sparsity: settings.issue_sparsity.unwrap_or(settings.marker_sparsity),
             issue_ratio: settings.issue_ratio.unwrap_or(settings.marker_ratio),
         },
+        settings.solid_len,
     );
 
     let raw_cnts = trio_infos
