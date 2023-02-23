@@ -409,11 +409,13 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     }
 
     let solid_cov_est = weighted_mean_solid_cov(&g, settings.solid_len);
-    if solid_cov_est == 0.
-        && (settings.suspect_homozygous_cov_coeff > 0.
-            || settings.solid_homozygous_cov_coeff > 0.) {
-        warn!("Looks like the graph didn't have coverage information, which we were hoping to use. \
-                Consider providing it or changing --suspect-homozygous-cov-coeff and --solid-homozygous-cov-coeff");
+    if settings.suspect_homozygous_cov_coeff > 0.
+            || settings.solid_homozygous_cov_coeff > 0. {
+        info!("Coverage estimate based on long nodes was {solid_cov_est}");
+        if solid_cov_est == 0. {
+            warn!("Looks like the graph didn't have coverage information, which we were hoping to use. \
+                    Consider providing it or changing --suspect-homozygous-cov-coeff and --solid-homozygous-cov-coeff");
+        }
     }
 
     let suspect_homozygous_cov = if settings.suspect_homozygous_cov_coeff < 0. {
@@ -422,7 +424,7 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         Some(settings.suspect_homozygous_cov_coeff * solid_cov_est)
     };
 
-    let solid_homozygous_cov = settings.suspect_homozygous_cov_coeff * solid_cov_est;
+    let solid_homozygous_cov = settings.solid_homozygous_cov_coeff * solid_cov_est;
 
     info!("Marking homozygous nodes");
     let assigner =
