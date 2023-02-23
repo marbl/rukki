@@ -300,12 +300,17 @@ pub fn parse_node_assignments(
     Ok(assignments)
 }
 
+const MAX_COMPONENT_SIZE: usize = 100;
+
 pub struct HomozygousAssigner<'a> {
     g: &'a Graph,
     assignments: AssignmentStorage,
     trusted_len: usize,
-    min_suspect_cov: f64,
+    min_suspect_cov: Option<f64>,
+    solid_len: usize,
+    min_solid_cov: f64,
     max_assign_len: usize,
+    complex_component_size: usize,
     considered: HashSet<usize>,
 }
 
@@ -314,7 +319,9 @@ impl<'a> HomozygousAssigner<'a> {
         g: &'a Graph,
         assignments: AssignmentStorage,
         trusted_len: usize,
-        min_suspect_cov: f64,
+        min_suspect_cov: Option<f64>,
+        solid_len: usize,
+        min_solid_cov: f64,
         max_assign_len: usize,
     ) -> HomozygousAssigner<'a> {
         HomozygousAssigner {
@@ -322,38 +329,38 @@ impl<'a> HomozygousAssigner<'a> {
             assignments,
             trusted_len,
             min_suspect_cov,
+            solid_len,
+            min_solid_cov,
             max_assign_len,
+            complex_component_size: MAX_COMPONENT_SIZE,
             considered: HashSet::new(),
         }
     }
 
     fn can_assign(&self, node_id: usize) -> bool {
-        if self.g.node_length(node_id) > self.max_assign_len {
+        let n = self.g.node(node_id);
+        if n.length > self.max_assign_len {
             return false;
         }
+
         match self.assignments.group(node_id) {
-            None => true,
+            None => {
+                n.length < self.solid_len
+                    || n.coverage > self.min_solid_cov - 1e-5
+                },
             //TODO think if we should be able to also reclassify ISSUE nodes
             Some(TrioGroup::ISSUE) => false,
             //TODO can probably be removed / asserted if only single round allowed
             Some(TrioGroup::HOMOZYGOUS) => true,
             _ => {
-                let n = self.g.node(node_id);
-                if n.length >= self.trusted_len {
-                    return false;
+                n.length < self.trusted_len
+                    && self.min_suspect_cov.is_some()
+                    && n.coverage > self.min_suspect_cov.unwrap() - 1e-5
                 }
-                if self.min_suspect_cov < 0. {
-                    false
-                } else {
-                    assert!(self.min_suspect_cov >= 0.);
-                    //also handles by 0. threshold case even if all coverages are 0.
-                    n.coverage > self.min_suspect_cov - 1e-5
-                }
-            }
         }
     }
 
-    fn exclude_complicated(&mut self, max_component_size: usize) {
+    fn exclude_complicated(&mut self) {
         let mut accounted_long_starts = HashSet::new();
         for v in self.g.all_vertices() {
             if self.g.vertex_length(v) < self.trusted_len || accounted_long_starts.contains(&v) {
@@ -362,7 +369,7 @@ impl<'a> HomozygousAssigner<'a> {
 
             let short_node_component =
                 dfs::ShortNodeComponent::ahead_from_long(self.g, v, self.trusted_len);
-            if short_node_component.inner.len() > max_component_size {
+            if short_node_component.inner.len() >= self.complex_component_size {
                 for w in short_node_component.inner {
                     self.considered.insert(w.node_id);
                 }
@@ -376,11 +383,10 @@ impl<'a> HomozygousAssigner<'a> {
         }
     }
 
-    //TODO consider preventing doing multiple rounds
-    fn marking_round(&mut self) -> usize {
-        const MAX_COMPONENT_SIZE: usize = 100;
-        self.considered.clear();
-        self.exclude_complicated(MAX_COMPONENT_SIZE);
+    pub fn run(mut self) -> AssignmentStorage {
+        assert!(self.considered.is_empty());
+
+        self.exclude_complicated();
         //FIXME call only on the outer bubble chains
         let mut marked = 0;
         //TODO think how it should work with generalized super-bubbles
@@ -394,7 +400,8 @@ impl<'a> HomozygousAssigner<'a> {
                 marked += self.mark_vertex_and_chains(v);
             }
         }
-        marked
+        info!("Marked {}", marked);
+        self.assignments
     }
 
     fn mark_vertex_and_chains(&mut self, v: Vertex) -> usize {
@@ -469,21 +476,6 @@ impl<'a> HomozygousAssigner<'a> {
     }
 }
 
-pub fn assign_homozygous(
-    g: &Graph,
-    assignments: AssignmentStorage,
-    trusted_len: usize,
-    min_suspect_cov: f64,
-    max_assign_len: usize,
-) -> AssignmentStorage {
-    info!("Marking homozygous nodes");
-    let mut assigner =
-        HomozygousAssigner::new(g, assignments, trusted_len, min_suspect_cov, max_assign_len);
-    let marked = assigner.marking_round();
-    info!("Marked {}", marked);
-    assigner.assignments
-}
-
 #[cfg(test)]
 mod tests {
     use crate::graph::*;
@@ -503,7 +495,7 @@ mod tests {
         let g = Graph::read(&fs::read_to_string(graph_fn).unwrap());
         let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
-        let assigner = trio::HomozygousAssigner::new(&g, assignments, 100_000, -1., usize::MAX);
+        let assigner = trio::HomozygousAssigner::new(&g, assignments, 100_000, None, 500_000, 1.5, usize::MAX);
         assert!(assigner.check_homozygous_fork_ahead(Vertex::forward(g.name2id("utig4-1237"))));
         assert!(assigner.check_homozygous_fork_ahead(Vertex::reverse(g.name2id("utig4-1237"))));
         assert!(!assigner.check_homozygous_fork_ahead(Vertex::forward(g.name2id("utig4-1554"))));

@@ -708,7 +708,8 @@ impl<'a> HaploSearcher<'a> {
                     let filtered_connectors = direct_connectors
                                             .iter()
                                             .filter(|&c| !self.used.contains(c.node_id))
-                                            .filter(|&c| cov(c) > ((cov(&v) + cov(&w)) / 2.) / self.settings.good_side_cov_gap - 1e-5)
+                                            .filter(|&c| self.settings.good_side_cov_gap == 0.
+                                                || self.settings.good_side_cov_gap * cov(c) > (cov(&v) + cov(&w)) / 2. - 1e-5)
                                             .cloned()
                                             .collect::<Vec<Vertex>>();
 

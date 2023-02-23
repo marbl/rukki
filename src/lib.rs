@@ -71,13 +71,14 @@ pub struct TrioSettings {
     #[clap(long, default_value_t = 200_000)]
     pub trusted_len: usize,
 
-    /// Nodes with coverage below <coeff> * <weighted mean coverage of 'solid' nodes> can not be 'reclassified' as homozygous (negative turns off reclassification, 0. disables coverage check)
+    /// Nodes with coverage below <coeff> * <weighted mean coverage of 'solid' nodes> can not be 'reclassified' as homozygous.
+    /// Negative turns off reclassification, 0. disables coverage check
     #[clap(long, default_value_t = 1.5)]
     pub suspect_homozygous_cov_coeff: f64,
 
     /// Longer nodes can not be classified as homozygous
     #[clap(long, default_value_t = 2_000_000)]
-    pub homozygous_max_len: usize,
+    pub max_homozygous_len: usize,
 
     //TODO maybe check that it is > trusted_len
     /// Longer nodes are unlikely to represent repeats, polymorphic variants, etc (used to seed and guide the path search)
@@ -88,6 +89,11 @@ pub struct TrioSettings {
     /// Must be <= marker_ratio (by default == marker_ratio)
     #[clap(long)]
     pub solid_ratio: Option<f64>,
+
+    /// Solid nodes with coverage below <coeff> * <weighted mean coverage of 'solid' nodes> can not be classified as homozygous.
+    /// 0. disables check
+    #[clap(long, default_value_t = 1.5)]
+    pub solid_homozygous_cov_coeff: f64,
 
     /// Minimal node length for assigning ISSUE label
     #[clap(long, default_value_t = 50_000)]
@@ -109,8 +115,8 @@ pub struct TrioSettings {
     #[clap(long)]
     pub try_fill_bubbles: bool,
 
-    /// Do not fill bubble if source or sink is non-solid, non-homozygous and has coverage above <coeff> * <weighted mean coverage of 'solid' nodes>
-    /// (0. fails coverage check, negative makes it to always pass)
+    /// Do not fill bubble if source or sink is non-solid, non-homozygous and has coverage above <coeff> * <weighted mean coverage of 'solid' nodes>.
+    /// Negative disables check, 0. makes it fail
     #[clap(long, default_value_t = 1.5)]
     pub max_unique_cov_coeff: f64,
 
@@ -130,7 +136,8 @@ pub struct TrioSettings {
     #[clap(long)]
     het_fill_bubble_diff: Option<usize>,
 
-    /// During bubble filling Ignore simple sides of bubbles with coverage less than source/sink average divided by this value
+    /// During bubble filling ignore simple sides of bubbles with coverage less than source/sink average divided by this value
+    /// 0. disables check
     #[clap(long, default_value_t = 5.0)]
     good_side_cov_gap: f64,
 
@@ -161,6 +168,9 @@ impl TrioSettings {
                     Please double-check the logic and consider specifying smaller --issue-ratio.");
             }
         }
+
+        assert!(self.good_side_cov_gap >= 0.);
+        assert!(self.solid_homozygous_cov_coeff >= 0.);
     }
 }
 
@@ -399,22 +409,29 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     }
 
     let solid_cov_est = weighted_mean_solid_cov(&g, settings.solid_len);
-    let suspect_homozygous_cov = if settings.suspect_homozygous_cov_coeff <= 0. {
-        settings.suspect_homozygous_cov_coeff
+    if solid_cov_est == 0.
+        && (settings.suspect_homozygous_cov_coeff > 0.
+            || settings.solid_homozygous_cov_coeff > 0.) {
+        warn!("Looks like the graph didn't have coverage information, which we were hoping to use. \
+                Consider providing it or changing --suspect-homozygous-cov-coeff and --solid-homozygous-cov-coeff");
+    }
+
+    let suspect_homozygous_cov = if settings.suspect_homozygous_cov_coeff < 0. {
+        None
     } else {
-        if solid_cov_est == 0. {
-            warn!("Looks like the graph didn't have coverage information, which we were hoping to use. Consider providing it or changing --suspect-homozygous-cov-coeff");
-        }
-        settings.suspect_homozygous_cov_coeff * solid_cov_est
+        Some(settings.suspect_homozygous_cov_coeff * solid_cov_est)
     };
 
-    let assignments = trio::assign_homozygous(
-        &g,
-        assignments,
-        settings.trusted_len,
-        suspect_homozygous_cov,
-        settings.homozygous_max_len,
-    );
+    let solid_homozygous_cov = settings.suspect_homozygous_cov_coeff * solid_cov_est;
+
+    info!("Marking homozygous nodes");
+    let assigner =
+        trio::HomozygousAssigner::new(&g, assignments,
+            settings.trusted_len, suspect_homozygous_cov,
+            settings.solid_len, solid_homozygous_cov,
+            settings.max_homozygous_len);
+
+    let assignments = assigner.run();
 
     let mut search_settings = HaploSearchSettings {
         solid_len: settings.solid_len,
