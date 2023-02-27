@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use log::{debug, info, warn};
 use std::collections::HashMap;
 use std::{collections::HashSet, path::PathBuf};
@@ -18,7 +17,7 @@ pub mod trio_walk;
 
 pub use graph::*;
 
-use crate::trio::{GroupAssignmentSettings, TrioGroup, assign_short_node_tangles};
+use crate::trio::{GroupAssignmentSettings, TrioGroup, assign_short_node_tangles, TangleAssignmentSettings};
 use crate::trio_walk::HaploSearcher;
 
 //TODO use PathBuf
@@ -26,100 +25,100 @@ use crate::trio_walk::HaploSearcher;
 pub struct TrioSettings {
     /// GFA file
     #[clap(short, long)]
-    pub graph: PathBuf,
+    graph: PathBuf,
 
     /// Parental markers file
     #[clap(short, long)]
-    pub markers: PathBuf,
+    markers: PathBuf,
 
     /// Marker-based annotation output file
     #[clap(long)]
-    pub init_assign: Option<PathBuf>,
+    init_assign: Option<PathBuf>,
 
     /// Refined annotation output file
     #[clap(long)]
-    pub refined_assign: Option<PathBuf>,
+    refined_assign: Option<PathBuf>,
 
     /// Final annotation output file
     #[clap(long)]
-    pub final_assign: Option<PathBuf>,
+    final_assign: Option<PathBuf>,
 
     /// Comma separated haplotype names to be used in outputs (default: "mat,pat")
     #[clap(long, default_value_t = String::from("mat,pat"))]
-    pub hap_names: String,
+    hap_names: String,
 
     /// Marker-assisted extracted haplo-paths
     #[clap(long, short)]
-    pub paths: Option<PathBuf>,
+    paths: Option<PathBuf>,
 
     /// Use GAF ([<>]<name1>)+ format for paths
     #[clap(long)]
-    pub gaf_format: bool,
+    gaf_format: bool,
 
     /// Minimal number of parent-specific markers required for assigning parental group to a node
     #[clap(long, default_value_t = 10)]
-    pub marker_cnt: usize,
+    marker_cnt: usize,
 
     /// Require at least (node_length / <value>) markers within the node for parental group assignment
     #[clap(long, default_value_t = 10_000)]
-    pub marker_sparsity: usize,
+    marker_sparsity: usize,
 
     /// Sets minimal marker excess for assigning a parental group to <value>:1
     #[clap(long, default_value_t = 5.0)]
-    pub marker_ratio: f64,
+    marker_ratio: f64,
 
     /// Longer nodes are unlikely to be spurious and likely to be reliably assigned based on markers (used in HOMOZYGOUS node labeling)
     #[clap(long, default_value_t = 200_000)]
-    pub trusted_len: usize,
+    trusted_len: usize,
 
     /// Nodes with coverage below <coeff> * <weighted mean coverage of 'solid' nodes> can not be 'reclassified' as homozygous.
     /// Negative turns off reclassification, 0. disables coverage check
     #[clap(long, default_value_t = 1.5)]
-    pub suspect_homozygous_cov_coeff: f64,
+    suspect_homozygous_cov_coeff: f64,
 
     /// Longer nodes can not be classified as homozygous
     #[clap(long, default_value_t = 2_000_000)]
-    pub max_homozygous_len: usize,
+    max_homozygous_len: usize,
 
     //TODO maybe check that it is > trusted_len
     /// Longer nodes are unlikely to represent repeats, polymorphic variants, etc (used to seed and guide the path search)
     #[clap(long, default_value_t = 500_000)]
-    pub solid_len: usize,
+    solid_len: usize,
 
     /// Sets minimal marker excess for assigning a parental group of solid nodes to <value>:1.
     /// Must be <= marker_ratio (by default == marker_ratio)
     #[clap(long)]
-    pub solid_ratio: Option<f64>,
+    solid_ratio: Option<f64>,
 
     /// Solid nodes with coverage below <coeff> * <weighted mean coverage of 'solid' nodes> can not be classified as homozygous.
     /// 0. disables check
     #[clap(long, default_value_t = 1.5)]
-    pub solid_homozygous_cov_coeff: f64,
+    solid_homozygous_cov_coeff: f64,
 
     /// Minimal node length for assigning ISSUE label
     #[clap(long, default_value_t = 50_000)]
-    pub issue_len: usize,
+    issue_len: usize,
 
     /// Minimal number of markers for assigning ISSUE label (by default == marker_cnt, will typically be set to a value >= marker_cnt)
     #[clap(long)]
-    pub issue_cnt: Option<usize>,
+    issue_cnt: Option<usize>,
 
     /// Require at least (node_length / <value>) markers for assigning ISSUE label (by default == marker_sparsity, will typically be set to a value >= marker_sparsity)
     #[clap(long)]
-    pub issue_sparsity: Option<usize>,
+    issue_sparsity: Option<usize>,
 
     /// Require primary marker excess BELOW <value>:1 for assigning ISSUE label. Must be <= marker_ratio (by default == marker_ratio)
     #[clap(long)]
-    pub issue_ratio: Option<f64>,
+    issue_ratio: Option<f64>,
 
     /// Try to fill in small ambiguous bubbles
     #[clap(long)]
-    pub try_fill_bubbles: bool,
+    try_fill_bubbles: bool,
 
     /// Do not fill bubble if source or sink is non-solid, non-homozygous and has coverage above <coeff> * <weighted mean coverage of 'solid' nodes>.
     /// Negative disables check, 0. makes it fail
     #[clap(long, default_value_t = 1.5)]
-    pub max_unique_cov_coeff: f64,
+    max_unique_cov_coeff: f64,
 
     /// Bubbles including a longer alternative sequence will not be filled
     #[clap(long, default_value_t = 50_000)]
@@ -149,6 +148,23 @@ pub struct TrioSettings {
     /// Default gap size, which will be output in cases where reasonable estimate is not possible or (more likely) hasn't been implemented yet.
     #[clap(long, default_value_t = 5000)]
     default_gap_size: usize,
+
+    /// Assign tangles flanked by solid nodes from the same class
+    #[clap(long)]
+    assign_tangles: bool,
+
+    /// Allow dead-end nodes in the tangles
+    #[clap(long)]
+    tangle_allow_deadend: bool,
+
+    /// Check that inner tangle nodes are either unassigned or assigned to correct class
+    #[clap(long)]
+    tangle_check_inner: bool,
+
+    /// Prevent reassignment of nodes
+    #[clap(long)]
+    tangle_prevent_reassign: bool,
+
 }
 
 impl TrioSettings {
@@ -477,8 +493,15 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
 
     let assignments = augment_by_path_search(&g, assignments, search_settings);
 
-    let assignments = assign_short_node_tangles(&g, assignments, search_settings.solid_len,
-        true, false, true);
+    let assignments = if settings.assign_tangles {
+        assign_short_node_tangles(&g, assignments, settings.solid_len, TangleAssignmentSettings {
+            allow_deadend: settings.tangle_allow_deadend,
+            check_inner: settings.tangle_check_inner,
+            allow_reassign: !settings.tangle_prevent_reassign,
+        })
+    } else {
+        assignments
+    };
 
     if let Some(output) = &settings.refined_assign {
         info!("Writing refined node annotation to {}", output.to_str().unwrap());

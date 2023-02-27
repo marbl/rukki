@@ -476,13 +476,27 @@ impl<'a> HomozygousAssigner<'a> {
     }
 }
 
+pub struct TangleAssignmentSettings {
+    pub allow_deadend: bool,
+    pub check_inner: bool,
+    pub allow_reassign: bool,
+}
+
+impl Default for TangleAssignmentSettings {
+    fn default() -> Self {
+        Self {
+            allow_deadend: false,
+            check_inner: false,
+            allow_reassign: true,
+        }
+    }
+}
+
 pub fn assign_short_node_tangles(
         g: &Graph,
         mut assignments: AssignmentStorage,
         solid_len: usize,
-        no_deadend_only: bool,
-        check_inner: bool,
-        allow_reassign: bool,
+        settings: TangleAssignmentSettings
 ) -> AssignmentStorage {
     let mut considered_boundary = HashSet::<Vertex>::new();
     for v in g.all_vertices() {
@@ -497,7 +511,7 @@ pub fn assign_short_node_tangles(
                 considered_boundary.insert(s.rc());
             }
 
-            if no_deadend_only && comp.has_deadends {
+            if !settings.allow_deadend && comp.has_deadends {
                 continue
             }
 
@@ -510,7 +524,7 @@ pub fn assign_short_node_tangles(
                 continue;
             }
 
-            if check_inner
+            if settings.check_inner
                 && comp.inner.iter().any(|&x| group != assignments.group(x.node_id).unwrap_or(group)) {
                 continue
             }
@@ -520,7 +534,7 @@ pub fn assign_short_node_tangles(
                     None => {assignments.assign(w.node_id, group, "TangleAssignment");}
                     Some(g) if g == group => {}
                     _ => {
-                        if allow_reassign {
+                        if settings.allow_reassign {
                             assignments.assign(w.node_id, group, "TangleReAssignment");
                         }
                     }
