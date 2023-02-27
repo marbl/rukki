@@ -17,7 +17,7 @@ pub mod trio_walk;
 
 pub use graph::*;
 
-use crate::trio::{GroupAssignmentSettings, TrioGroup};
+use crate::trio::{GroupAssignmentSettings, TrioGroup, assign_short_node_tangles};
 use crate::trio_walk::HaploSearcher;
 
 //TODO use PathBuf
@@ -188,7 +188,7 @@ fn output_coloring(
     g: &Graph,
     assignments: &trio::AssignmentStorage,
     file_name: &PathBuf,
-    hap_names: &(String, String),
+    hap_names: &(&str, &str),
 ) -> Result<(), std::io::Error> {
     let mut output = BufWriter::new(File::create(file_name)?);
     writeln!(output, "node\tassignment\tlength\tinfo\tcolor")?;
@@ -259,7 +259,7 @@ fn augment_assignments(
                     tentative_group,
                     g.name(node_id)
                 );
-                assignments.assign(node_id, tentative_group, String::from("PathSearch"));
+                assignments.assign(node_id, tentative_group, "PathSearch");
             }
             Some(init_group) => {
                 assert!(init_group == tentative_group || init_group == trio::TrioGroup::HOMOZYGOUS)
@@ -281,12 +281,12 @@ fn weighted_mean_solid_cov(g: &Graph, solid_len_thr: usize) -> f64 {
     total_cov / total_len as f64
 }
 
-fn parse_hap_names(hap_names_s: &str) -> Option<(String, String)> {
+fn parse_hap_names(hap_names_s: &str) -> Option<(&str, &str)> {
     let mut split = hap_names_s.split(',');
-    Some((String::from(split.next()?), String::from(split.next()?)))
+    Some((split.next()?, split.next()?))
 }
 
-fn group_str(o_g: Option<TrioGroup>, hap_names: &(String, String)) -> &str {
+fn group_str<'a>(o_g: Option<TrioGroup>, hap_names: &'a (&'a str, &'a str)) -> &'a str {
     match o_g {
         Some(TrioGroup::MATERNAL) => &hap_names.0,
         Some(TrioGroup::PATERNAL) => &hap_names.1,
@@ -302,7 +302,7 @@ pub fn write_paths(g: &Graph,
     node_usage: &trio::AssignmentStorage,
     output: &PathBuf,
     gaf_format: bool,
-    hap_names: &(String, String)) -> Result<(), std::io::Error> {
+    hap_names: &(&str, &str)) -> Result<(), std::io::Error> {
     //FIXME buffer
     let mut output = File::create(output)?;
     writeln!(output, "name\tpath\tassignment")?;
@@ -475,6 +475,9 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     }
 
     let assignments = augment_by_path_search(&g, assignments, search_settings);
+
+    let assignments = assign_short_node_tangles(&g, assignments, search_settings.solid_len,
+        true, false, true);
 
     if let Some(output) = &settings.refined_assign {
         info!("Writing refined node annotation to {}", output.to_str().unwrap());

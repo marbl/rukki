@@ -131,8 +131,8 @@ impl AssignmentStorage {
         false
     }
 
-    pub fn assign(&mut self, node_id: usize, group: TrioGroup, info: String) -> Option<Assignment> {
-        self.storage.insert(node_id, Assignment { group, info })
+    pub fn assign<S: Into<String>>(&mut self, node_id: usize, group: TrioGroup, info: S) -> Option<Assignment> {
+        self.storage.insert(node_id, Assignment { group, info: info.into() })
     }
 
     pub fn update_group(&mut self, node_id: usize, group: TrioGroup) {
@@ -142,7 +142,7 @@ impl AssignmentStorage {
                 self.storage.get_mut(&node_id).unwrap().group = TrioGroup::blend(exist_group, group)
             }
             None => {
-                self.assign(node_id, group, String::new());
+                self.assign(node_id, group, "");
             }
         };
     }
@@ -422,7 +422,7 @@ impl<'a> HomozygousAssigner<'a> {
             self.assignments.assign(
                 v.node_id,
                 TrioGroup::HOMOZYGOUS,
-                String::from("HomozygousAssigner"),
+                "HomozygousAssigner",
             );
             1
         } else {
@@ -474,6 +474,61 @@ impl<'a> HomozygousAssigner<'a> {
                     .all(|&l| visited_vertices.contains(&l.start))
         })
     }
+}
+
+pub fn assign_short_node_tangles(
+        g: &Graph,
+        mut assignments: AssignmentStorage,
+        solid_len: usize,
+        no_deadend_only: bool,
+        check_inner: bool,
+        allow_reassign: bool,
+) -> AssignmentStorage {
+    let mut considered_boundary = HashSet::<Vertex>::new();
+    for v in g.all_vertices() {
+        if !considered_boundary.contains(&v)
+            && g.vertex_length(v) >= solid_len {
+            let comp = dfs::ShortNodeComponent::ahead_from_long(g, v, solid_len);
+
+            for s in comp.sources.iter() {
+                considered_boundary.insert(*s);
+            }
+            for s in comp.sinks.iter() {
+                considered_boundary.insert(s.rc());
+            }
+
+            if no_deadend_only && comp.has_deadends {
+                continue
+            }
+
+            if !assignments.is_definite(v.node_id) {
+                continue;
+            }
+            let group = assignments.group(v.node_id).unwrap();
+
+            if comp.sources.iter().chain(comp.sinks.iter()).any(|&x| Some(group) != assignments.group(x.node_id)) {
+                continue;
+            }
+
+            if check_inner
+                && comp.inner.iter().any(|&x| group != assignments.group(x.node_id).unwrap_or(group)) {
+                continue
+            }
+
+            for w in comp.inner.iter() {
+                match assignments.group(w.node_id) {
+                    None => {assignments.assign(w.node_id, group, "TangleAssignment");}
+                    Some(g) if g == group => {}
+                    _ => {
+                        if allow_reassign {
+                            assignments.assign(w.node_id, group, "TangleReAssignment");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assignments
 }
 
 #[cfg(test)]
