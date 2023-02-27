@@ -147,30 +147,32 @@ impl<'a> ExtensionHelper<'a> {
         debug!("Component -- {}", component.print(self.g));
         debug!("Looking for compatible sink and checking uniqueness");
 
-        //special hairpin case
-        if component.sources.len() == 2
-            && component
-                .sources
-                .iter()
-                .all(|x| self.compatible_assignment(x.node_id, group))
-            && component
-                .sinks
-                .iter()
-                .map(|&x| x.rc())
-                .collect::<HashSet<Vertex>>()
-                == component.sources
-        {
-            //let it = component.sinks.iter().copied().filter(|&x| x != v.rc());
-            //let a = only_or_none(it);
-            debug!("Special hairpin case");
-            return only_or_none(component.sinks.iter().copied().filter(|&x| x != v.rc()));
-        }
-
-        debug!("Identifying source");
-        let s = self.only_compatible_of_bearable(component.sources.iter().copied(), group)?;
+        ////in-haplotype hairpin case
+        //if component.sources.len() == 2
+        //    && component
+        //        .sources
+        //        .iter()
+        //        .all(|x| self.compatible_assignment(x.node_id, group))
+        //    && component
+        //        .sinks
+        //        .iter()
+        //        .map(|&x| x.rc())
+        //        .collect::<HashSet<Vertex>>()
+        //        == component.sources
+        //{
+        //    //let it = component.sinks.iter().copied().filter(|&x| x != v.rc());
+        //    //let a = only_or_none(it);
+        //    debug!("Special hairpin case");
+        //    return only_or_none(component.sinks.iter().copied().filter(|&x| x != v.rc()));
+        //}
 
         debug!("Identifying sink");
-        let t = self.only_compatible_of_bearable(component.sinks.iter().copied(), group)?;
+        //excluding self to handle hairpins
+        let t = self.only_compatible_of_bearable(component.sinks.iter().copied().filter(|&x| x != v.rc()), group)?;
+
+        debug!("Identifying source");
+        //excluding reverse-complement to handle hairpins
+        let s = self.only_compatible_of_bearable(component.sources.iter().copied().filter(|&x| x != t.rc()), group)?;
 
         assert!(s == v);
         if s.node_id == t.node_id {
