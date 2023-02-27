@@ -1,4 +1,5 @@
 extern crate log;
+use itertools::Itertools;
 
 use rukki::trio::*;
 use rukki::*;
@@ -38,11 +39,11 @@ fn haplo_paths() {
     let augment_assign = augment_by_path_search(&g, assignments, settings);
 
     let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
-    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher
+    let mut answer = haplo_searcher
         .find_all()
         .into_iter()
         .map(|(p, _, group)| (group, p.print(&g)))
-        .collect();
+        .collect_vec();
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,
@@ -81,11 +82,11 @@ fn augment_by_search() {
 
     let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
 
-    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher
+    let mut answer = haplo_searcher
         .find_all()
         .into_iter()
         .map(|(p, _, group)| (group, p.print(&g)))
-        .collect();
+        .collect_vec();
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,
@@ -123,11 +124,11 @@ fn bubble_filling() {
 
     let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
 
-    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher
+    let mut answer = haplo_searcher
         .find_all()
         .into_iter()
         .map(|(p, _, group)| (group, p.print(&g)))
-        .collect();
+        .collect_vec();
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,
@@ -170,11 +171,11 @@ fn haplo_paths_2() {
 
     let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
 
-    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher
+    let mut answer = haplo_searcher
         .find_all()
         .into_iter()
         .map(|(p, _, group)| (group, p.print(&g)))
-        .collect();
+        .collect_vec();
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,
@@ -210,11 +211,11 @@ fn haplo_paths_3() {
 
     let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
 
-    let mut answer: Vec<(TrioGroup, String)> = haplo_searcher
+    let mut answer = haplo_searcher
         .find_all()
         .into_iter()
         .map(|(p, _, group)| (group, p.print(&g)))
-        .collect();
+        .collect_vec();
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,

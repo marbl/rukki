@@ -3,6 +3,7 @@
 //use std::fs;
 //use std::fs::File;
 //use std::io::Write;
+//use itertools::Itertools;
 ////FIXME populate with small corner cases.
 
 //#[test]
@@ -17,6 +18,6 @@
 //    write!(output, "{}", cond.as_gfa()).unwrap();
 //    let mut output = File::create(scc_out_file).unwrap();
 //    for (scc_id, scc) in sccs.iter().enumerate() {
-//        write!(output, "scc_{}: {}\n", scc_id, scc.iter().map(|&w| g.v_str(w)).collect::<Vec<String>>().join(",")).unwrap();
+//        write!(output, "scc_{}: {}\n", scc_id, scc.iter().map(|&w| g.v_str(w)).join(",")).unwrap();
 //    }
 //}

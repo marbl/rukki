@@ -754,18 +754,13 @@ impl Path {
     }
 
     pub fn print(&self, g: &Graph) -> String {
-        //self.v_storage.iter().map(|&v| g.v_str(v)).collect::<Vec<String>>().join(",")
+        //self.v_storage.iter().map(|&v| g.v_str(v)).join(",")
         self.print_format(g, false)
     }
 
-    //pub fn print_gaf(&self, g: &Graph) -> String {
-    //    self.v_storage.iter().map(|&v| g.gaf_str(v)).collect::<Vec<String>>().join("")
-    //}
-
     //fn print_ungapped(g: &Graph, vertices: &[Vertex], gaf: bool) -> String {
     //    let delim = if gaf { "" } else { "," };
-    //    vertices.iter().map(|&v| g.v_str_format(v, gaf))
-    //        .collect::<Vec<String>>().join(delim)
+    //    vertices.iter().map(|&v| g.v_str_format(v, gaf)).join(delim)
     //}
 
     pub fn print_format(&self, g: &Graph, gaf: bool) -> String {

@@ -3,6 +3,7 @@ use super::only_or_none;
 use crate::graph::*;
 use log::debug;
 use std::collections::{HashMap, HashSet};
+use itertools::Itertools;
 
 //Implementing Kosaraju-Sharir algorithm
 //'trivial' SCCs of individual vertices are not reported
@@ -31,7 +32,6 @@ pub fn strongly_connected(graph: &Graph) -> Vec<Vec<Vertex>> {
                     visited
                         .iter()
                         .map(|&v| graph.v_str(v))
-                        .collect::<Vec<String>>()
                         .join(",")
                 );
 
@@ -132,7 +132,6 @@ pub fn condensation(
                     scc_vertices
                         .iter()
                         .map(|&w| graph.v_str(w))
-                        .collect::<Vec<String>>()
                         .join("")
                 )
             }

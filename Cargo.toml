@@ -9,4 +9,5 @@ edition = "2021"
 log = "0.4.0"
 env_logger = "0.10"
 clap = { version = "4.1", features = ["derive"] }
-os_str_bytes = "6.1.*"
+os_str_bytes = "6.1"
+itertools = "0.10"

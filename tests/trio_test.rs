@@ -1,4 +1,5 @@
 extern crate log;
+use itertools::Itertools;
 
 use rukki::trio::*;
 use rukki::*;
@@ -24,10 +25,10 @@ fn homozygous_assignment() {
 
     let assignments = assigner.run();
 
-    let mut homozygous_names: Vec<&str> = (0..g.node_cnt())
+    let mut homozygous_names = (0..g.node_cnt())
         .filter(|&node_id| assignments.group(node_id) == Some(TrioGroup::HOMOZYGOUS))
         .map(|node_id| g.name(node_id))
-        .collect();
+        .collect_vec();
     homozygous_names.sort();
     assert_eq!(
         &homozygous_names,

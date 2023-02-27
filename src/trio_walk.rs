@@ -4,6 +4,7 @@ use crate::graph_algos::*;
 use crate::trio::*;
 use log::{debug, warn};
 use std::collections::{HashMap, HashSet};
+use itertools::Itertools;
 
 // pub fn reachable_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
 //     let (sinks, mut short_ahead) = sinks_ahead(g, v, node_len_thr);
@@ -82,6 +83,7 @@ impl<'a> ExtensionHelper<'a> {
         // then check that all the vertices are assigned something
         // (other than ISSUE)
         if v_it.clone().all(|v| self.bearable_assignment(v.node_id)) {
+            debug!("{}", v_it.clone().filter(|v| self.compatible_assignment(v.node_id, group)).map(|x| self.g.v_str(x)).join(", "));
             only_or_none(v_it.filter(|v| self.compatible_assignment(v.node_id, group)))
         } else {
             None
@@ -703,7 +705,7 @@ impl<'a> HaploSearcher<'a> {
                     .filter_map(|l1| self.g.connector(l1.end, w))
                     .map(|l2| l2.start)
                     .filter(|tc_v| self.unassigned_or_compatible(tc_v.node_id, group))
-                    .collect::<Vec<Vertex>>();
+                    .collect_vec();
 
             if !direct_connectors.is_empty() {
                 let c = if self.homozygous_bubble(v, w) {
@@ -713,7 +715,7 @@ impl<'a> HaploSearcher<'a> {
                                             .filter(|&c| self.settings.good_side_cov_gap == 0.
                                                 || self.settings.good_side_cov_gap * cov(c) > (cov(&v) + cov(&w)) / 2. - 1e-5)
                                             .cloned()
-                                            .collect::<Vec<Vertex>>();
+                                            .collect_vec();
 
                     if !filtered_connectors.is_empty() {
                         direct_connectors = filtered_connectors;
