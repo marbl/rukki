@@ -305,8 +305,8 @@ fn parse_hap_names(hap_names_s: &str) -> Option<(&str, &str)> {
 
 fn group_str<'a>(o_g: Option<TrioGroup>, hap_names: &'a (&'a str, &'a str)) -> &'a str {
     match o_g {
-        Some(TrioGroup::MATERNAL) => &hap_names.0,
-        Some(TrioGroup::PATERNAL) => &hap_names.1,
+        Some(TrioGroup::MATERNAL) => hap_names.0,
+        Some(TrioGroup::PATERNAL) => hap_names.1,
         Some(TrioGroup::HOMOZYGOUS) => "hom",
         Some(TrioGroup::ISSUE) => "issue",
         _ => "na",
