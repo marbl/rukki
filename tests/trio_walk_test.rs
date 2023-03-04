@@ -3,6 +3,7 @@ use itertools::Itertools;
 
 use rukki::trio::*;
 use rukki::*;
+use rukki::trio_walk::{HaploSearchSettings, HaploSearcher};
 use std::fs;
 
 //fn from_assignment_iterator<'a>(g: &'a Graph, node_assign_it: impl Iterator<Item=(usize, TrioGroup)>)
@@ -22,6 +23,14 @@ use std::fs;
 //            .map(|n| (*n, TrioGroup::PATERNAL))))
 //}
 
+fn build_searcher<'a>(
+    settings: HaploSearchSettings,
+    g: &'a Graph,
+    assignments: &'a AssignmentStorage,
+) -> HaploSearcher<'a> {
+    HaploSearcher::new(g, assignments, settings, None)
+}
+
 fn init() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
@@ -38,7 +47,7 @@ fn haplo_paths() {
     let settings = trio_walk::HaploSearchSettings::default();
     let augment_assign = augment_by_path_search(&g, assignments, settings);
 
-    let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
+    let mut haplo_searcher = build_searcher(settings, &g, &augment_assign);
     let mut answer = haplo_searcher
         .find_all()
         .into_iter()
@@ -80,7 +89,7 @@ fn augment_by_search() {
         Some(TrioGroup::PATERNAL)
     );
 
-    let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
+    let mut haplo_searcher = build_searcher(settings, &g, &augment_assign);
 
     let mut answer = haplo_searcher
         .find_all()
@@ -122,7 +131,7 @@ fn bubble_filling() {
         Some(TrioGroup::MATERNAL)
     );
 
-    let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
+    let mut haplo_searcher = build_searcher(settings, &g, &augment_assign);
 
     let mut answer = haplo_searcher
         .find_all()
@@ -132,7 +141,7 @@ fn bubble_filling() {
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,
-            String::from("utig4-1575-,utig4-1574+,utig4-1397-,utig4-1395-,utig4-1347-,utig4-1343-,utig4-1344+,utig4-1568-,utig4-815-,utig4-814+,utig4-819+,utig4-1799-,utig4-1796-,utig4-1798+")),
+            String::from("utig4-1575-,utig4-1574+,utig4-1397-,utig4-1395-,utig4-1347-,utig4-1343-,utig4-1345+,utig4-1568-,utig4-815-,utig4-814+,utig4-819+,utig4-1799-,utig4-1796-,utig4-1798+")),
         (TrioGroup::MATERNAL,
             String::from("utig4-3444+,utig4-4080-,utig4-771-,utig4-768-,utig4-770+")),
         (TrioGroup::PATERNAL,
@@ -169,7 +178,7 @@ fn haplo_paths_2() {
     );
     assert_eq!(augment_assign.assigned().count(), 45);
 
-    let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
+    let mut haplo_searcher = build_searcher(settings, &g, &augment_assign);
 
     let mut answer = haplo_searcher
         .find_all()
@@ -209,7 +218,7 @@ fn haplo_paths_3() {
 
     assert_eq!(augment_assign.assigned().count(), 82);
 
-    let mut haplo_searcher = settings.build_searcher(&g, &augment_assign);
+    let mut haplo_searcher = build_searcher(settings, &g, &augment_assign);
 
     let mut answer = haplo_searcher
         .find_all()
@@ -219,7 +228,7 @@ fn haplo_paths_3() {
     answer.sort();
     assert_eq!(&answer, &[
         (TrioGroup::MATERNAL,
-            String::from("utig4-4093-,utig4-3587-,utig4-3588+,utig4-4041-,utig4-3592+,utig4-1535-,utig4-1533-,utig4-1529-,utig4-1531+,utig4-1892-,utig4-925-,utig4-923+,utig4-926+,utig4-1595+,utig4-1597+,utig4-1896+,utig4-1619-,utig4-1617+,utig4-65-,utig4-64+,utig4-67+,[N5000N],utig4-1477-,utig4-1476+,utig4-1251-,utig4-1249+,utig4-1252+,utig4-1254+,utig4-3626+,utig4-3631+,utig4-1027-,utig4-1025-,utig4-1022-,utig4-1019-,utig4-1020+,utig4-1387+,utig4-1388+,utig4-1392+,utig4-1393+,utig4-1450+,utig4-1451+,utig4-1795+,utig4-1406-,utig4-1402-,utig4-1403+,utig4-3448-,utig4-1409+,utig4-3446-,[N14098N],utig4-3456-")),
+            String::from("utig4-4093-,utig4-3587-,utig4-3588+,utig4-4041-,utig4-3592+,utig4-1535-,utig4-1533-,utig4-1529-,utig4-1531+,utig4-1892-,utig4-925-,utig4-923+,utig4-926+,utig4-1595+,utig4-1597+,utig4-1896+,utig4-1619-,utig4-1617+,utig4-65-,utig4-64+,utig4-67+,[N5000N],utig4-1477-,utig4-1476+,utig4-1251-,utig4-1249+,utig4-1252+,utig4-1254+,utig4-3626+,utig4-3631+,utig4-1027-,utig4-1025-,utig4-1022-,utig4-1019-,utig4-1020+,utig4-1387+,utig4-1389+,utig4-1392+,utig4-1393+,utig4-1450+,utig4-1451+,utig4-1795+,utig4-1406-,utig4-1402-,utig4-1403+,utig4-3448-,utig4-1409+,utig4-3446-,[N14098N],utig4-3456-")),
         (TrioGroup::PATERNAL,
             String::from("utig4-3455-,utig4-3445-,utig4-3447+,utig4-1410-,utig4-1408-,utig4-1404-,utig4-1402+,utig4-1405+,utig4-1795-,utig4-1452-,utig4-1450-,utig4-1394-,utig4-1392-,utig4-1388-,utig4-1387-,utig4-1021-,utig4-1019+,utig4-1023+,utig4-1024+,utig4-1026+,utig4-3630-,utig4-3626-,utig4-3627+,utig4-1257-,utig4-1253-,utig4-1249-,utig4-1251+,utig4-1476-,utig4-1478+,utig4-3650-,utig4-68-,utig4-64-,utig4-66+,utig4-1617-,utig4-1618+,utig4-1896-,utig4-1596-,utig4-1595-,utig4-927-,utig4-923-,utig4-924+,utig4-1892+,utig4-1530-,utig4-1529+,utig4-1532+,utig4-1534+,utig4-3593-,utig4-3591-,utig4-3589-,[N34594N],utig4-3384+"))]);
 }

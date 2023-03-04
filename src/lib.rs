@@ -253,9 +253,11 @@ fn augment_by_path_search_round(
     assignments: trio::AssignmentStorage,
     settings: HaploSearchSettings,
 ) -> trio::AssignmentStorage {
-    let mut path_searcher = settings
-        .assigning_stage_adjusted()
-        .build_searcher(g, &assignments);
+    let mut path_searcher =
+        HaploSearcher::new(g,
+            &assignments,
+            settings.assigning_stage_adjusted(),
+            None);
 
     path_searcher.find_all();
     let node_usage = path_searcher.take_used();
