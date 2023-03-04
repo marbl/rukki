@@ -2,8 +2,8 @@ extern crate log;
 use itertools::Itertools;
 
 use rukki::trio::*;
-use rukki::*;
 use rukki::trio_walk::{HaploSearchSettings, HaploSearcher};
+use rukki::*;
 use std::fs;
 
 //fn from_assignment_iterator<'a>(g: &'a Graph, node_assign_it: impl Iterator<Item=(usize, TrioGroup)>)

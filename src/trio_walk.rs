@@ -249,7 +249,6 @@ impl Default for HaploSearchSettings {
 }
 
 impl HaploSearchSettings {
-
     pub fn assigning_stage_adjusted(&self) -> HaploSearchSettings {
         HaploSearchSettings {
             allow_solid_intersections: true,
@@ -258,7 +257,6 @@ impl HaploSearchSettings {
             ..*self
         }
     }
-
 }
 
 pub struct HaploSearcher<'a> {
@@ -929,8 +927,12 @@ mod tests {
         let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
         let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
-        let haplo_searcher =
-            HaploSearcher::new(&g, &assignments, trio_walk::HaploSearchSettings::default(), None);
+        let haplo_searcher = HaploSearcher::new(
+            &g,
+            &assignments,
+            trio_walk::HaploSearchSettings::default(),
+            None,
+        );
         let path = haplo_searcher.haplo_path(
             graph::Vertex::forward(g.name2id("utig4-2545")),
             trio::TrioGroup::PATERNAL,
@@ -952,8 +954,12 @@ mod tests {
         let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
         let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
-        let haplo_searcher =
-            HaploSearcher::new(&g, &assignments, trio_walk::HaploSearchSettings::default(), None);
+        let haplo_searcher = HaploSearcher::new(
+            &g,
+            &assignments,
+            trio_walk::HaploSearchSettings::default(),
+            None,
+        );
         for node in ["utig4-1322", "utig4-1320", "utig4-947"] {
             info!("Starting from {}", node);
             println!("Print Starting from {node}");
