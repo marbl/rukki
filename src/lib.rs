@@ -1,10 +1,10 @@
 use log::{debug, info, warn};
 use std::collections::HashMap;
-use std::{collections::HashSet, path::PathBuf};
 use std::error::Error;
 use std::fs;
 use std::fs::File;
-use std::io::{Write, BufWriter};
+use std::io::{BufWriter, Write};
+use std::{collections::HashSet, path::PathBuf};
 use trio_walk::HaploSearchSettings;
 
 //tests don't compile without the pub
@@ -17,7 +17,9 @@ pub mod trio_walk;
 
 pub use graph::*;
 
-use crate::trio::{GroupAssignmentSettings, TrioGroup, assign_short_node_tangles, TangleAssignmentSettings};
+use crate::trio::{
+    assign_short_node_tangles, GroupAssignmentSettings, TangleAssignmentSettings, TrioGroup,
+};
 use crate::trio_walk::HaploSearcher;
 
 //TODO use PathBuf
@@ -164,25 +166,28 @@ pub struct TrioSettings {
     /// Prevent reassignment of nodes
     #[clap(long)]
     tangle_prevent_reassign: bool,
-
 }
 
 impl TrioSettings {
     pub fn validate(&self) {
         if let Some(issue_ratio) = self.issue_ratio {
-            assert!(issue_ratio <= self.marker_ratio,
+            assert!(
+                issue_ratio <= self.marker_ratio,
                 "--issue-ratio can't be set to a value higher than --marker-ratio"
             );
         }
 
         if let Some(solid_ratio) = self.solid_ratio {
-            assert!(solid_ratio <= self.marker_ratio,
+            assert!(
+                solid_ratio <= self.marker_ratio,
                 "--solid-ratio can't be set to a value higher than --marker-ratio"
             );
 
             if solid_ratio < self.issue_ratio.unwrap_or(self.marker_ratio) {
-                warn!("Specified --solid-ratio value is smaller than --issue-ratio. \
-                    Please double-check the logic and consider specifying smaller --issue-ratio.");
+                warn!(
+                    "Specified --solid-ratio value is smaller than --issue-ratio. \
+                    Please double-check the logic and consider specifying smaller --issue-ratio."
+                );
             }
         }
 
@@ -248,8 +253,9 @@ fn augment_by_path_search_round(
     assignments: trio::AssignmentStorage,
     settings: HaploSearchSettings,
 ) -> trio::AssignmentStorage {
-    let mut path_searcher =
-        settings.assigning_stage_adjusted().build_searcher(g, &assignments);
+    let mut path_searcher = settings
+        .assigning_stage_adjusted()
+        .build_searcher(g, &assignments);
 
     path_searcher.find_all();
     let node_usage = path_searcher.take_used();
@@ -313,13 +319,15 @@ fn group_str<'a>(o_g: Option<TrioGroup>, hap_names: &'a (&'a str, &'a str)) -> &
     }
 }
 
-pub fn write_paths(g: &Graph,
+pub fn write_paths(
+    g: &Graph,
     haplo_paths: Vec<trio_walk::HaploPath>,
     assignments: &trio::AssignmentStorage,
     node_usage: &trio::AssignmentStorage,
     output: &PathBuf,
     gaf_format: bool,
-    hap_names: &(&str, &str)) -> Result<(), std::io::Error> {
+    hap_names: &(&str, &str),
+) -> Result<(), std::io::Error> {
     //FIXME buffer
     let mut output = File::create(output)?;
     writeln!(output, "name\tpath\tassignment")?;
@@ -352,8 +360,10 @@ pub fn write_paths(g: &Graph,
         match assignments.group(node_id) {
             None | Some(TrioGroup::ISSUE) => {
                 assert!(!node_usage.contains(node_id));
-                debug!("Node: {} length: {} not assigned to any haplotype (adding trivial NA path)",
-                    n.name, n.length);
+                debug!(
+                    "Node: {} length: {} not assigned to any haplotype (adding trivial NA path)",
+                    n.name, n.length
+                );
                 write_node(g.node(node_id), None)?;
             }
             Some(assign) => {
@@ -395,7 +405,10 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let hap_names =
         parse_hap_names(&settings.hap_names).expect("Problem while parsing haplotype names");
 
-    info!("Reading trio marker information from {}", &settings.markers.to_str().unwrap());
+    info!(
+        "Reading trio marker information from {}",
+        &settings.markers.to_str().unwrap()
+    );
     let trio_infos = trio::read_trio(&settings.markers)?;
 
     info!("Assigning initial parental groups to the nodes");
@@ -416,18 +429,20 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     );
 
     let raw_cnts = trio_infos
-                        .into_iter()
-                        .map(|ti| {(g.name2id(&ti.node_name), ti)})
-                        .collect::<HashMap<usize, trio::TrioInfo>>();
+        .into_iter()
+        .map(|ti| (g.name2id(&ti.node_name), ti))
+        .collect::<HashMap<usize, trio::TrioInfo>>();
 
     if let Some(output) = &settings.init_assign {
-        info!("Writing initial node annotation to {}", output.to_str().unwrap());
+        info!(
+            "Writing initial node annotation to {}",
+            output.to_str().unwrap()
+        );
         output_coloring(&g, &assignments, output, &hap_names)?;
     }
 
     let solid_cov_est = weighted_mean_solid_cov(&g, settings.solid_len);
-    if settings.suspect_homozygous_cov_coeff > 0.
-            || settings.solid_homozygous_cov_coeff > 0. {
+    if settings.suspect_homozygous_cov_coeff > 0. || settings.solid_homozygous_cov_coeff > 0. {
         info!("Coverage estimate based on long nodes was {solid_cov_est}");
         if solid_cov_est == 0. {
             warn!("Looks like the graph didn't have coverage information, which we were hoping to use. \
@@ -444,11 +459,15 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let solid_homozygous_cov = settings.solid_homozygous_cov_coeff * solid_cov_est;
 
     info!("Marking homozygous nodes");
-    let assigner =
-        trio::HomozygousAssigner::new(&g, assignments,
-            settings.trusted_len, suspect_homozygous_cov,
-            settings.solid_len, solid_homozygous_cov,
-            settings.max_homozygous_len);
+    let assigner = trio::HomozygousAssigner::new(
+        &g,
+        assignments,
+        settings.trusted_len,
+        suspect_homozygous_cov,
+        settings.solid_len,
+        solid_homozygous_cov,
+        settings.max_homozygous_len,
+    );
 
     let assignments = assigner.run();
 
@@ -494,17 +513,25 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let assignments = augment_by_path_search(&g, assignments, search_settings);
 
     let assignments = if settings.assign_tangles {
-        assign_short_node_tangles(&g, assignments, settings.solid_len, TangleAssignmentSettings {
-            allow_deadend: settings.tangle_allow_deadend,
-            check_inner: settings.tangle_check_inner,
-            allow_reassign: !settings.tangle_prevent_reassign,
-        })
+        assign_short_node_tangles(
+            &g,
+            assignments,
+            settings.solid_len,
+            TangleAssignmentSettings {
+                allow_deadend: settings.tangle_allow_deadend,
+                check_inner: settings.tangle_check_inner,
+                allow_reassign: !settings.tangle_prevent_reassign,
+            },
+        )
     } else {
         assignments
     };
 
     if let Some(output) = &settings.refined_assign {
-        info!("Writing refined node annotation to {}", output.to_str().unwrap());
+        info!(
+            "Writing refined node annotation to {}",
+            output.to_str().unwrap()
+        );
         output_coloring(&g, &assignments, output, &hap_names)?;
     }
     let mut path_searcher = HaploSearcher::new(&g, &assignments, search_settings, Some(&raw_cnts));
@@ -515,14 +542,24 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     let assignments = augment_assignments(&g, assignments, &node_usage, false);
 
     if let Some(output) = &settings.final_assign {
-        info!("Writing final node annotation to {}", output.to_str().unwrap());
+        info!(
+            "Writing final node annotation to {}",
+            output.to_str().unwrap()
+        );
         output_coloring(&g, &assignments, output, &hap_names)?;
     }
 
     if let Some(output) = &settings.paths {
         info!("Outputting haplo-paths to {}", output.to_str().unwrap());
-        write_paths(&g, haplo_paths, &assignments, &node_usage,
-                    output, settings.gaf_format, &hap_names)?;
+        write_paths(
+            &g,
+            haplo_paths,
+            &assignments,
+            &node_usage,
+            output,
+            settings.gaf_format,
+            &hap_names,
+        )?;
     }
 
     info!("All done");

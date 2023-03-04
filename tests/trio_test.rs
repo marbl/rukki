@@ -18,10 +18,7 @@ fn homozygous_assignment() {
     let g = graph::Graph::read(&fs::read_to_string(graph_fn).unwrap());
     let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
     let assigner =
-        trio::HomozygousAssigner::new(&g, assignments,
-            200_000, None,
-            500_000, 1.5,
-            usize::MAX);
+        trio::HomozygousAssigner::new(&g, assignments, 200_000, None, 500_000, 1.5, usize::MAX);
 
     let assignments = assigner.run();
 

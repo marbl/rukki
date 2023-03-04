@@ -1,9 +1,9 @@
 use super::dfs;
 use super::only_or_none;
 use crate::graph::*;
+use itertools::Itertools;
 use log::debug;
 use std::collections::{HashMap, HashSet};
-use itertools::Itertools;
 
 //Implementing Kosaraju-Sharir algorithm
 //'trivial' SCCs of individual vertices are not reported
@@ -29,10 +29,7 @@ pub fn strongly_connected(graph: &Graph) -> Vec<Vec<Vertex>> {
                 debug!(
                     "Identified non-trivial component of size {}: {}",
                     visited.len(),
-                    visited
-                        .iter()
-                        .map(|&v| graph.v_str(v))
-                        .join(",")
+                    visited.iter().map(|&v| graph.v_str(v)).join(",")
                 );
 
                 non_trivial_sccs.push(visited.clone());
@@ -129,10 +126,7 @@ pub fn condensation(
                 debug!(
                     "Dealing with self-conjugate SCC {}: {}",
                     scc_id,
-                    scc_vertices
-                        .iter()
-                        .map(|&w| graph.v_str(w))
-                        .join("")
+                    scc_vertices.iter().map(|&w| graph.v_str(w)).join("")
                 )
             }
             let length = scc_vertices

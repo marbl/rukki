@@ -83,10 +83,7 @@ L c + d + 50M
     .unwrap();
     assert!(g.name(bubble.end_vertex().node_id) == "d");
     assert_eq!(bubble.vertices().count(), 4);
-    let mut bubble_vertices = bubble
-        .vertices()
-        .map(|&v| g.v_str(v))
-        .collect_vec();
+    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect_vec();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+", "b+", "c+", "d+"]);
     assert_eq!(bubble.length_range(&g), (200, 200));
@@ -114,10 +111,7 @@ L c + a + 50M
     .unwrap();
     assert!(g.name(bubble.end_vertex().node_id) == "a");
     assert_eq!(bubble.vertices().count(), 4);
-    let mut bubble_vertices = bubble
-        .vertices()
-        .map(|&v| g.v_str(v))
-        .collect_vec();
+    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect_vec();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+", "b+", "c+"]);
     assert_eq!(bubble.length_range(&g), (100, 100));
@@ -145,10 +139,7 @@ L a + d + 50M
     .unwrap();
     assert!(g.name(bubble.end_vertex().node_id) == "d");
     assert_eq!(bubble.vertices().count(), 4);
-    let mut bubble_vertices = bubble
-        .vertices()
-        .map(|&v| g.v_str(v))
-        .collect_vec();
+    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect_vec();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+", "b+", "c+", "d+"]);
     assert_eq!(bubble.length_range(&g), (150, 200));
@@ -176,10 +167,7 @@ L c + d + 50M
     .unwrap();
     assert!(g.name(bubble.end_vertex().node_id) == "d");
     assert_eq!(bubble.vertices().count(), 4);
-    let mut bubble_vertices = bubble
-        .vertices()
-        .map(|&v| g.v_str(v))
-        .collect_vec();
+    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect_vec();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+", "b+", "c+", "d+"]);
     assert_eq!(bubble.length_range(&g), (200, 250));
@@ -207,10 +195,7 @@ L c + d + 50M
     .unwrap();
     assert!(g.name(bubble.end_vertex().node_id) == "a");
     assert_eq!(bubble.vertices().count(), 4);
-    let mut bubble_vertices = bubble
-        .vertices()
-        .map(|&v| g.v_str(v))
-        .collect_vec();
+    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect_vec();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a-", "b-", "c-", "d-"]);
     assert_eq!(bubble.length_range(&g), (200, 250));
@@ -243,10 +228,7 @@ L e + f + 50M
     .unwrap();
     assert!(g.name(bubble.end_vertex().node_id) == "f");
     assert_eq!(bubble.vertices().count(), 6);
-    let mut bubble_vertices = bubble
-        .vertices()
-        .map(|&v| g.v_str(v))
-        .collect_vec();
+    let mut bubble_vertices = bubble.vertices().map(|&v| g.v_str(v)).collect_vec();
     bubble_vertices.sort();
     assert_eq!(bubble_vertices, vec!["a+", "b+", "c+", "d+", "e+", "f+"]);
     assert_eq!(bubble.length_range(&g), (200, 250));

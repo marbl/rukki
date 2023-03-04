@@ -1,6 +1,6 @@
 use crate::graph::*;
-use std::collections::HashSet;
 use itertools::Itertools;
+use std::collections::HashSet;
 
 #[derive(Copy, Clone, Debug)]
 pub enum TraversalDirection {
@@ -326,14 +326,8 @@ impl ShortNodeComponent {
     pub fn print(&self, g: &Graph) -> String {
         format!(
             "Sources: {}; sinks: {}",
-            self.sources
-                .iter()
-                .map(|&v| g.v_str(v))
-                .join(", "),
-            self.sinks
-                .iter()
-                .map(|&v| g.v_str(v))
-                .join(", ")
+            self.sources.iter().map(|&v| g.v_str(v)).join(", "),
+            self.sinks.iter().map(|&v| g.v_str(v)).join(", ")
         )
     }
 }

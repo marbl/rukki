@@ -6,8 +6,8 @@ use log::info;
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io::{BufRead,BufReader};
 use std::io::Result as IOResult;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 
 //TODO add UNASSIGNED to display useful info for all nodes
@@ -131,8 +131,19 @@ impl AssignmentStorage {
         false
     }
 
-    pub fn assign<S: Into<String>>(&mut self, node_id: usize, group: TrioGroup, info: S) -> Option<Assignment> {
-        self.storage.insert(node_id, Assignment { group, info: info.into() })
+    pub fn assign<S: Into<String>>(
+        &mut self,
+        node_id: usize,
+        group: TrioGroup,
+        info: S,
+    ) -> Option<Assignment> {
+        self.storage.insert(
+            node_id,
+            Assignment {
+                group,
+                info: info.into(),
+            },
+        )
     }
 
     pub fn update_group(&mut self, node_id: usize, group: TrioGroup) {
@@ -225,8 +236,7 @@ pub fn assign_parental_groups(
         tot >= settings.assign_cnt
             && node_len <= tot * settings.assign_sparsity
             && ((x as f64) > settings.assign_ratio * (y as f64) - 1e-6
-                || (node_len > solid_len
-                    && (x as f64) > settings.solid_ratio * (y as f64) - 1e-6))
+                || (node_len > solid_len && (x as f64) > settings.solid_ratio * (y as f64) - 1e-6))
     };
 
     let issue_node_f = |x: usize, y: usize, node_len: usize| {
@@ -344,10 +354,7 @@ impl<'a> HomozygousAssigner<'a> {
         }
 
         match self.assignments.group(node_id) {
-            None => {
-                n.length < self.solid_len
-                    || n.coverage > self.min_solid_cov - 1e-5
-                },
+            None => n.length < self.solid_len || n.coverage > self.min_solid_cov - 1e-5,
             //TODO think if we should be able to also reclassify ISSUE nodes
             Some(TrioGroup::ISSUE) => false,
             //TODO can probably be removed / asserted if only single round allowed
@@ -356,7 +363,7 @@ impl<'a> HomozygousAssigner<'a> {
                 n.length < self.trusted_len
                     && self.min_suspect_cov.is_some()
                     && n.coverage > self.min_suspect_cov.unwrap() - 1e-5
-                }
+            }
         }
     }
 
@@ -419,11 +426,8 @@ impl<'a> HomozygousAssigner<'a> {
         if self.can_assign(v.node_id)
             && self.assignments.group(v.node_id) != Some(TrioGroup::HOMOZYGOUS)
         {
-            self.assignments.assign(
-                v.node_id,
-                TrioGroup::HOMOZYGOUS,
-                "HomozygousAssigner",
-            );
+            self.assignments
+                .assign(v.node_id, TrioGroup::HOMOZYGOUS, "HomozygousAssigner");
             1
         } else {
             0
@@ -493,15 +497,14 @@ impl Default for TangleAssignmentSettings {
 }
 
 pub fn assign_short_node_tangles(
-        g: &Graph,
-        mut assignments: AssignmentStorage,
-        solid_len: usize,
-        settings: TangleAssignmentSettings
+    g: &Graph,
+    mut assignments: AssignmentStorage,
+    solid_len: usize,
+    settings: TangleAssignmentSettings,
 ) -> AssignmentStorage {
     let mut considered_boundary = HashSet::<Vertex>::new();
     for v in g.all_vertices() {
-        if !considered_boundary.contains(&v)
-            && g.vertex_length(v) >= solid_len {
+        if !considered_boundary.contains(&v) && g.vertex_length(v) >= solid_len {
             let comp = dfs::ShortNodeComponent::ahead_from_long(g, v, solid_len);
 
             for s in comp.sources.iter() {
@@ -512,7 +515,7 @@ pub fn assign_short_node_tangles(
             }
 
             if !settings.allow_deadend && comp.has_deadends {
-                continue
+                continue;
             }
 
             if !assignments.is_definite(v.node_id) {
@@ -520,18 +523,29 @@ pub fn assign_short_node_tangles(
             }
             let group = assignments.group(v.node_id).unwrap();
 
-            if comp.sources.iter().chain(comp.sinks.iter()).any(|&x| Some(group) != assignments.group(x.node_id)) {
+            if comp
+                .sources
+                .iter()
+                .chain(comp.sinks.iter())
+                .any(|&x| Some(group) != assignments.group(x.node_id))
+            {
                 continue;
             }
 
             if settings.check_inner
-                && comp.inner.iter().any(|&x| group != assignments.group(x.node_id).unwrap_or(group)) {
-                continue
+                && comp
+                    .inner
+                    .iter()
+                    .any(|&x| group != assignments.group(x.node_id).unwrap_or(group))
+            {
+                continue;
             }
 
             for w in comp.inner.iter() {
                 match assignments.group(w.node_id) {
-                    None => {assignments.assign(w.node_id, group, "TangleAssignment");}
+                    None => {
+                        assignments.assign(w.node_id, group, "TangleAssignment");
+                    }
                     Some(g) if g == group => {}
                     _ => {
                         if settings.allow_reassign {
@@ -564,7 +578,8 @@ mod tests {
         let g = Graph::read(&fs::read_to_string(graph_fn).unwrap());
         let assignments = trio::parse_node_assignments(&g, assignments_fn).unwrap();
 
-        let assigner = trio::HomozygousAssigner::new(&g, assignments, 100_000, None, 500_000, 1.5, usize::MAX);
+        let assigner =
+            trio::HomozygousAssigner::new(&g, assignments, 100_000, None, 500_000, 1.5, usize::MAX);
         assert!(assigner.check_homozygous_fork_ahead(Vertex::forward(g.name2id("utig4-1237"))));
         assert!(assigner.check_homozygous_fork_ahead(Vertex::reverse(g.name2id("utig4-1237"))));
         assert!(!assigner.check_homozygous_fork_ahead(Vertex::forward(g.name2id("utig4-1554"))));

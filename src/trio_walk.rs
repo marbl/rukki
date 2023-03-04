@@ -2,9 +2,9 @@ use crate::graph::*;
 use crate::graph_algos::only_or_none;
 use crate::graph_algos::*;
 use crate::trio::*;
+use itertools::Itertools;
 use log::{debug, warn};
 use std::collections::{HashMap, HashSet};
-use itertools::Itertools;
 
 // pub fn reachable_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
 //     let (sinks, mut short_ahead) = sinks_ahead(g, v, node_len_thr);
@@ -83,7 +83,13 @@ impl<'a> ExtensionHelper<'a> {
         // then check that all the vertices are assigned something
         // (other than ISSUE)
         if v_it.clone().all(|v| self.bearable_assignment(v.node_id)) {
-            debug!("{}", v_it.clone().filter(|v| self.compatible_assignment(v.node_id, group)).map(|x| self.g.v_str(x)).join(", "));
+            debug!(
+                "{}",
+                v_it.clone()
+                    .filter(|v| self.compatible_assignment(v.node_id, group))
+                    .map(|x| self.g.v_str(x))
+                    .join(", ")
+            );
             only_or_none(v_it.filter(|v| self.compatible_assignment(v.node_id, group)))
         } else {
             None
@@ -170,11 +176,17 @@ impl<'a> ExtensionHelper<'a> {
 
         debug!("Identifying sink");
         //excluding self to handle hairpins
-        let t = self.only_compatible_of_bearable(component.sinks.iter().copied().filter(|&x| x != v.rc()), group)?;
+        let t = self.only_compatible_of_bearable(
+            component.sinks.iter().copied().filter(|&x| x != v.rc()),
+            group,
+        )?;
 
         debug!("Identifying source");
         //excluding reverse-complement to handle hairpins
-        let s = self.only_compatible_of_bearable(component.sources.iter().copied().filter(|&x| x != t.rc()), group)?;
+        let s = self.only_compatible_of_bearable(
+            component.sources.iter().copied().filter(|&x| x != t.rc()),
+            group,
+        )?;
 
         assert!(s == v);
         if s.node_id == t.node_id {
@@ -699,23 +711,25 @@ impl<'a> HaploSearcher<'a> {
             let cov = |x: &Vertex| self.g.node(x.node_id).coverage;
 
             //Filling the bubble
-            let mut direct_connectors =
-                considered_extensions(self.g, v, consider_vertex_f)
-                    .into_iter()
-                    .filter_map(|l1| self.g.connector(l1.end, w))
-                    .map(|l2| l2.start)
-                    .filter(|tc_v| self.unassigned_or_compatible(tc_v.node_id, group))
-                    .collect_vec();
+            let mut direct_connectors = considered_extensions(self.g, v, consider_vertex_f)
+                .into_iter()
+                .filter_map(|l1| self.g.connector(l1.end, w))
+                .map(|l2| l2.start)
+                .filter(|tc_v| self.unassigned_or_compatible(tc_v.node_id, group))
+                .collect_vec();
 
             if !direct_connectors.is_empty() {
                 let c = if self.homozygous_bubble(v, w) {
                     let filtered_connectors = direct_connectors
-                                            .iter()
-                                            .filter(|&c| !self.used.contains(c.node_id))
-                                            .filter(|&c| self.settings.good_side_cov_gap == 0.
-                                                || self.settings.good_side_cov_gap * cov(c) > (cov(&v) + cov(&w)) / 2. - 1e-5)
-                                            .cloned()
-                                            .collect_vec();
+                        .iter()
+                        .filter(|&c| !self.used.contains(c.node_id))
+                        .filter(|&c| {
+                            self.settings.good_side_cov_gap == 0.
+                                || self.settings.good_side_cov_gap * cov(c)
+                                    > (cov(&v) + cov(&w)) / 2. - 1e-5
+                        })
+                        .cloned()
+                        .collect_vec();
 
                     if !filtered_connectors.is_empty() {
                         direct_connectors = filtered_connectors;
@@ -725,10 +739,15 @@ impl<'a> HaploSearcher<'a> {
                     //direct_connectors.into_iter().max_by_key(|&c| (cov(c), self.raw_marker_excess(c, group)));
                     direct_connectors
                         .into_iter()
-                        .max_by(|a, b| (self.raw_marker_excess(a, group).unwrap_or_default(), cov(a))
-                                                                .partial_cmp(&(self.raw_marker_excess(b, group).unwrap_or_default(), cov(b)))
-                                                                .unwrap())
-                                                                .unwrap()
+                        .max_by(|a, b| {
+                            (self.raw_marker_excess(a, group).unwrap_or_default(), cov(a))
+                                .partial_cmp(&(
+                                    self.raw_marker_excess(b, group).unwrap_or_default(),
+                                    cov(b),
+                                ))
+                                .unwrap()
+                        })
+                        .unwrap()
                 } else {
                     direct_connectors
                         .into_iter()
