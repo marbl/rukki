@@ -558,11 +558,12 @@ impl Graph {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct GapInfo {
     pub start: Vertex,
     pub end: Vertex,
     pub gap_size: i64,
+    pub info: String,
 }
 
 impl GapInfo {
@@ -571,11 +572,12 @@ impl GapInfo {
             start: self.end.rc(),
             end: self.start.rc(),
             gap_size: self.gap_size,
+            info: self.info.clone(),
         }
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum GeneralizedLink {
     LINK(Link),
     GAP(GapInfo),
@@ -667,13 +669,13 @@ impl Path {
         self.v_storage.is_empty()
     }
 
-    pub fn general_link_at(&self, idx: usize) -> GeneralizedLink {
-        self.l_storage[idx]
+    pub fn general_link_at(&self, idx: usize) -> &GeneralizedLink {
+        &self.l_storage[idx]
     }
 
     pub fn link_at(&self, idx: usize) -> Link {
         match self.general_link_at(idx) {
-            GeneralizedLink::LINK(l) => l,
+            GeneralizedLink::LINK(l) => *l,
             _ => panic!("Not an actual graph link at index {idx}"),
         }
     }
@@ -768,10 +770,10 @@ impl Path {
         let mut ans = String::new();
         for (i, &v) in self.v_storage.iter().enumerate() {
             if i > 0 {
-                match self.l_storage[i - 1] {
+                match &self.l_storage[i - 1] {
                     GeneralizedLink::GAP(gap_info) => {
                         ans += delim;
-                        ans += &format!("[N{}N]", gap_info.gap_size);
+                        ans += &format!("[N{}N:{}]", gap_info.gap_size, gap_info.info);
                     }
                     GeneralizedLink::LINK(_) => {}
                 };

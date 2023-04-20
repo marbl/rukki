@@ -417,6 +417,7 @@ impl<'a> HaploSearcher<'a> {
             end: p2.start(),
             //FIXME use something reasonable
             gap_size: self.settings.default_gap_size,
+            info: String::from("ambig_path"),
         }));
         assert!(p1.can_merge_in(&p2));
         p1.merge_in(p2);
@@ -583,6 +584,7 @@ impl<'a> HaploSearcher<'a> {
                     curr_gap_est - self.g.vertex_length(w) as i64,
                     self.settings.min_gap_size,
                 ),
+                info: format!("alt-{}", self.g.name(alt.node_id)),
             });
         } else if component.sources.len() == 1 {
             //haplotype merge-in case
@@ -605,6 +607,7 @@ impl<'a> HaploSearcher<'a> {
                         start: v,
                         end: w,
                         gap_size: std::cmp::max(curr_gap_est, self.settings.min_gap_size),
+                        info: format!("alt-{}", self.g.name(alt.node_id)),
                     });
                 }
             }
@@ -778,6 +781,7 @@ impl<'a> HaploSearcher<'a> {
                 start: v,
                 end: w,
                 gap_size: gap_est,
+                info: String::from("ambig_bubble"),
             })))
         }
     }
@@ -796,6 +800,7 @@ impl<'a> HaploSearcher<'a> {
                 scc::estimate_size_no_mult(small_tangle, self.g) as i64,
                 self.settings.min_gap_size,
             ),
+            info: String::from("tangle"),
         })))
     }
 

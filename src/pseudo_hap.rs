@@ -488,6 +488,7 @@ pub fn detect_gap(g: &Graph, u: Vertex) -> Option<GapInfo> {
                 gap_size: (bridge_p.total_length(g) as i64
                     - Path::from_link(s_l).total_length(g) as i64
                     - Path::from_link(t_l).total_length(g) as i64),
+                info: String::from(""),
             });
         }
     }
