@@ -208,8 +208,11 @@ pub struct HaploSearchSettings {
     pub trusted_len: usize,
 
     //configuring behavior
-    //NB: path intersections by homozygous labeled 'solid' nodes are always allowed
-    pub allow_solid_intersections: bool,
+    //Allow reuse of nodes within the same haplotype (otherwise prevented),
+    // and use of solid unassigned nodes by different haplotypes
+    //NB: path intersections by solid 'homozygous' nodes are always allowed
+    //NB2: path self-intersections are always prevented
+    pub allow_intersections: bool,
     pub allow_unassigned: bool,
 
     //fill in small bubbles
@@ -232,7 +235,7 @@ impl Default for HaploSearchSettings {
         Self {
             solid_len: 500_000,
             trusted_len: 200_000,
-            allow_solid_intersections: false,
+            allow_intersections: false,
             allow_unassigned: false,
             fill_bubbles: true,
             max_unique_cov: f64::MAX,
@@ -251,7 +254,7 @@ impl Default for HaploSearchSettings {
 impl HaploSearchSettings {
     pub fn assigning_stage_adjusted(&self) -> HaploSearchSettings {
         HaploSearchSettings {
-            allow_solid_intersections: true,
+            allow_intersections: true,
             fill_bubbles: false,
             allow_unassigned: true,
             ..*self
@@ -312,13 +315,13 @@ impl<'a> HaploSearcher<'a> {
     //TODO maybe use single length threshold?
     pub fn find_all(&mut self) -> Vec<HaploPath> {
         let mut answer = Vec::new();
-        let mut nodes: Vec<(usize, &Node)> = self.g.all_nodes().enumerate().collect();
+        let mut nodes = self.g.all_nodes().enumerate().collect_vec();
         nodes.sort_by_key(|(_, n)| n.length);
 
-        for (node_id, node) in nodes.into_iter().rev() {
+        for (node_id, _node) in nodes.into_iter().rev() {
             //launch from long, definitely assigned nodes
             if !self.used.contains(node_id)
-                && node.length >= self.settings.solid_len
+                && self.long_node(node_id)
                 && self.assignments.is_definite(node_id)
             {
                 let group = self.assignments.get(node_id).unwrap().group;
@@ -343,17 +346,18 @@ impl<'a> HaploSearcher<'a> {
         path.reverse_complement()
     }
 
-    fn aimed_grow_ext(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
-        assert!(self.g.vertex_length(v) >= self.settings.solid_len);
+    fn aimed_grow_step_ext(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
+        assert!(self.long_node(v.node_id));
 
         let w = self
             .extension_helper
             .find_compatible_sink(v, group, self.settings.solid_len)?;
 
-        if !self.check_available(w.node_id, group) {
-            debug!("Next 'target' node {} was unavailable", self.g.v_str(w));
-            return None;
-        }
+        //Unifying checks
+        //if !self.check_available(w.node_id, group) {
+        //    debug!("Next 'target' node {} was unavailable", self.g.v_str(w));
+        //    return None;
+        //}
 
         debug!("Found next 'target' vertex {}", self.g.v_str(w));
 
@@ -426,35 +430,32 @@ impl<'a> HaploSearcher<'a> {
 
     fn grow_forward(&self, path: &mut Path, group: TrioGroup) {
         loop {
-            self.aimed_grow(path, group);
-            if !self.unguided_grow(path, group) {
+            if self.long_node(path.end().node_id) {
+                self.aimed_grow(path, group);
+            }
+            if !self.unguided_grow_to_solid(path, group) {
                 debug!("Stopping extension");
                 break;
             }
         }
     }
 
+    //Tries to maximally grow the path forward from a solid node, iteratively trying to guess next solid target
     //returns true if anything was done and false if couldn't extend
-    fn aimed_grow(&self, path: &mut Path, group: TrioGroup) -> bool {
+    fn aimed_grow(&self, path: &mut Path, group: TrioGroup) {
         debug!(
             "Initiating 'guided' extension from {}",
             self.g.v_str(path.end())
         );
-        let mut something_done = false;
-        while let Some(ext) = self.aimed_grow_ext(path.end(), group) {
-            assert!(ext
-                .vertices()
-                .iter()
-                .all(|v| self.check_available(v.node_id, group)));
+        while let Some(ext) = self.aimed_grow_step_ext(path.end(), group) {
             debug!("Found extension {}", ext.print(self.g));
-            if path.can_merge_in(&ext) {
+            if self.check_available_append(path, &ext, group) {
                 debug!("Merging in");
                 path.merge_in(ext);
                 debug!(
                     "Will continue 'guided' extension from {}",
                     self.g.v_str(path.end())
                 );
-                something_done = true;
             } else {
                 warn!(
                     "Couldn't merge in guided extension from {}",
@@ -463,21 +464,22 @@ impl<'a> HaploSearcher<'a> {
                 break;
             }
         }
-        something_done
     }
 
-    //returns true if reached long node and false if ended in issue or couldn't extend anymore
-    fn unguided_grow(&self, path: &mut Path, group: TrioGroup) -> bool {
+    //Tries to maximally grow the path forward until the next solid node (without gessing next solid in advance)
+    //returns true if reached solid node and false if ended in issue or couldn't extend anymore
+    fn unguided_grow_to_solid(&self, path: &mut Path, group: TrioGroup) -> bool {
         debug!(
             "Initiating unguided extension from {}",
             self.g.v_str(path.end())
         );
+        //try to make one step ahead, s.a. gap/tangle/bubble and regular extension
         while let Some(ext) = self.unguided_next_or_gap(path.end(), group) {
             if self.check_available_append(path, &ext, group) {
                 path.merge_in(ext);
                 let v = path.end();
-                if self.g.vertex_length(v) >= self.settings.solid_len {
-                    debug!("Reached long node {}", self.g.v_str(v));
+                if self.long_node(v.node_id) {
+                    debug!("Reached solid node {}", self.g.v_str(v));
                     return true;
                 }
             } else {
@@ -684,7 +686,7 @@ impl<'a> HaploSearcher<'a> {
         )?;
         if bubble
             .inner_vertices()
-            .any(|&v| self.g.vertex_length(v) >= self.settings.solid_len)
+            .any(|&x| self.long_node(x.node_id))
         {
             return None;
         }
@@ -820,19 +822,21 @@ impl<'a> HaploSearcher<'a> {
             return false;
         }
 
-        if !self.settings.allow_solid_intersections {
+        if !self.settings.allow_intersections {
             if let Some(used_group) = self.used.group(node_id) {
                 if TrioGroup::incompatible(used_group, target_group) {
                     //node already used in different haplotype
                     if self.long_node(node_id)
                         && self.assignments.group(node_id) != Some(TrioGroup::HOMOZYGOUS)
                     {
+                        assert!(self.assignments.group(node_id).is_none());
                         warn!("Can't reuse long node {} (not initially marked as homozygous) in different haplotype",
                             self.g.name(node_id));
                         return false;
                     }
                 } else {
                     //node already used within the same haplotype
+                    //TODO consider allowing when deduplication is implemented
                     debug!(
                         "Tried to reuse node {} twice within the same haplotype: {:?}",
                         self.g.name(node_id),
@@ -842,6 +846,7 @@ impl<'a> HaploSearcher<'a> {
                 }
             }
         }
+
         true
     }
 
