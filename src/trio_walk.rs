@@ -976,7 +976,7 @@ mod tests {
             assert!(path.len() == 4);
             assert_eq!(
                 path.print(&g),
-                String::from("utig4-947+,utig4-1318-,utig4-1320+,[N36423N],utig4-1322+")
+                String::from("utig4-947+,utig4-1318-,utig4-1320+,[N36423N:alt-utig4-1319],utig4-1322+")
             );
         }
     }
