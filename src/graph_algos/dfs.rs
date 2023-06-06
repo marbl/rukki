@@ -155,45 +155,6 @@ impl<'a> DFS<'a> {
     }
 }
 
-//includes boundary (unvisited) vertices
-//returns pair of sinks and all ('inner') visited vertices
-//visited vertices will overlap sinks by short dead-ends
-pub fn sinks_ahead(
-    g: &Graph,
-    v: Vertex,
-    node_len_thr: usize,
-    visit_f: Option<&dyn Fn(Vertex) -> bool>,
-) -> (HashSet<Vertex>, HashSet<Vertex>) {
-    let mut dfs = DFS::new(g, TraversalDirection::FORWARD, visit_f);
-    dfs.set_max_node_len(node_len_thr);
-    //inner_dfs(g, v, node_len_thr, &mut visited, &mut border);
-    dfs.run_from(v);
-    let sinks = dfs.boundary();
-    //extend to dead-ends
-    //sinks.extend(dfs.dead_ends());
-    //TODO no copy
-    (sinks.clone(), dfs.visited())
-}
-
-//includes boundary (unvisited) vertices
-//returns pair of sources and all ('inner') visited vertices
-//visited vertices will overlap sources by short dead-ends
-//pub fn sources_behind(
-//    g: &Graph,
-//    v: Vertex,
-//    node_len_thr: usize,
-//    visit_f: Option<&dyn Fn(Vertex) -> bool>,
-//) -> (Vec<Vertex>, HashSet<Vertex>) {
-//    let mut dfs = DFS::new(g, TraversalDirection::REVERSE, subgraph_f);
-//    dfs.set_max_node_len(node_len_thr);
-//    //inner_dfs(g, v, node_len_thr, &mut visited, &mut border);
-//    dfs.run_from(v);
-//    let mut sources = dfs.boundary();
-//    //extend to dead-ends
-//    //sources.extend(dfs.dead_ends());
-//    (sources, dfs.visited())
-//}
-
 pub struct ShortNodeComponent {
     pub sources: HashSet<Vertex>,
     pub sinks: HashSet<Vertex>,
