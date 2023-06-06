@@ -152,26 +152,27 @@ impl<'a> ExtensionHelper<'a> {
         ext
     }
 
-    fn find_assigned_ahead(
-        &self,
-        v: Vertex,
-        group: TrioGroup,
-        solid_len: usize,
-    ) -> Option<Vertex> {
+    fn find_assigned_ahead(&self, v: Vertex, group: TrioGroup, solid_len: usize) -> Option<Vertex> {
         let check_unassigned = |x: Vertex| self.assignments.get(x.node_id).is_none();
-        let mut dfs = dfs::DFS::new(self.g, dfs::TraversalDirection::FORWARD,
-            Some(&check_unassigned));
+        let mut dfs = dfs::DFS::new(
+            self.g,
+            dfs::TraversalDirection::FORWARD,
+            Some(&check_unassigned),
+        );
         dfs.set_max_node_len(solid_len);
         dfs.run_from(v);
 
         //could be if solid unassigned node is in the boundary
         if dfs.boundary().iter().any(|&x| check_unassigned(x)) {
-            return None
+            return None;
         }
 
-        only_or_none(dfs.boundary().iter().
-            filter(|x| self.compatible_assignment(x.node_id, group))
-            .copied())
+        only_or_none(
+            dfs.boundary()
+                .iter()
+                .filter(|x| self.compatible_assignment(x.node_id, group))
+                .copied(),
+        )
     }
 
     fn find_compatible_sink(
@@ -407,7 +408,13 @@ impl<'a> HaploSearcher<'a> {
     }
 
     //FIXME extract to some helper
-    fn filling_path_between(&self, v: Vertex, w: Vertex, group: TrioGroup, allow_gaps: bool) -> Option<Path> {
+    fn filling_path_between(
+        &self,
+        v: Vertex,
+        w: Vertex,
+        group: TrioGroup,
+        allow_gaps: bool,
+    ) -> Option<Path> {
         let mut reachable_vertices = reachable_between(
             self.g,
             v,
@@ -736,10 +743,7 @@ impl<'a> HaploSearcher<'a> {
             &superbubble::SbSearchParams::unrestricted(),
             consider_vertex_f,
         )?;
-        if bubble
-            .inner_vertices()
-            .any(|&x| self.long_node(x.node_id))
-        {
+        if bubble.inner_vertices().any(|&x| self.long_node(x.node_id)) {
             return None;
         }
 
@@ -1034,7 +1038,9 @@ mod tests {
             assert!(path.len() == 4);
             assert_eq!(
                 path.print(&g),
-                String::from("utig4-947+,utig4-1318-,utig4-1320+,[N36423N:alt-utig4-1319],utig4-1322+")
+                String::from(
+                    "utig4-947+,utig4-1318-,utig4-1320+,[N36423N:alt-utig4-1319],utig4-1322+"
+                )
             );
         }
     }

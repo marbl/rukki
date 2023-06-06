@@ -67,18 +67,10 @@ impl<'a> DFS<'a> {
     //TODO use iterators
     fn neighbors(&self, v: Vertex) -> Vec<Vertex> {
         match self.direction {
-            TraversalDirection::FORWARD => self
-                .g
-                .outgoing_edges(v)
-                .iter()
-                .map(|l| l.end)
-                .collect(),
-            TraversalDirection::REVERSE => self
-                .g
-                .incoming_edges(v)
-                .iter()
-                .map(|l| l.start)
-                .collect(),
+            TraversalDirection::FORWARD => self.g.outgoing_edges(v).iter().map(|l| l.end).collect(),
+            TraversalDirection::REVERSE => {
+                self.g.incoming_edges(v).iter().map(|l| l.start).collect()
+            }
         }
     }
 
@@ -87,9 +79,10 @@ impl<'a> DFS<'a> {
         self.blocked.insert(v);
 
         for w in self.neighbors(v) {
-            if !self.blocked.contains(&w) &&
-                (self.visit_f.is_none() || self.visit_f.unwrap()(w)) &&
-                self.g.vertex_length(w) < self.node_len_thr {
+            if !self.blocked.contains(&w)
+                && (self.visit_f.is_none() || self.visit_f.unwrap()(w))
+                && self.g.vertex_length(w) < self.node_len_thr
+            {
                 self.run_from(w);
             } else {
                 self.boundary.insert(w);
