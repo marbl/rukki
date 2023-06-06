@@ -80,6 +80,7 @@ impl<'a> ExtensionHelper<'a> {
         }
     }
 
+    //FIXME refactor out!
     //FIXME try switching to a &Vertex iterator to simplify calls
     fn only_compatible_of_bearable(
         &self,
@@ -90,6 +91,7 @@ impl<'a> ExtensionHelper<'a> {
         // then check that all the vertices are assigned something
         // (other than ISSUE)
         if v_it.clone().all(|v| self.bearable_assignment(v.node_id)) {
+            //FIXME remove debug
             debug!(
                 "{}",
                 v_it.clone()
@@ -148,6 +150,28 @@ impl<'a> ExtensionHelper<'a> {
             debug!("Candidate adjacent extension {}", self.g.v_str(l.end));
         }
         ext
+    }
+
+    fn find_assigned_ahead(
+        &self,
+        v: Vertex,
+        group: TrioGroup,
+        solid_len: usize,
+    ) -> Option<Vertex> {
+        let check_unassigned = |x: Vertex| self.assignments.get(x.node_id).is_none();
+        let mut dfs = dfs::DFS::new(self.g, dfs::TraversalDirection::FORWARD,
+            Some(&check_unassigned));
+        dfs.set_max_node_len(solid_len);
+        dfs.run_from(v);
+
+        //could be if solid unassigned node is in the boundary
+        if dfs.boundary().iter().any(|&x| check_unassigned(x)) {
+            return None
+        }
+
+        only_or_none(dfs.boundary().iter().
+            filter(|x| self.compatible_assignment(x.node_id, group))
+            .copied())
     }
 
     fn find_compatible_sink(
@@ -353,7 +377,7 @@ impl<'a> HaploSearcher<'a> {
         path.reverse_complement()
     }
 
-    fn aimed_grow_step_ext(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
+    fn solid_aimed_step_ext(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
         assert!(self.long_node(v.node_id));
 
         let w = self
@@ -368,6 +392,22 @@ impl<'a> HaploSearcher<'a> {
 
         debug!("Found next 'target' vertex {}", self.g.v_str(w));
 
+        self.filling_path_between(v, w, group, true)
+    }
+
+    fn assigned_aimed_ext(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
+        let w = self
+            .extension_helper
+            .find_assigned_ahead(v, group, self.settings.solid_len)?;
+
+        debug!("Found next 'assigned' vertex {}", self.g.v_str(w));
+
+        //FIXME do we want to allow gaps here?
+        self.filling_path_between(v, w, group, false)
+    }
+
+    //FIXME extract to some helper
+    fn filling_path_between(&self, v: Vertex, w: Vertex, group: TrioGroup, allow_gaps: bool) -> Option<Path> {
         let mut reachable_vertices = reachable_between(
             self.g,
             v,
@@ -401,6 +441,10 @@ impl<'a> HaploSearcher<'a> {
             assert!(p2.start() == v);
             debug!("Constrained backward search led to complete path");
             return Some(p2);
+        }
+
+        if !allow_gaps {
+            return None;
         }
 
         //use that multiple copies of the node can't be in path
@@ -438,7 +482,7 @@ impl<'a> HaploSearcher<'a> {
     fn grow_forward(&self, path: &mut Path, group: TrioGroup) {
         loop {
             if self.long_node(path.end().node_id) {
-                self.aimed_grow(path, group);
+                self.solid_aimed_grow(path, group);
             }
             if !self.unguided_grow_to_solid(path, group) {
                 debug!("Stopping extension");
@@ -449,12 +493,12 @@ impl<'a> HaploSearcher<'a> {
 
     //Tries to maximally grow the path forward from a solid node, iteratively trying to guess next solid target
     //returns true if anything was done and false if couldn't extend
-    fn aimed_grow(&self, path: &mut Path, group: TrioGroup) {
+    fn solid_aimed_grow(&self, path: &mut Path, group: TrioGroup) {
         debug!(
             "Initiating 'guided' extension from {}",
             self.g.v_str(path.end())
         );
-        while let Some(ext) = self.aimed_grow_step_ext(path.end(), group) {
+        while let Some(ext) = self.solid_aimed_step_ext(path.end(), group) {
             debug!("Found extension {}", ext.print(self.g));
             if self.check_available_append(path, &ext, group) {
                 debug!("Merging in");
@@ -499,6 +543,7 @@ impl<'a> HaploSearcher<'a> {
 
     fn unguided_next_or_gap(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
         self.local_next(v, group, None)
+            .or_else(|| self.assigned_aimed_ext(v, group))
             .or_else(|| self.gap_patch(v, group, self.settings.trusted_len))
             //FIXME this one might lead to interesting non-trivial issues
             .or_else(|| self.gap_patch(v, group, 0))
@@ -891,6 +936,7 @@ impl<'a> HaploSearcher<'a> {
     }
 
     //returns false if ended in issue
+    //FIXME remove return value
     fn grow_local(
         &self,
         path: &mut Path,
