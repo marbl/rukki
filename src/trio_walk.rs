@@ -18,20 +18,39 @@ use std::collections::{HashMap, HashSet};
 //     short_behind
 // }
 
+//FIXME move to dfs.rs
 //TODO optimize
 pub fn reachable_between(
     g: &Graph,
     v: Vertex,
     w: Vertex,
     node_len_thr: usize,
-    subgraph_f: Option<&dyn Fn(Vertex) -> bool>,
+    node_f: Option<&dyn Fn(Vertex) -> bool>,
 ) -> HashSet<Vertex> {
-    let (sinks, mut short_ahead) = dfs::sinks_ahead(g, v, node_len_thr, subgraph_f);
-    short_ahead.extend(&sinks);
-    let (sources, mut short_behind) = dfs::sources_behind(g, w, node_len_thr, subgraph_f);
-    short_behind.extend(&sources);
+    //let (sinks, mut short_ahead) = dfs::sinks_ahead(g, v, node_len_thr, node_f);
+    use dfs::*;
+    let mut reachable_between: HashSet<Vertex> = HashSet::new();
 
-    short_ahead.intersection(&short_behind).copied().collect()
+    let mut fwd_dfs = DFS::new(g, TraversalDirection::FORWARD, node_f);
+    fwd_dfs.set_max_node_len(node_len_thr);
+    fwd_dfs.extend_blocked(std::iter::once(w));
+    //inner_dfs(g, v, node_len_thr, &mut visited, &mut border);
+    fwd_dfs.run_from(v);
+    if fwd_dfs.boundary().contains(&w) {
+        let fwd_visited = fwd_dfs.visited();
+        reachable_between.insert(v);
+        reachable_between.insert(w);
+
+        let mut bwd_dfs = DFS::new(g, TraversalDirection::REVERSE, node_f);
+        bwd_dfs.set_max_node_len(node_len_thr);
+        bwd_dfs.extend_blocked(std::iter::once(v));
+        bwd_dfs.run_from(w);
+        let bwd_visited = bwd_dfs.visited();
+        assert!(bwd_dfs.boundary().contains(&v));
+
+        reachable_between.extend(fwd_visited.intersection(&bwd_visited).copied());
+    }
+    reachable_between
 }
 
 //FIXME use iterators
