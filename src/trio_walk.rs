@@ -6,32 +6,39 @@ use itertools::Itertools;
 use log::{debug, warn};
 use std::collections::{HashMap, HashSet};
 
-// pub fn reachable_ahead(g: &Graph, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
-//     let (sinks, mut short_ahead) = sinks_ahead(g, v, node_len_thr);
-//     short_ahead.extend(&sinks);
-//     short_ahead
-// }
-
-// pub fn reachable_behind(g: &Graph, v: Vertex, node_len_thr: usize) -> HashSet<Vertex> {
-//     let (sources, mut short_behind) = sources_behind(g, v, node_len_thr);
-//     short_behind.extend(&sources);
-//     short_behind
-// }
-
+//FIXME move to dfs.rs
 //TODO optimize
 pub fn reachable_between(
     g: &Graph,
     v: Vertex,
     w: Vertex,
     node_len_thr: usize,
-    subgraph_f: Option<&dyn Fn(Vertex) -> bool>,
+    node_f: Option<&dyn Fn(Vertex) -> bool>,
 ) -> HashSet<Vertex> {
-    let (sinks, mut short_ahead) = dfs::sinks_ahead(g, v, node_len_thr, subgraph_f);
-    short_ahead.extend(&sinks);
-    let (sources, mut short_behind) = dfs::sources_behind(g, w, node_len_thr, subgraph_f);
-    short_behind.extend(&sources);
+    //let (sinks, mut short_ahead) = dfs::sinks_ahead(g, v, node_len_thr, node_f);
+    use dfs::*;
+    let mut reachable_between: HashSet<Vertex> = HashSet::new();
 
-    short_ahead.intersection(&short_behind).copied().collect()
+    let mut fwd_dfs = DFS::new(g, TraversalDirection::FORWARD, node_f);
+    fwd_dfs.set_max_node_len(node_len_thr);
+    fwd_dfs.extend_blocked(std::iter::once(w));
+    //inner_dfs(g, v, node_len_thr, &mut visited, &mut border);
+    fwd_dfs.run_from(v);
+    if fwd_dfs.boundary().contains(&w) {
+        let fwd_visited = fwd_dfs.visited();
+        reachable_between.insert(v);
+        reachable_between.insert(w);
+
+        let mut bwd_dfs = DFS::new(g, TraversalDirection::REVERSE, node_f);
+        bwd_dfs.set_max_node_len(node_len_thr);
+        bwd_dfs.extend_blocked(std::iter::once(v));
+        bwd_dfs.run_from(w);
+        let bwd_visited = bwd_dfs.visited();
+        assert!(bwd_dfs.boundary().contains(&v));
+
+        reachable_between.extend(fwd_visited.intersection(&bwd_visited).copied());
+    }
+    reachable_between
 }
 
 //FIXME use iterators
@@ -73,6 +80,7 @@ impl<'a> ExtensionHelper<'a> {
         }
     }
 
+    //FIXME refactor out!
     //FIXME try switching to a &Vertex iterator to simplify calls
     fn only_compatible_of_bearable(
         &self,
@@ -83,6 +91,7 @@ impl<'a> ExtensionHelper<'a> {
         // then check that all the vertices are assigned something
         // (other than ISSUE)
         if v_it.clone().all(|v| self.bearable_assignment(v.node_id)) {
+            //FIXME remove debug
             debug!(
                 "{}",
                 v_it.clone()
@@ -141,6 +150,29 @@ impl<'a> ExtensionHelper<'a> {
             debug!("Candidate adjacent extension {}", self.g.v_str(l.end));
         }
         ext
+    }
+
+    fn find_assigned_ahead(&self, v: Vertex, group: TrioGroup, solid_len: usize) -> Option<Vertex> {
+        let check_unassigned = |x: Vertex| self.assignments.get(x.node_id).is_none();
+        let mut dfs = dfs::DFS::new(
+            self.g,
+            dfs::TraversalDirection::FORWARD,
+            Some(&check_unassigned),
+        );
+        dfs.set_max_node_len(solid_len);
+        dfs.run_from(v);
+
+        //could be if solid unassigned node is in the boundary
+        if dfs.boundary().iter().any(|&x| check_unassigned(x)) {
+            return None;
+        }
+
+        only_or_none(
+            dfs.boundary()
+                .iter()
+                .filter(|x| self.compatible_assignment(x.node_id, group))
+                .copied(),
+        )
     }
 
     fn find_compatible_sink(
@@ -208,8 +240,11 @@ pub struct HaploSearchSettings {
     pub trusted_len: usize,
 
     //configuring behavior
-    //NB: path intersections by homozygous labeled 'solid' nodes are always allowed
-    pub allow_solid_intersections: bool,
+    //Allow reuse of nodes within the same haplotype (otherwise prevented),
+    // and use of solid unassigned nodes by different haplotypes
+    //NB: path intersections by solid 'homozygous' nodes are always allowed
+    //NB2: path self-intersections are always prevented
+    pub allow_intersections: bool,
     pub allow_unassigned: bool,
 
     //fill in small bubbles
@@ -232,7 +267,7 @@ impl Default for HaploSearchSettings {
         Self {
             solid_len: 500_000,
             trusted_len: 200_000,
-            allow_solid_intersections: false,
+            allow_intersections: false,
             allow_unassigned: false,
             fill_bubbles: true,
             max_unique_cov: f64::MAX,
@@ -251,7 +286,7 @@ impl Default for HaploSearchSettings {
 impl HaploSearchSettings {
     pub fn assigning_stage_adjusted(&self) -> HaploSearchSettings {
         HaploSearchSettings {
-            allow_solid_intersections: true,
+            allow_intersections: true,
             fill_bubbles: false,
             allow_unassigned: true,
             ..*self
@@ -312,13 +347,13 @@ impl<'a> HaploSearcher<'a> {
     //TODO maybe use single length threshold?
     pub fn find_all(&mut self) -> Vec<HaploPath> {
         let mut answer = Vec::new();
-        let mut nodes: Vec<(usize, &Node)> = self.g.all_nodes().enumerate().collect();
+        let mut nodes = self.g.all_nodes().enumerate().collect_vec();
         nodes.sort_by_key(|(_, n)| n.length);
 
-        for (node_id, node) in nodes.into_iter().rev() {
+        for (node_id, _node) in nodes.into_iter().rev() {
             //launch from long, definitely assigned nodes
             if !self.used.contains(node_id)
-                && node.length >= self.settings.solid_len
+                && self.long_node(node_id)
                 && self.assignments.is_definite(node_id)
             {
                 let group = self.assignments.get(node_id).unwrap().group;
@@ -343,20 +378,43 @@ impl<'a> HaploSearcher<'a> {
         path.reverse_complement()
     }
 
-    fn aimed_grow_ext(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
-        assert!(self.g.vertex_length(v) >= self.settings.solid_len);
+    fn solid_aimed_step_ext(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
+        assert!(self.long_node(v.node_id));
 
         let w = self
             .extension_helper
             .find_compatible_sink(v, group, self.settings.solid_len)?;
 
-        if !self.check_available(w.node_id, group) {
-            debug!("Next 'target' node {} was unavailable", self.g.v_str(w));
-            return None;
-        }
+        //Unifying checks
+        //if !self.check_available(w.node_id, group) {
+        //    debug!("Next 'target' node {} was unavailable", self.g.v_str(w));
+        //    return None;
+        //}
 
         debug!("Found next 'target' vertex {}", self.g.v_str(w));
 
+        self.filling_path_between(v, w, group, true)
+    }
+
+    fn assigned_aimed_ext(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
+        let w = self
+            .extension_helper
+            .find_assigned_ahead(v, group, self.settings.solid_len)?;
+
+        debug!("Found next 'assigned' vertex {}", self.g.v_str(w));
+
+        //FIXME do we want to allow gaps here?
+        self.filling_path_between(v, w, group, false)
+    }
+
+    //FIXME extract to some helper
+    fn filling_path_between(
+        &self,
+        v: Vertex,
+        w: Vertex,
+        group: TrioGroup,
+        allow_gaps: bool,
+    ) -> Option<Path> {
         let mut reachable_vertices = reachable_between(
             self.g,
             v,
@@ -370,26 +428,36 @@ impl<'a> HaploSearcher<'a> {
         }
 
         let mut p1 = Path::new(v);
-        debug!("Constrained forward extension from {}", self.g.v_str(v));
+        debug!(
+            "Constrained forward extension from {} to {}",
+            self.g.v_str(v),
+            self.g.v_str(w)
+        );
         self.grow_local(&mut p1, group, w, &|x| reachable_vertices.contains(&x));
-        if p1.in_path(w.node_id) {
-            //TODO think if actually guaranteed
+        if p1.vertices().contains(&w) {
             assert!(p1.end() == w);
             debug!("Constrained forward search led to complete path");
             return Some(p1);
         }
 
         let mut p2 = Path::new(w.rc());
-        debug!("Constrained backward extension from {}", self.g.v_str(w));
+        debug!(
+            "Constrained backward extension from {} to {}",
+            self.g.v_str(w),
+            self.g.v_str(v)
+        );
         self.grow_local(&mut p2, group, v.rc(), &|x| {
             reachable_vertices.contains(&x.rc())
         });
         let p2 = p2.reverse_complement();
-        if p2.in_path(v.node_id) {
-            //TODO think if actually guaranteed
+        if p2.vertices().contains(&v) {
             assert!(p2.start() == v);
             debug!("Constrained backward search led to complete path");
             return Some(p2);
+        }
+
+        if !allow_gaps {
+            return None;
         }
 
         //use that multiple copies of the node can't be in path
@@ -417,6 +485,7 @@ impl<'a> HaploSearcher<'a> {
             end: p2.start(),
             //FIXME use something reasonable
             gap_size: self.settings.default_gap_size,
+            info: String::from("ambig_path"),
         }));
         assert!(p1.can_merge_in(&p2));
         p1.merge_in(p2);
@@ -425,35 +494,32 @@ impl<'a> HaploSearcher<'a> {
 
     fn grow_forward(&self, path: &mut Path, group: TrioGroup) {
         loop {
-            self.aimed_grow(path, group);
-            if !self.unguided_grow(path, group) {
+            if self.long_node(path.end().node_id) {
+                self.solid_aimed_grow(path, group);
+            }
+            if !self.unguided_grow_to_solid(path, group) {
                 debug!("Stopping extension");
                 break;
             }
         }
     }
 
+    //Tries to maximally grow the path forward from a solid node, iteratively trying to guess next solid target
     //returns true if anything was done and false if couldn't extend
-    fn aimed_grow(&self, path: &mut Path, group: TrioGroup) -> bool {
+    fn solid_aimed_grow(&self, path: &mut Path, group: TrioGroup) {
         debug!(
             "Initiating 'guided' extension from {}",
             self.g.v_str(path.end())
         );
-        let mut something_done = false;
-        while let Some(ext) = self.aimed_grow_ext(path.end(), group) {
-            assert!(ext
-                .vertices()
-                .iter()
-                .all(|v| self.check_available(v.node_id, group)));
+        while let Some(ext) = self.solid_aimed_step_ext(path.end(), group) {
             debug!("Found extension {}", ext.print(self.g));
-            if path.can_merge_in(&ext) {
+            if self.check_available_append(path, &ext, group) {
                 debug!("Merging in");
                 path.merge_in(ext);
                 debug!(
                     "Will continue 'guided' extension from {}",
                     self.g.v_str(path.end())
                 );
-                something_done = true;
             } else {
                 warn!(
                     "Couldn't merge in guided extension from {}",
@@ -462,21 +528,22 @@ impl<'a> HaploSearcher<'a> {
                 break;
             }
         }
-        something_done
     }
 
-    //returns true if reached long node and false if ended in issue or couldn't extend anymore
-    fn unguided_grow(&self, path: &mut Path, group: TrioGroup) -> bool {
+    //Tries to maximally grow the path forward until the next solid node (without gessing next solid in advance)
+    //returns true if reached solid node and false if ended in issue or couldn't extend anymore
+    fn unguided_grow_to_solid(&self, path: &mut Path, group: TrioGroup) -> bool {
         debug!(
             "Initiating unguided extension from {}",
             self.g.v_str(path.end())
         );
+        //try to make one step ahead, s.a. gap/tangle/bubble and regular extension
         while let Some(ext) = self.unguided_next_or_gap(path.end(), group) {
             if self.check_available_append(path, &ext, group) {
                 path.merge_in(ext);
                 let v = path.end();
-                if self.g.vertex_length(v) >= self.settings.solid_len {
-                    debug!("Reached long node {}", self.g.v_str(v));
+                if self.long_node(v.node_id) {
+                    debug!("Reached solid node {}", self.g.v_str(v));
                     return true;
                 }
             } else {
@@ -489,6 +556,7 @@ impl<'a> HaploSearcher<'a> {
 
     fn unguided_next_or_gap(&self, v: Vertex, group: TrioGroup) -> Option<Path> {
         self.local_next(v, group, None)
+            .or_else(|| self.assigned_aimed_ext(v, group))
             .or_else(|| self.gap_patch(v, group, self.settings.trusted_len))
             //FIXME this one might lead to interesting non-trivial issues
             .or_else(|| self.gap_patch(v, group, 0))
@@ -583,6 +651,7 @@ impl<'a> HaploSearcher<'a> {
                     curr_gap_est - self.g.vertex_length(w) as i64,
                     self.settings.min_gap_size,
                 ),
+                info: format!("alt-{}", self.g.name(alt.node_id)),
             });
         } else if component.sources.len() == 1 {
             //haplotype merge-in case
@@ -605,6 +674,7 @@ impl<'a> HaploSearcher<'a> {
                         start: v,
                         end: w,
                         gap_size: std::cmp::max(curr_gap_est, self.settings.min_gap_size),
+                        info: format!("alt-{}", self.g.name(alt.node_id)),
                     });
                 }
             }
@@ -679,10 +749,7 @@ impl<'a> HaploSearcher<'a> {
             &superbubble::SbSearchParams::unrestricted(),
             consider_vertex_f,
         )?;
-        if bubble
-            .inner_vertices()
-            .any(|&v| self.g.vertex_length(v) >= self.settings.solid_len)
-        {
+        if bubble.inner_vertices().any(|&x| self.long_node(x.node_id)) {
             return None;
         }
 
@@ -778,6 +845,7 @@ impl<'a> HaploSearcher<'a> {
                 start: v,
                 end: w,
                 gap_size: gap_est,
+                info: String::from("ambig_bubble"),
             })))
         }
     }
@@ -796,6 +864,7 @@ impl<'a> HaploSearcher<'a> {
                 scc::estimate_size_no_mult(small_tangle, self.g) as i64,
                 self.settings.min_gap_size,
             ),
+            info: String::from("tangle"),
         })))
     }
 
@@ -815,19 +884,21 @@ impl<'a> HaploSearcher<'a> {
             return false;
         }
 
-        if !self.settings.allow_solid_intersections {
+        if !self.settings.allow_intersections {
             if let Some(used_group) = self.used.group(node_id) {
                 if TrioGroup::incompatible(used_group, target_group) {
                     //node already used in different haplotype
                     if self.long_node(node_id)
                         && self.assignments.group(node_id) != Some(TrioGroup::HOMOZYGOUS)
                     {
+                        assert!(self.assignments.group(node_id).is_none());
                         warn!("Can't reuse long node {} (not initially marked as homozygous) in different haplotype",
                             self.g.name(node_id));
                         return false;
                     }
                 } else {
                     //node already used within the same haplotype
+                    //TODO consider allowing when deduplication is implemented
                     debug!(
                         "Tried to reuse node {} twice within the same haplotype: {:?}",
                         self.g.name(node_id),
@@ -837,6 +908,7 @@ impl<'a> HaploSearcher<'a> {
                 }
             }
         }
+
         true
     }
 
@@ -874,6 +946,7 @@ impl<'a> HaploSearcher<'a> {
     }
 
     //returns false if ended in issue
+    //FIXME remove return value
     fn grow_local(
         &self,
         path: &mut Path,
@@ -971,7 +1044,9 @@ mod tests {
             assert!(path.len() == 4);
             assert_eq!(
                 path.print(&g),
-                String::from("utig4-947+,utig4-1318-,utig4-1320+,[N36423N],utig4-1322+")
+                String::from(
+                    "utig4-947+,utig4-1318-,utig4-1320+,[N36423N:alt-utig4-1319],utig4-1322+"
+                )
             );
         }
     }

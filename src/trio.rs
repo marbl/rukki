@@ -449,10 +449,23 @@ impl<'a> HomozygousAssigner<'a> {
         self.check_homozygous_fork_ahead(v) || self.check_homozygous_fork_ahead(v.rc())
     }
 
+    //includes boundary (unvisited) vertices
+    //returns pair of sinks and all ('inner') visited vertices
+    //visited vertices will overlap sinks by short dead-ends
+    fn sinks_ahead(&self, v: Vertex, node_len_thr: usize) -> (HashSet<Vertex>, HashSet<Vertex>) {
+        let mut dfs = dfs::DFS::new_forward(self.g);
+        dfs.set_max_node_len(node_len_thr);
+        //inner_dfs(g, v, node_len_thr, &mut visited, &mut border);
+        dfs.run_from(v);
+        let mut sinks = dfs.boundary().clone();
+        //extend to dead-ends
+        sinks.extend(dfs.dead_ends());
+        (sinks, dfs.visited())
+    }
+
     fn check_homozygous_fork_ahead(&self, v: Vertex) -> bool {
         //trick is that v no longer has to itself be long
-        let (long_ahead, mut visited_vertices) =
-            dfs::sinks_ahead(self.g, v, self.trusted_len, None);
+        let (long_ahead, mut visited_vertices) = self.sinks_ahead(v, self.trusted_len);
         visited_vertices.extend(&long_ahead);
         let mut blended_group = None;
 
