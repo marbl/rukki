@@ -428,7 +428,11 @@ impl<'a> HaploSearcher<'a> {
         }
 
         let mut p1 = Path::new(v);
-        debug!("Constrained forward extension from {} to {}", self.g.v_str(v), self.g.v_str(w));
+        debug!(
+            "Constrained forward extension from {} to {}",
+            self.g.v_str(v),
+            self.g.v_str(w)
+        );
         self.grow_local(&mut p1, group, w, &|x| reachable_vertices.contains(&x));
         if p1.vertices().contains(&w) {
             assert!(p1.end() == w);
@@ -437,7 +441,11 @@ impl<'a> HaploSearcher<'a> {
         }
 
         let mut p2 = Path::new(w.rc());
-        debug!("Constrained backward extension from {} to {}", self.g.v_str(w), self.g.v_str(v));
+        debug!(
+            "Constrained backward extension from {} to {}",
+            self.g.v_str(w),
+            self.g.v_str(v)
+        );
         self.grow_local(&mut p2, group, v.rc(), &|x| {
             reachable_vertices.contains(&x.rc())
         });
