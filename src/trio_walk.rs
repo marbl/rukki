@@ -401,6 +401,10 @@ impl<'a> HaploSearcher<'a> {
             .extension_helper
             .find_assigned_ahead(v, group, self.settings.solid_len)?;
 
+        if v == w {
+            return None;
+        }
+        assert!(self.assignments.get(w.node_id).is_some());
         debug!("Found next 'assigned' vertex {}", self.g.v_str(w));
 
         //FIXME do we want to allow gaps here?
