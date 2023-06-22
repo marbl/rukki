@@ -130,9 +130,9 @@ impl<'a> ExtensionHelper<'a> {
         consider_vertex_f: Option<&dyn Fn(Vertex) -> bool>,
     ) -> Option<Link> {
         //If only extension exists it is always ok if it is unassigned
-        //FIXME Probably obsolete with two-step strategy!
-        if self.g.outgoing_edge_cnt(v) == 1 {
-            let l = self.g.outgoing_edges(v)[0];
+        let filtered_outgoing = considered_extensions(self.g, v, consider_vertex_f);
+        if filtered_outgoing.len() == 1 {
+            let l = filtered_outgoing[0];
             if self
                 .assignments
                 .group(l.end.node_id)
@@ -144,7 +144,6 @@ impl<'a> ExtensionHelper<'a> {
         }
 
         //debug!("Looking at (subset of) outgoing edges for {}", self.g.v_str(v));
-        let filtered_outgoing = considered_extensions(self.g, v, consider_vertex_f);
         let ext = self.only_compatible_of_bearable_link(&filtered_outgoing, group);
         if let Some(l) = ext {
             debug!("Candidate adjacent extension {}", self.g.v_str(l.end));
@@ -405,7 +404,7 @@ impl<'a> HaploSearcher<'a> {
             return None;
         }
         assert!(self.assignments.get(w.node_id).is_some());
-        debug!("Found next 'assigned' vertex {}", self.g.v_str(w));
+        debug!("Found next 'assigned' vertex {}", self.g.v_str(w),);
 
         //FIXME do we want to allow gaps here?
         self.filling_path_between(v, w, group, false)
@@ -433,30 +432,43 @@ impl<'a> HaploSearcher<'a> {
 
         let mut p1 = Path::new(v);
         debug!(
-            "Constrained forward extension from {} to {}",
+            "Constrained forward extension from {} to {}, allow gaps: {}",
             self.g.v_str(v),
-            self.g.v_str(w)
+            self.g.v_str(w),
+            allow_gaps
         );
-        self.grow_local(&mut p1, group, w, &|x| reachable_vertices.contains(&x));
+
+        self.grow_local_maybe_gap(
+            &mut p1,
+            group,
+            w,
+            &|x| reachable_vertices.contains(&x),
+            allow_gaps,
+        );
         if p1.vertices().contains(&w) {
             assert!(p1.end() == w);
-            debug!("Constrained forward search led to complete path");
+            debug!("Found complete path");
             return Some(p1);
         }
 
         let mut p2 = Path::new(w.rc());
         debug!(
-            "Constrained backward extension from {} to {}",
+            "Constrained backward extension from {} to {}, allow gaps: {}",
             self.g.v_str(w),
-            self.g.v_str(v)
+            self.g.v_str(v),
+            allow_gaps
         );
-        self.grow_local(&mut p2, group, v.rc(), &|x| {
-            reachable_vertices.contains(&x.rc())
-        });
+        self.grow_local_maybe_gap(
+            &mut p2,
+            group,
+            v.rc(),
+            &|x| reachable_vertices.contains(&x.rc()),
+            allow_gaps,
+        );
         let p2 = p2.reverse_complement();
         if p2.vertices().contains(&v) {
             assert!(p2.start() == v);
-            debug!("Constrained backward search led to complete path");
+            debug!("Found complete path");
             return Some(p2);
         }
 
@@ -949,6 +961,20 @@ impl<'a> HaploSearcher<'a> {
             .or_else(|| self.find_bubble_fill_ahead(v, group, constraint_vertex_f))
     }
 
+    fn grow_local_maybe_gap(
+        &self,
+        path: &mut Path,
+        group: TrioGroup,
+        target_v: Vertex,
+        hint_f: &dyn Fn(Vertex) -> bool,
+        allow_gaps: bool,
+    ) -> bool {
+        match allow_gaps {
+            true => self.grow_local(path, group, target_v, hint_f),
+            false => self.grow_local_nogap(path, group, target_v, hint_f),
+        }
+    }
+
     //returns false if ended in issue
     //FIXME remove return value
     fn grow_local(
@@ -958,7 +984,6 @@ impl<'a> HaploSearcher<'a> {
         target_v: Vertex,
         hint_f: &dyn Fn(Vertex) -> bool,
     ) -> bool {
-        debug!("Locally growing from {}", self.g.v_str(path.end()));
         while let Some(ext) = self
             .local_next(path.end(), group, Some(hint_f))
             //FIXME review logic
@@ -971,10 +996,30 @@ impl<'a> HaploSearcher<'a> {
                     break;
                 }
             } else {
-                debug!(
-                    "Couldn't append extension {} to the path",
-                    ext.print(self.g)
-                );
+                return false;
+            }
+        }
+        true
+    }
+
+    fn grow_local_nogap(
+        &self,
+        path: &mut Path,
+        group: TrioGroup,
+        target_v: Vertex,
+        hint_f: &dyn Fn(Vertex) -> bool,
+    ) -> bool {
+        while let Some(l) = self
+            .extension_helper
+            .group_extension(path.end(), group, Some(hint_f))
+        {
+            let ext = Path::from_link(l);
+            if self.check_available_append(path, &ext, group) {
+                path.merge_in(ext);
+                if path.end() == target_v {
+                    break;
+                }
+            } else {
                 return false;
             }
         }
@@ -1039,7 +1084,6 @@ mod tests {
         );
         for node in ["utig4-1322", "utig4-1320", "utig4-947"] {
             info!("Starting from {}", node);
-            println!("Print Starting from {node}");
             let path = haplo_searcher.haplo_path(
                 graph::Vertex::forward(g.name2id(node)),
                 trio::TrioGroup::MATERNAL,
