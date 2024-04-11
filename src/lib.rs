@@ -410,36 +410,6 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     );
     let trio_infos = trio::read_trio(&settings.markers)?;
 
-    info!("Assigning initial parental groups to the nodes");
-    let assignments = trio::assign_parental_groups(
-        &g,
-        &trio_infos,
-        &GroupAssignmentSettings {
-            assign_cnt: settings.marker_cnt,
-            assign_sparsity: settings.marker_sparsity,
-            assign_ratio: settings.marker_ratio,
-            solid_ratio: settings.solid_ratio.unwrap_or(settings.marker_ratio),
-            issue_len: settings.issue_len,
-            issue_cnt: settings.issue_cnt.unwrap_or(settings.marker_cnt),
-            issue_sparsity: settings.issue_sparsity.unwrap_or(settings.marker_sparsity),
-            issue_ratio: settings.issue_ratio.unwrap_or(settings.marker_ratio),
-        },
-        settings.solid_len,
-    );
-
-    let raw_cnts = trio_infos
-        .into_iter()
-        .map(|ti| (g.name2id(&ti.node_name), ti))
-        .collect::<HashMap<usize, trio::TrioInfo>>();
-
-    if let Some(output) = &settings.init_assign {
-        info!(
-            "Writing initial node annotation to {}",
-            output.to_str().unwrap()
-        );
-        output_coloring(&g, &assignments, output, &hap_names)?;
-    }
-
     let solid_cov_est = weighted_mean_solid_cov(&g, settings.solid_len);
     if settings.suspect_homozygous_cov_coeff > 0. || settings.solid_homozygous_cov_coeff > 0. {
         info!("Coverage estimate based on long nodes was {solid_cov_est}");
@@ -456,6 +426,37 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
     };
 
     let solid_homozygous_cov = settings.solid_homozygous_cov_coeff * solid_cov_est;
+
+    info!("Assigning initial parental groups to the nodes");
+    let assignments = trio::assign_parental_groups(
+        &g,
+        &trio_infos,
+        &GroupAssignmentSettings {
+            assign_cnt: settings.marker_cnt,
+            assign_sparsity: settings.marker_sparsity,
+            assign_ratio: settings.marker_ratio,
+            solid_ratio: settings.solid_ratio.unwrap_or(settings.marker_ratio),
+            issue_len: settings.issue_len,
+            issue_cnt: settings.issue_cnt.unwrap_or(settings.marker_cnt),
+            issue_sparsity: settings.issue_sparsity.unwrap_or(settings.marker_sparsity),
+            issue_ratio: settings.issue_ratio.unwrap_or(settings.marker_ratio),
+        },
+        settings.solid_len,
+        solid_homozygous_cov,
+    );
+
+    let raw_cnts = trio_infos
+        .into_iter()
+        .map(|ti| (g.name2id(&ti.node_name), ti))
+        .collect::<HashMap<usize, trio::TrioInfo>>();
+
+    if let Some(output) = &settings.init_assign {
+        info!(
+            "Writing initial node annotation to {}",
+            output.to_str().unwrap()
+        );
+        output_coloring(&g, &assignments, output, &hap_names)?;
+    }
 
     info!("Marking homozygous nodes");
     let assigner = trio::HomozygousAssigner::new(

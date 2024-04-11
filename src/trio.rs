@@ -220,6 +220,7 @@ pub fn assign_parental_groups(
     trio_infos: &[TrioInfo],
     settings: &GroupAssignmentSettings,
     solid_len: usize,
+    solid_cov: f64,
 ) -> AssignmentStorage {
     let mut assignments = AssignmentStorage::new();
 
@@ -230,13 +231,13 @@ pub fn assign_parental_groups(
             settings.issue_cnt, settings.issue_sparsity, settings.issue_ratio);
     assert!(settings.issue_ratio <= settings.assign_ratio);
 
-    let assign_node_f = |x: usize, y: usize, node_len: usize| {
+    let assign_node_f = |x: usize, y: usize, node_len: usize, node_cov: f64| {
         assert!(x >= y);
         let tot = x + y;
         tot >= settings.assign_cnt
             && node_len <= tot * settings.assign_sparsity
             && ((x as f64) > settings.assign_ratio * (y as f64) - 1e-6
-                || (node_len > solid_len && (x as f64) > settings.solid_ratio * (y as f64) - 1e-6))
+                || (node_len > solid_len && (x as f64) > settings.solid_ratio * (y as f64) - 1e-6 && node_cov < solid_cov - 1e-6))
     };
 
     let issue_node_f = |x: usize, y: usize, node_len: usize| {
@@ -251,6 +252,7 @@ pub fn assign_parental_groups(
     for trio_info in trio_infos {
         let node_id = g.name2id(&trio_info.node_name);
         let node_len = g.node_length(node_id);
+        let node_cov = g.node(node_id).coverage;
         debug!(
             "Looking at node {} (len={}), mat:pat={}",
             trio_info.node_name,
@@ -269,6 +271,7 @@ pub fn assign_parental_groups(
             max(trio_info.mat, trio_info.pat),
             min(trio_info.mat, trio_info.pat),
             node_len,
+            node_cov,
         ) {
             if trio_info.mat >= trio_info.pat {
                 debug!("Looks MATERNAL");
