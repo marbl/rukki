@@ -357,7 +357,6 @@ impl<'a> HomozygousAssigner<'a> {
         if n.length > self.max_assign_len {
             return false;
         }
-
         match self.assignments.group(node_id) {
             None => n.length < self.solid_len || n.coverage > self.min_solid_cov - 1e-5,
             //TODO think if we should be able to also reclassify ISSUE nodes
@@ -477,7 +476,7 @@ impl<'a> HomozygousAssigner<'a> {
         //todo maybe chack long_ahead size
         for v_ahead in &long_ahead {
             match self.assignments.group(v_ahead.node_id) {
-                None | Some(TrioGroup::ISSUE) => return false,
+                Some(TrioGroup::ISSUE) => return false,
                 og => blended_group = TrioGroup::optional_blend(blended_group, og),
             };
         }
