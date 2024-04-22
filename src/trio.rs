@@ -239,7 +239,7 @@ pub fn assign_parental_groups(
             && ((x as f64) > settings.assign_ratio * (y as f64) - 1e-6
                 || (node_len > solid_len
                     && (x as f64) > settings.solid_ratio * (y as f64) - 1e-6
-                    && node_cov < solid_cov - 1e-6))
+                    && node_cov < solid_cov + 1e-6))
     };
 
     let issue_node_f = |x: usize, y: usize, node_len: usize| {
