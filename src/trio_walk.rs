@@ -639,9 +639,21 @@ impl<'a> HaploSearcher<'a> {
             self.g.v_str(alt)
         );
         let component = dfs::ShortNodeComponent::ahead_from_long(self.g, alt, short_node_len);
+        let compatible_source_cnt = component
+            .sources
+            .iter()
+            .filter(|s| self.assignments.group(s.node_id) == Some(group))
+            .count();
+        let compatible_sink_cnt = component
+            .sinks
+            .iter()
+            .filter(|s| self.assignments.group(s.node_id) == Some(group))
+            .count();
 
         //think of maybe relaxing
         if !component.simple_boundary()
+            || compatible_source_cnt > 1
+            || compatible_sink_cnt > 1
             || !component
                 .sources
                 .iter()
