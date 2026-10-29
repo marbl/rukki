@@ -4,7 +4,10 @@ use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::{collections::HashSet, path::PathBuf};
+use std::{
+    collections::{HashSet, VecDeque},
+    path::PathBuf,
+};
 use trio_walk::HaploSearchSettings;
 
 //tests don't compile without the pub
@@ -21,6 +24,61 @@ use crate::trio::{
     assign_short_node_tangles, GroupAssignmentSettings, TangleAssignmentSettings, TrioGroup,
 };
 use crate::trio_walk::HaploSearcher;
+
+/// Settings for evidence-free dual assembly using the pseudo-hap bubble
+/// decomposition as a deterministic source of complementary choices.
+#[derive(clap::Args, Debug)]
+pub struct DualSettings {
+    /// GFA file with per-node coverage
+    #[clap(short, long)]
+    graph: PathBuf,
+
+    /// Node coloring output
+    #[clap(long)]
+    colors: Option<PathBuf>,
+
+    /// Extracted pseudohaplotype paths
+    #[clap(long, short)]
+    paths: Option<PathBuf>,
+
+    /// Strict homologous node pairs selected from MashMap self-alignments
+    #[clap(long)]
+    homology: Option<PathBuf>,
+
+    /// Use GAF ([<>]<name1>)+ format for paths
+    #[clap(long)]
+    gaf_format: bool,
+
+    /// Comma separated names for the two outputs
+    #[clap(long, default_value_t = String::from("haplotype1,haplotype2"))]
+    hap_names: String,
+
+    /// Seed used to swap primary and alternate colors between blocks
+    #[clap(long, default_value_t = 1)]
+    seed: u64,
+
+    /// Treat graph-wide coverage as haploid depth when no bubble-based
+    /// coverage estimate is available
+    #[clap(long)]
+    haploid: bool,
+
+    /// Minimum length of a unique block used by pseudo-hap decomposition
+    #[clap(long, default_value_t = 500_000)]
+    unique_block_len: usize,
+
+    /// Components below this multiple of haploid coverage are emitted once;
+    /// components near diploid coverage are shared by both outputs.
+    #[clap(long, default_value_t = 1.5)]
+    haploid_component_cov_coeff: f64,
+}
+
+impl DualSettings {
+    pub fn validate(&self) {
+        assert!(self.unique_block_len > 0);
+        assert!(self.haploid_component_cov_coeff > 1.0);
+        assert!(parse_hap_names(&self.hap_names).is_some());
+    }
+}
 
 //TODO use PathBuf
 #[derive(clap::Args, Debug)]
@@ -562,6 +620,777 @@ pub fn run_trio_analysis(settings: &TrioSettings) -> Result<(), Box<dyn Error>> 
         )?;
     }
 
+    info!("All done");
+    Ok(())
+}
+
+/// Length-weighted coverage is robust to graph fragmentation: splitting a
+/// sequence into many nodes does not give that sequence extra influence.
+fn weighted_median_cov(g: &Graph, node_ids: impl Iterator<Item = usize>) -> Option<f64> {
+    let mut cov_len: Vec<(f64, usize)> = node_ids
+        .map(|node_id| (g.node(node_id).coverage, g.node(node_id).length))
+        .filter(|(coverage, length)| *coverage > 0.0 && *length > 0)
+        .collect();
+    if cov_len.is_empty() {
+        return None;
+    }
+    cov_len.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let total_len: usize = cov_len.iter().map(|(_, length)| length).sum();
+    let mut seen = 0;
+    for (coverage, length) in cov_len {
+        seen += length;
+        if seen * 2 >= total_len {
+            return Some(coverage);
+        }
+    }
+    unreachable!()
+}
+
+fn dual_block_hash(g: &Graph, block: &pseudo_hap::LinearBlock, seed: u64) -> u64 {
+    // FNV-1a over sorted node names makes the decision independent of graph
+    // traversal direction and stable across platforms.
+    let mut names: Vec<&str> = block.all_nodes().map(|node_id| g.name(node_id)).collect();
+    names.sort_unstable();
+    let mut hash = 0xcbf29ce484222325u64 ^ seed;
+    for name in names {
+        for byte in name.as_bytes().iter().chain(std::iter::once(&0u8)) {
+            hash ^= *byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    }
+    hash
+}
+
+/// Find connected graph components not covered by a pseudo-hap bubble block.
+/// Sex chromosomes and other haploid components commonly enter this path.
+fn unassigned_components(g: &Graph, assignments: &trio::AssignmentStorage) -> Vec<Vec<usize>> {
+    let mut neighbors = vec![Vec::<usize>::new(); g.node_cnt()];
+    for link in g.all_links() {
+        if link.start.node_id != link.end.node_id {
+            neighbors[link.start.node_id].push(link.end.node_id);
+            neighbors[link.end.node_id].push(link.start.node_id);
+        }
+    }
+
+    let mut seen = vec![false; g.node_cnt()];
+    let mut components = Vec::new();
+    for start in 0..g.node_cnt() {
+        if seen[start] || assignments.contains(start) {
+            continue;
+        }
+        let mut stack = vec![start];
+        let mut component = Vec::new();
+        seen[start] = true;
+        while let Some(node_id) = stack.pop() {
+            component.push(node_id);
+            for &next in &neighbors[node_id] {
+                if !seen[next] && !assignments.contains(next) {
+                    seen[next] = true;
+                    stack.push(next);
+                }
+            }
+        }
+        components.push(component);
+    }
+    components
+}
+
+fn undirected_component_ids(g: &Graph) -> Vec<usize> {
+    let mut neighbors = vec![Vec::<usize>::new(); g.node_cnt()];
+    for link in g.all_links() {
+        if link.start.node_id != link.end.node_id {
+            neighbors[link.start.node_id].push(link.end.node_id);
+            neighbors[link.end.node_id].push(link.start.node_id);
+        }
+    }
+    let mut component_of = vec![usize::MAX; g.node_cnt()];
+    let mut component_id = 0;
+    for start in 0..g.node_cnt() {
+        if component_of[start] != usize::MAX {
+            continue;
+        }
+        component_of[start] = component_id;
+        let mut stack = vec![start];
+        while let Some(node_id) = stack.pop() {
+            for &next in &neighbors[node_id] {
+                if component_of[next] == usize::MAX {
+                    component_of[next] = component_id;
+                    stack.push(next);
+                }
+            }
+        }
+        component_id += 1;
+    }
+    component_of
+}
+
+/// Return the distinct unresolved neighbors reachable from one oriented side
+/// of a node.  GFA links are bidirected, so the forward and reverse vertices
+/// represent the two physical sides of the sequence.
+fn unresolved_side_neighbors(
+    g: &Graph,
+    assignments: &trio::AssignmentStorage,
+    vertex: Vertex,
+) -> HashSet<usize> {
+    g.outgoing_edges(vertex)
+        .into_iter()
+        .map(|link| link.end.node_id)
+        .filter(|&node_id| node_id != vertex.node_id && !assignments.contains(node_id))
+        .collect()
+}
+
+fn side_neighbors(g: &Graph, vertex: Vertex) -> HashSet<usize> {
+    g.outgoing_edges(vertex)
+        .into_iter()
+        .map(|link| link.end.node_id)
+        .filter(|&node_id| node_id != vertex.node_id)
+        .collect()
+}
+
+/// Detect collapsed junctions missed by pseudo-hap decomposition.
+///
+/// Coverage alone is insufficient: a high-copy linear or repetitive node
+/// should not split a component.  Require at least two unresolved branches on
+/// each oriented side and haploid-depth support on both sides.  This captures
+/// terminal "bowtie" structures while leaving recognized bubbles untouched.
+fn unresolved_shared_anchors(
+    g: &Graph,
+    assignments: &trio::AssignmentStorage,
+    haploid_cov: f64,
+    shared_cov_coeff: f64,
+) -> Vec<usize> {
+    if haploid_cov <= 0.0 {
+        return Vec::new();
+    }
+    let max_single_cov = shared_cov_coeff * haploid_cov;
+    let mut anchors = Vec::new();
+    for node_id in 0..g.node_cnt() {
+        if assignments.contains(node_id) || g.node(node_id).coverage < max_single_cov {
+            continue;
+        }
+        let forward = unresolved_side_neighbors(g, assignments, Vertex::forward(node_id));
+        let reverse = unresolved_side_neighbors(g, assignments, Vertex::reverse(node_id));
+        // Resolve only binary choices.  Higher-order repetitive junctions do
+        // not have a unique complementary split without additional evidence.
+        if forward.len() != 2 || reverse.len() != 2 {
+            continue;
+        }
+        let all_single_copy_neighbors = |neighbors: &HashSet<usize>| {
+            neighbors.iter().all(|&neighbor| {
+                let coverage = g.node(neighbor).coverage;
+                coverage > 0.0 && coverage < max_single_cov
+            })
+        };
+        // All four immediate arms must look single-copy.  Allowing only one
+        // supporting arm per side admits high-copy/zero-coverage rDNA tangles
+        // whose removal can repartition several otherwise-correct components.
+        if all_single_copy_neighbors(&forward) && all_single_copy_neighbors(&reverse) {
+            anchors.push(node_id);
+        }
+    }
+    anchors
+}
+
+fn stable_node_hash(g: &Graph, node_ids: &[usize], seed: u64) -> u64 {
+    let mut names: Vec<&str> = node_ids.iter().map(|&node_id| g.name(node_id)).collect();
+    names.sort_unstable();
+    let mut hash = 0xcbf29ce484222325u64 ^ seed;
+    for name in names {
+        for byte in name.as_bytes().iter().chain(std::iter::once(&0u8)) {
+            hash ^= *byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    }
+    hash
+}
+
+fn read_dual_homology(
+    g: &Graph,
+    path: &PathBuf,
+) -> Result<Vec<(usize, usize, usize)>, Box<dyn Error>> {
+    let name_to_id: HashMap<&str, usize> = (0..g.node_cnt())
+        .map(|node_id| (g.name(node_id), node_id))
+        .collect();
+    let mut pairs = Vec::new();
+    for (line_number, line) in fs::read_to_string(path)?.lines().enumerate() {
+        if line_number == 0 && line.starts_with("node1\t") {
+            continue;
+        }
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.is_empty() {
+            continue;
+        }
+        if fields.len() != 3 {
+            return Err(format!(
+                "{}:{}: expected node1, node2, and homology length",
+                path.display(),
+                line_number + 1
+            )
+            .into());
+        }
+        let Some(&first) = name_to_id.get(fields[0]) else {
+            warn!("Ignoring homology for absent graph node {}", fields[0]);
+            continue;
+        };
+        let Some(&second) = name_to_id.get(fields[1]) else {
+            warn!("Ignoring homology for absent graph node {}", fields[1]);
+            continue;
+        };
+        let homology_length = fields[2].parse::<usize>().map_err(|error| {
+            format!(
+                "{}:{}: invalid homology length: {error}",
+                path.display(),
+                line_number + 1
+            )
+        })?;
+        if first != second && homology_length > 0 {
+            pairs.push((first, second, homology_length));
+        }
+    }
+    Ok(pairs)
+}
+
+/// Assign the two single-copy branches on each side of a validated collapsed
+/// anchor to opposite outputs.  These are topology constraints, not phasing
+/// evidence: existing colors select the orientation that keeps the most
+/// sequence unchanged, with the seed used only for exact ties.
+fn assign_binary_choices(
+    g: &Graph,
+    anchors: &[usize],
+    assignments: &mut trio::AssignmentStorage,
+    seed: u64,
+    hap_lengths: &mut [usize; 2],
+    max_single_cov: f64,
+) {
+    let mut constraints = vec![Vec::<(usize, bool)>::new(); g.node_cnt()];
+    for &node_id in anchors {
+        for vertex in [Vertex::forward(node_id), Vertex::reverse(node_id)] {
+            let choices = side_neighbors(g, vertex);
+            if choices.len() == 2 {
+                let mut pair: Vec<usize> = choices.into_iter().collect();
+                pair.sort_by_key(|&node_id| g.name(node_id));
+                let first = pair[0];
+                let second = pair[1];
+                let single_copy = |choice: usize| {
+                    let coverage = g.node(choice).coverage;
+                    coverage > 0.0 && coverage < max_single_cov
+                };
+                if first != second && single_copy(first) && single_copy(second) {
+                    constraints[first].push((second, true));
+                    constraints[second].push((first, true));
+                }
+            }
+        }
+    }
+
+    let mut colors = vec![None::<bool>; g.node_cnt()];
+    for start in 0..g.node_cnt() {
+        if constraints[start].is_empty() || colors[start].is_some() {
+            continue;
+        }
+        let mut queue = VecDeque::from([start]);
+        let mut members = Vec::new();
+        let mut conflict = false;
+        colors[start] = Some(false);
+        while let Some(component_id) = queue.pop_front() {
+            members.push(component_id);
+            let color = colors[component_id].unwrap();
+            for &(next, opposite) in &constraints[component_id] {
+                let expected = color ^ opposite;
+                match colors[next] {
+                    None => {
+                        colors[next] = Some(expected);
+                        queue.push_back(next);
+                    }
+                    Some(next_color) if next_color != expected => conflict = true,
+                    Some(_) => {}
+                }
+            }
+        }
+        if conflict {
+            warn!(
+                "Contradictory dual-assembly choices across {} residual segments; leaving them for the conservative fallback",
+                members.len()
+            );
+            for &component_id in &members {
+                colors[component_id] = None;
+            }
+            continue;
+        }
+
+        let agreement_score = |flip: bool| {
+            members
+                .iter()
+                .map(|&node_id| {
+                    let desired = colors[node_id].unwrap() ^ flip;
+                    let agrees = matches!(
+                        (assignments.group(node_id), desired),
+                        (Some(TrioGroup::MATERNAL), false) | (Some(TrioGroup::PATERNAL), true)
+                    );
+                    if agrees {
+                        g.node_length(node_id)
+                    } else {
+                        0
+                    }
+                })
+                .sum::<usize>()
+        };
+        let keep_score = agreement_score(false);
+        let flip_score = agreement_score(true);
+        let flip = if keep_score == flip_score {
+            stable_node_hash(g, &members, seed) & 1 == 1
+        } else {
+            flip_score > keep_score
+        };
+        for &node_id in &members {
+            let group_idx = (colors[node_id].unwrap() ^ flip) as usize;
+            let group = if group_idx == 0 {
+                TrioGroup::MATERNAL
+            } else {
+                TrioGroup::PATERNAL
+            };
+            assignments.assign(node_id, group, "dual-binary-choice");
+            hap_lengths[group_idx] += g.node_length(node_id);
+        }
+        info!(
+            "Assigned {} nodes using complementary binary graph choices",
+            members.len()
+        );
+    }
+}
+
+/// Reproduce the original component-level fallback without mutating the real
+/// assignments.  New shared-anchor choices can then replace only the affected
+/// components while every unrelated fallback decision remains stable.
+fn baseline_component_groups(
+    g: &Graph,
+    assignments: &trio::AssignmentStorage,
+    haploid_cov: f64,
+    haploid_component_cov_coeff: f64,
+    initial_hap_lengths: [usize; 2],
+    seed: u64,
+) -> Vec<Option<TrioGroup>> {
+    let components = unassigned_components(g, assignments);
+    let mut component_order: Vec<usize> = (0..components.len()).collect();
+    component_order.sort_by_key(|&component_id| {
+        usize::MAX
+            - components[component_id]
+                .iter()
+                .map(|&node_id| g.node_length(node_id))
+                .sum::<usize>()
+    });
+
+    let mut groups = vec![None; g.node_cnt()];
+    let mut hap_lengths = initial_hap_lengths;
+    for component_id in component_order {
+        let component = &components[component_id];
+        let component_len = component
+            .iter()
+            .map(|&node_id| g.node_length(node_id))
+            .sum::<usize>();
+        let component_cov = weighted_median_cov(g, component.iter().copied()).unwrap_or(0.0);
+        let group = if haploid_cov > 0.0
+            && component_cov > 0.0
+            && component_cov < haploid_component_cov_coeff * haploid_cov
+        {
+            let group_idx = if hap_lengths[0] == hap_lengths[1] {
+                let mut hash = seed ^ 0x9e3779b97f4a7c15;
+                let mut names: Vec<&str> = component.iter().map(|&id| g.name(id)).collect();
+                names.sort_unstable();
+                for name in names {
+                    for byte in name.as_bytes() {
+                        hash = hash.rotate_left(5) ^ (*byte as u64);
+                    }
+                }
+                (hash & 1) as usize
+            } else if hap_lengths[0] < hap_lengths[1] {
+                0
+            } else {
+                1
+            };
+            hap_lengths[group_idx] += component_len;
+            Some(if group_idx == 0 {
+                TrioGroup::MATERNAL
+            } else {
+                TrioGroup::PATERNAL
+            })
+        } else if haploid_cov > 0.0
+            && component_cov >= haploid_component_cov_coeff * haploid_cov
+            && component_cov <= 2.5 * haploid_cov
+        {
+            Some(TrioGroup::HOMOZYGOUS)
+        } else {
+            None
+        };
+        for &node_id in component {
+            groups[node_id] = group;
+        }
+    }
+    groups
+}
+
+/// Build two complementary assemblies without external phasing evidence.
+///
+/// Bubble interiors are split between outputs, shared boundaries are marked
+/// homozygous, and untouched components are classified by their coverage.
+pub fn run_dual_analysis(settings: &DualSettings) -> Result<(), Box<dyn Error>> {
+    let g = read_graph(&settings.graph)?;
+    let hap_names =
+        parse_hap_names(&settings.hap_names).expect("Problem while parsing haplotype names");
+    let blocks = pseudo_hap::pseudo_hap_decompose(&g, settings.unique_block_len);
+    for block in &blocks {
+        debug!(
+            "Dual pseudo-hap block primary=[{}] alternate=[{}] shared=[{}]",
+            block
+                .primary_exclusive_nodes()
+                .map(|node_id| g.name(node_id))
+                .collect::<Vec<_>>()
+                .join(","),
+            block
+                .known_alt_nodes()
+                .iter()
+                .map(|&node_id| g.name(node_id))
+                .collect::<Vec<_>>()
+                .join(","),
+            block
+                .shared_nodes()
+                .iter()
+                .map(|&node_id| g.name(node_id))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+    }
+
+    // Bubble sides represent single-copy alternatives even when most of the
+    // graph is homozygous, so they are the preferred haploid-depth estimator.
+    let bubble_nodes: HashSet<usize> = blocks
+        .iter()
+        .filter(|block| !block.known_alt_nodes().is_empty())
+        .flat_map(|block| {
+            block
+                .primary_exclusive_nodes()
+                .chain(block.known_alt_nodes().iter().copied())
+        })
+        .collect();
+    let haploid_cov = if let Some(coverage) = weighted_median_cov(&g, bubble_nodes.iter().copied())
+    {
+        info!("Estimated haploid coverage from pseudo-hap bubbles: {coverage:.3}");
+        coverage
+    } else {
+        let graph_median = weighted_median_cov(&g, 0..g.node_cnt()).unwrap_or(0.0);
+        if settings.haploid {
+            warn!("No covered pseudo-hap bubbles were available for estimating haploid coverage; --haploid is set, so using the graph-wide weighted median.");
+            graph_median
+        } else {
+            warn!("No covered pseudo-hap bubbles were available for estimating haploid coverage; using half the graph-wide weighted median.");
+            graph_median / 2.0
+        }
+    };
+    info!("Dual-mode haploid coverage is {haploid_cov:.3}");
+
+    let mut assignments = trio::AssignmentStorage::new();
+    let mut hap_lengths = [0usize, 0usize];
+    let component_of = undirected_component_ids(&g);
+    let mut linear_blocks = Vec::<(Vec<usize>, usize)>::new();
+
+    for block in &blocks {
+        if block.known_alt_nodes().is_empty() {
+            // A long linear block is still informative in dual mode even
+            // without an explicit ALT path.  Single-copy blocks represent a
+            // haploid component/arm and belong in one output; diploid-depth
+            // blocks are collapsed sequence shared by both outputs.  Skipping
+            // these blocks lets a later connected-component fallback flatten
+            // several distinct chromosome arms to one color.
+            let block_nodes: Vec<usize> = block.primary_exclusive_nodes().collect();
+            let block_cov = weighted_median_cov(&g, block_nodes.iter().copied()).unwrap_or(0.0);
+            let max_single_cov = settings.haploid_component_cov_coeff * haploid_cov;
+            if block_cov > 0.0 && block_cov < max_single_cov {
+                let block_len = block_nodes
+                    .iter()
+                    .map(|&node_id| g.node_length(node_id))
+                    .sum();
+                linear_blocks.push((block_nodes, block_len));
+            } else if block_cov >= max_single_cov && block_cov <= 2.5 * haploid_cov {
+                for node_id in block_nodes {
+                    assignments.assign(node_id, TrioGroup::HOMOZYGOUS, "dual-linear-shared");
+                }
+            }
+            continue;
+        }
+        // Swap primary/ALT independently per block.  Hashing sorted node names
+        // makes the split reproducible without favoring traversal order.
+        let flip = dual_block_hash(&g, block, settings.seed) & 1 == 1;
+        let primary_group = if flip {
+            TrioGroup::PATERNAL
+        } else {
+            TrioGroup::MATERNAL
+        };
+        let alt_group = if flip {
+            TrioGroup::MATERNAL
+        } else {
+            TrioGroup::PATERNAL
+        };
+
+        for node_id in block.shared_nodes() {
+            assignments.update_group(*node_id, TrioGroup::HOMOZYGOUS);
+        }
+        for node_id in block.primary_exclusive_nodes() {
+            assignments.update_group(node_id, primary_group);
+            hap_lengths[if primary_group == TrioGroup::MATERNAL {
+                0
+            } else {
+                1
+            }] += g.node_length(node_id);
+        }
+        for &node_id in block.known_alt_nodes() {
+            assignments.update_group(node_id, alt_group);
+            hap_lengths[if alt_group == TrioGroup::MATERNAL {
+                0
+            } else {
+                1
+            }] += g.node_length(node_id);
+        }
+    }
+
+    let mut paired_with = vec![None::<usize>; linear_blocks.len()];
+    let mut mashmap_pair = HashSet::<(usize, usize)>::new();
+    if let Some(homology_path) = &settings.homology {
+        // Convert strict node homologies into block-level scores.  The Python
+        // selector has already applied the Hi-C pipeline's interval coverage,
+        // adjacency, and clear-best filters; aggregation here handles the
+        // uncommon case where a pseudo-hap block contains several nodes.
+        let mut linear_of_node = vec![usize::MAX; g.node_cnt()];
+        for (linear_id, (nodes, _)) in linear_blocks.iter().enumerate() {
+            for &node_id in nodes {
+                linear_of_node[node_id] = linear_id;
+            }
+        }
+        let mut scores = HashMap::<(usize, usize), usize>::new();
+        for (first_node, second_node, homology_length) in read_dual_homology(&g, homology_path)? {
+            let first = linear_of_node[first_node];
+            let second = linear_of_node[second_node];
+            if first == usize::MAX || second == usize::MAX || first == second {
+                continue;
+            }
+            let pair = if first < second {
+                (first, second)
+            } else {
+                (second, first)
+            };
+            *scores.entry(pair).or_default() += homology_length;
+        }
+
+        // Reapply the established 1.5x clear-best rule at block level, then
+        // greedily take the strongest non-conflicting pairs.  This prevents a
+        // repeat-rich block from being paired with several alternatives.
+        let mut best_two = vec![[0usize; 2]; linear_blocks.len()];
+        for (&(first, second), &score) in &scores {
+            for linear_id in [first, second] {
+                if score > best_two[linear_id][0] {
+                    best_two[linear_id][1] = best_two[linear_id][0];
+                    best_two[linear_id][0] = score;
+                } else if score > best_two[linear_id][1] {
+                    best_two[linear_id][1] = score;
+                }
+            }
+        }
+        let mut candidates: Vec<((usize, usize), usize)> = scores.into_iter().collect();
+        candidates.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+        for ((first, second), score) in candidates {
+            let clear_for = |linear_id: usize| {
+                score == best_two[linear_id][0]
+                    && (best_two[linear_id][1] == 0
+                        || score.saturating_mul(2) >= best_two[linear_id][1].saturating_mul(3))
+            };
+            if paired_with[first].is_none()
+                && paired_with[second].is_none()
+                && (clear_for(first) || clear_for(second))
+            {
+                paired_with[first] = Some(second);
+                paired_with[second] = Some(first);
+                mashmap_pair.insert((first, second));
+                info!(
+                    "Paired dual linear blocks with {} bp of strict MashMap homology",
+                    score
+                );
+            }
+        }
+    } else {
+        warn!(
+            "No --homology input was supplied; falling back to similar-length linear-block pairing"
+        );
+        // Retain a deterministic standalone fallback for direct Rukki use and
+        // old saved graphs that no longer have sequence.  The Verkko workflow
+        // always supplies MashMap evidence and does not enter this branch.
+        let mut linear_by_component = HashMap::<usize, Vec<usize>>::new();
+        for (linear_id, (nodes, _)) in linear_blocks.iter().enumerate() {
+            if let Some(&node_id) = nodes.first() {
+                linear_by_component
+                    .entry(component_of[node_id])
+                    .or_default()
+                    .push(linear_id);
+            }
+        }
+        for linear_ids in linear_by_component.values_mut() {
+            linear_ids.sort_by_key(|&linear_id| usize::MAX - linear_blocks[linear_id].1);
+            for pair in linear_ids.chunks_exact(2) {
+                let first = pair[0];
+                let second = pair[1];
+                if linear_blocks[second].1.saturating_mul(5)
+                    >= linear_blocks[first].1.saturating_mul(4)
+                {
+                    paired_with[first] = Some(second);
+                    paired_with[second] = Some(first);
+                }
+            }
+        }
+    }
+
+    let mut colored_linear = vec![false; linear_blocks.len()];
+    for first in 0..linear_blocks.len() {
+        if colored_linear[first] {
+            continue;
+        }
+        let second = paired_with[first];
+        let mut pair_nodes = linear_blocks[first].0.clone();
+        if let Some(second) = second {
+            pair_nodes.extend(linear_blocks[second].0.iter().copied());
+        }
+        let equal_length_flip = (stable_node_hash(&g, &pair_nodes, settings.seed) & 1) as usize;
+        let first_group = if let Some(second) = second {
+            // Haplotype 1 is paternal by convention.  For a divergent pair
+            // such as X/Y, assigning the shorter member to hap1 places Y on
+            // the paternal side; equal lengths retain seeded orientation.
+            match linear_blocks[first].1.cmp(&linear_blocks[second].1) {
+                std::cmp::Ordering::Less => 0,
+                std::cmp::Ordering::Greater => 1,
+                std::cmp::Ordering::Equal => equal_length_flip,
+            }
+        } else {
+            equal_length_flip
+        };
+        let is_mashmap_pair = second
+            .map(|second| mashmap_pair.contains(&(first.min(second), first.max(second))))
+            .unwrap_or(false);
+        for (linear_id, group_idx) in
+            std::iter::once((first, first_group)).chain(second.map(|id| (id, first_group ^ 1)))
+        {
+            let group = if group_idx == 0 {
+                TrioGroup::MATERNAL
+            } else {
+                TrioGroup::PATERNAL
+            };
+            let info = if is_mashmap_pair {
+                "dual-homology-block"
+            } else {
+                "dual-linear-block"
+            };
+            for &node_id in &linear_blocks[linear_id].0 {
+                assignments.assign(node_id, group, info);
+                hap_lengths[group_idx] += g.node_length(node_id);
+            }
+            colored_linear[linear_id] = true;
+        }
+    }
+
+    // Preserve the original fallback choices before introducing any new
+    // anchors.  This prevents a repaired component from perturbing global
+    // length balancing and flipping otherwise unrelated components.
+    let baseline_groups = baseline_component_groups(
+        &g,
+        &assignments,
+        haploid_cov,
+        settings.haploid_component_cov_coeff,
+        hap_lengths,
+        settings.seed,
+    );
+
+    // Pseudo-hap decomposition intentionally leaves linear components alone.
+    // Before the component-level fallback, identify high-coverage junctions
+    // connecting haploid-depth branches.  Treating the entire mixed-copy
+    // component as one unit would otherwise make all branches monochromatic.
+    let shared_anchors = unresolved_shared_anchors(
+        &g,
+        &assignments,
+        haploid_cov,
+        settings.haploid_component_cov_coeff,
+    );
+    for &anchor in &shared_anchors {
+        assignments.assign(anchor, TrioGroup::HOMOZYGOUS, "dual-shared-anchor");
+        info!(
+            "Collapsed shared anchor {} at {:.3}x",
+            g.name(anchor),
+            g.node(anchor).coverage
+        );
+    }
+
+    // Assign binary branch choices around those anchors complementarily.
+    // Remaining components retain the original copy-number fallback.
+    // Restore the saved decision node by node.  Re-grouping after adding arm
+    // seeds is unsafe because a new residual component can span several old
+    // fallback groups through a repeat tangle; copying one group's color to
+    // that whole component caused unrelated chromosomes to flip or collapse.
+    for (node_id, baseline) in baseline_groups.iter().copied().enumerate() {
+        if !assignments.contains(node_id) {
+            if let Some(group) = baseline {
+                assignments.assign(node_id, group, "dual-baseline");
+            }
+        }
+    }
+
+    assign_binary_choices(
+        &g,
+        &shared_anchors,
+        &mut assignments,
+        settings.seed,
+        &mut hap_lengths,
+        settings.haploid_component_cov_coeff * haploid_cov,
+    );
+
+    // Report only regions for which neither pseudo-hap decomposition, the
+    // local anchor repair, nor the preserved copy-number fallback had a safe
+    // assignment.
+    for component in unassigned_components(&g, &assignments) {
+        let component_len = component
+            .iter()
+            .map(|&node_id| g.node_length(node_id))
+            .sum::<usize>();
+        let component_cov = weighted_median_cov(&g, component.iter().copied()).unwrap_or(0.0);
+        if component_len < settings.unique_block_len {
+            debug!(
+                "Short component of {component_len} bp at {component_cov:.3}x has uncertain copy number and remains unassigned"
+            );
+        } else {
+            warn!(
+                "Component of {component_len} bp at {component_cov:.3}x has uncertain copy number and remains unassigned"
+            );
+        }
+    }
+
+    let search_settings = HaploSearchSettings {
+        max_unique_cov: settings.haploid_component_cov_coeff * haploid_cov,
+        ..HaploSearchSettings::default()
+    };
+    let assignments = augment_by_path_search(&g, assignments, search_settings);
+    let mut path_searcher = HaploSearcher::new(&g, &assignments, search_settings, None);
+    let haplo_paths = path_searcher.find_all();
+    let node_usage = path_searcher.take_used();
+    let assignments = augment_assignments(&g, assignments, &node_usage, false);
+
+    if let Some(output) = &settings.colors {
+        output_coloring(&g, &assignments, output, &hap_names)?;
+    }
+    if let Some(output) = &settings.paths {
+        write_paths(
+            &g,
+            haplo_paths,
+            &assignments,
+            &node_usage,
+            output,
+            settings.gaf_format,
+            &hap_names,
+        )?;
+    }
     info!("All done");
     Ok(())
 }

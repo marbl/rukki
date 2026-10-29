@@ -5,6 +5,9 @@ use std::collections::HashSet;
 pub struct LinearBlock {
     instance_path: Path,
     known_alt_nodes: HashSet<usize>,
+    // Bubble boundaries are present on both allelic paths and must not be
+    // colored as primary-exclusive sequence in dual mode.
+    shared_nodes: HashSet<usize>,
 }
 
 impl LinearBlock {
@@ -19,6 +22,22 @@ impl LinearBlock {
 
     pub fn known_alt_nodes(&self) -> &HashSet<usize> {
         &self.known_alt_nodes
+    }
+
+    /// Nodes which delimit bubbles in this block and therefore belong to
+    /// both pseudohaplotypes.
+    pub fn shared_nodes(&self) -> &HashSet<usize> {
+        &self.shared_nodes
+    }
+
+    /// Nodes on the selected primary path which are not shared bubble
+    /// boundaries.
+    pub fn primary_exclusive_nodes(&self) -> impl Iterator<Item = usize> + '_ {
+        self.instance_path
+            .vertices()
+            .iter()
+            .map(|v| v.node_id)
+            .filter(|node_id| !self.shared_nodes.contains(node_id))
     }
 
     pub fn all_nodes(&self) -> impl Iterator<Item = usize> + '_ {
@@ -41,6 +60,7 @@ impl LinearBlock {
         self.instance_path.merge_in(other.instance_path);
         self.known_alt_nodes
             .extend(other.known_alt_nodes.into_iter());
+        self.shared_nodes.extend(other.shared_nodes.into_iter());
     }
 
     fn try_merge_in(mut self, other: LinearBlock) -> Option<LinearBlock> {
@@ -56,6 +76,7 @@ impl LinearBlock {
         LinearBlock {
             instance_path: path,
             known_alt_nodes: iter.map(|v| v.node_id).collect(),
+            shared_nodes: HashSet::new(),
         }
     }
 
@@ -65,9 +86,12 @@ impl LinearBlock {
         for v in p.vertices() {
             nodes.remove(&v.node_id);
         }
+        let shared_nodes =
+            HashSet::from([bubble.start_vertex().node_id, bubble.end_vertex().node_id]);
         LinearBlock {
             instance_path: p,
             known_alt_nodes: nodes.into_iter().collect(),
+            shared_nodes,
         }
     }
 
@@ -86,6 +110,7 @@ impl LinearBlock {
         LinearBlock {
             instance_path: Path::new(v),
             known_alt_nodes: HashSet::new(),
+            shared_nodes: HashSet::new(),
         }
     }
 
@@ -107,6 +132,7 @@ impl LinearBlock {
         LinearBlock {
             instance_path: self.instance_path.reverse_complement(),
             known_alt_nodes: self.known_alt_nodes,
+            shared_nodes: self.shared_nodes,
             //..self
         }
     }

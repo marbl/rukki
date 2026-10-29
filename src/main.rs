@@ -15,6 +15,8 @@ struct Args {
 enum Commands {
     /// Trio-marker based analysis
     Trio(rukki::TrioSettings),
+    /// Produce two complementary pseudohaplotypes without phasing evidence
+    Dual(rukki::DualSettings),
 }
 
 fn main() {
@@ -34,6 +36,15 @@ fn main() {
             settings.validate();
 
             match rukki::run_trio_analysis(settings) {
+                Ok(()) => info!("Success"),
+                Err(e) => info!("Some error happened {:?}", e),
+            }
+        }
+        Commands::Dual(settings) => {
+            info!("Running dual pseudohaplotype analysis");
+            settings.validate();
+
+            match rukki::run_dual_analysis(settings) {
                 Ok(()) => info!("Success"),
                 Err(e) => info!("Some error happened {:?}", e),
             }

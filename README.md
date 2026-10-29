@@ -56,3 +56,27 @@ To see all options use:
 ```
 ./target/release/rukki trio --help
 ```
+
+### Dual pseudohaplotype mode
+
+When no external phasing evidence is available, `dual` reuses Rukki's
+pseudo-hap decomposition to color the selected primary route and its ALT
+nodes oppositely, then sends those assignments through the same haplotype
+path search used by trio mode:
+
+```
+./target/release/rukki dual -g <graph.gfa> -p <out_paths.tsv> \
+    --colors <node_assign.tsv> --homology <strict_homology.tsv> --seed 1
+```
+
+Shared bubble boundaries and collapsed components are emitted in both
+outputs. Low-copy disconnected components are kept intact and emitted once;
+strict homologous pairs can be supplied as a three-column node-pair and
+homology-length TSV. For unequal homologous components, the shorter member is
+placed in haplotype 1, which follows Verkko's paternal haplotype-1 convention
+for a sufficiently homologous X/Y pair. Components without a confident match
+are chosen deterministically while balancing sequence between the two
+pseudohaplotypes. When the input represents a haploid genome, pass `--haploid`
+so a graph-wide fallback estimate is not divided by two. Apart from the
+shorter-member convention, evidence-free output names have no parental
+meaning.
